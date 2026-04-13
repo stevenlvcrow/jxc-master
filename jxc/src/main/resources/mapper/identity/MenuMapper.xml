@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.identity.infrastructure.persistence.mapper.MenuMapper">
+
+    <resultMap id="MenuDOResultMap" type="com.boboboom.jxc.identity.infrastructure.persistence.dataobject.MenuDO">
+        <id property="id" column="id"/>
+        <result property="menuCode" column="menu_code"/>
+        <result property="menuName" column="menu_name"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="menuType" column="menu_type"/>
+        <result property="routePath" column="route_path"/>
+        <result property="componentPath" column="component_path"/>
+        <result property="permissionCode" column="permission_code"/>
+        <result property="icon" column="icon"/>
+        <result property="sortNo" column="sort_no"/>
+        <result property="visible" column="visible"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="MenuPermissionViewMap" type="com.boboboom.jxc.identity.infrastructure.persistence.query.MenuPermissionView">
+        <id property="id" column="id"/>
+        <result property="menuCode" column="menu_code"/>
+        <result property="menuName" column="menu_name"/>
+        <result property="parentId" column="parent_id"/>
+        <result property="menuType" column="menu_type"/>
+        <result property="routePath" column="route_path"/>
+        <result property="componentPath" column="component_path"/>
+        <result property="permissionCode" column="permission_code"/>
+        <result property="icon" column="icon"/>
+        <result property="sortNo" column="sort_no"/>
+        <result property="visible" column="visible"/>
+        <result property="status" column="status"/>
+        <result property="roleCode" column="role_code"/>
+    </resultMap>
+
+    <select id="selectMenusByUserContext" resultMap="MenuPermissionViewMap">
+        with recursive eligible_roles as (
+            select distinct r.id as role_id,
+                            r.role_code
+            from sys_user_role_rel urr
+                     inner join sys_role r on r.id = urr.role_id
+            where urr.user_id = #{userId}
+              and urr.status = 'ENABLED'
+              and r.status = 'ENABLED'
+              and (
+                (#{scopeType} = 'PLATFORM' and urr.scope_type = 'PLATFORM' and urr.scope_id is null)
+                    or (#{scopeType} = 'GROUP' and (
+                    (urr.scope_type = 'GROUP' and urr.scope_id = #{scopeId})
+                        or (urr.scope_type = 'PLATFORM' and urr.scope_id is null)
+                    ))
+                    or (#{scopeType} = 'STORE' and (
+                    (urr.scope_type = 'STORE' and urr.scope_id = #{scopeId})
+                        or (
+                        urr.scope_type = 'GROUP'
+                            and urr.scope_id = (
+                            select s.group_id
+                            from sys_store s
+                            where s.id = #{scopeId}
+                            limit 1
+                        )
+                        )
+                        or (urr.scope_type = 'PLATFORM' and urr.scope_id is null)
+                    ))
+                )
+        ),
+        direct_menus as (
+            select distinct m.id,
+                            m.menu_code,
+                            m.menu_name,
+                            m.parent_id,
+                            m.menu_type,
+                            m.route_path,
+                            m.component_path,
+                            m.permission_code,
+                            m.icon,
+                            m.sort_no,
+                            m.visible,
+                            m.status,
+                            er.role_code
+            from eligible_roles er
+                     inner join sys_role_menu_rel rmr on rmr.role_id = er.role_id
+                     inner join sys_menu m on m.id = rmr.menu_id
+            where m.status = 'ENABLED'
+        ),
+        menu_tree as (
+            select dm.id,
+                   dm.menu_code,
+                   dm.menu_name,
+                   dm.parent_id,
+                   dm.menu_type,
+                   dm.route_path,
+                   dm.component_path,
+                   dm.permission_code,
+                   dm.icon,
+                   dm.sort_no,
+                   dm.visible,
+                   dm.status,
+                   cast(dm.role_code as varchar(64)) as role_code
+            from direct_menus dm
+
+            union
+
+            select parent.id,
+                   parent.menu_code,
+                   parent.menu_name,
+                   parent.parent_id,
+                   parent.menu_type,
+                   parent.route_path,
+                   parent.component_path,
+                   parent.permission_code,
+                   parent.icon,
+                   parent.sort_no,
+                   parent.visible,
+                   parent.status,
+                   cast(null as varchar(64)) as role_code
+            from sys_menu parent
+                     inner join menu_tree child on child.parent_id = parent.id
+            where parent.status = 'ENABLED'
+        )
+        select distinct mt.id,
+                        mt.menu_code,
+                        mt.menu_name,
+                        mt.parent_id,
+                        mt.menu_type,
+                        mt.route_path,
+                        mt.component_path,
+                        mt.permission_code,
+                        mt.icon,
+                        mt.sort_no,
+                        mt.visible,
+                        mt.status,
+                        mt.role_code
+        from menu_tree mt
+        where mt.menu_type in ('DIRECTORY', 'MENU')
+        order by mt.sort_no asc, mt.id asc
+    </select>
+</mapper>
+

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserAccountMapper">
+
+    <resultMap id="UserAccountDOResultMap" type="com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO">
+        <id property="id" column="id"/>
+        <result property="username" column="username"/>
+        <result property="realName" column="real_name"/>
+        <result property="phone" column="phone"/>
+        <result property="passwordHash" column="password_hash"/>
+        <result property="passwordSalt" column="password_salt"/>
+        <result property="status" column="status"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="firstLoginChangedPwd" column="first_login_changed_pwd"/>
+        <result property="lastLoginAt" column="last_login_at"/>
+        <result property="lastLoginIp" column="last_login_ip"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="UserRoleViewMap" type="com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView">
+        <id property="userId" column="user_id"/>
+        <result property="username" column="username"/>
+        <result property="realName" column="real_name"/>
+        <result property="phone" column="phone"/>
+        <result property="userStatus" column="user_status"/>
+        <result property="roleId" column="role_id"/>
+        <result property="roleCode" column="role_code"/>
+        <result property="roleName" column="role_name"/>
+        <result property="roleType" column="role_type"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="scopeName" column="scope_name"/>
+        <result property="assignedAt" column="assigned_at"/>
+    </resultMap>
+
+    <select id="selectLoginUserByAccount" resultMap="UserAccountDOResultMap">
+        select id, username, real_name, phone, password_hash, password_salt, status, source_type,
+               first_login_changed_pwd, last_login_at, last_login_ip, created_at, updated_at
+        from sys_user
+        where username = #{account}
+           or phone = #{account}
+        order by case when username = #{account} then 0 else 1 end, id asc
+        limit 1
+    </select>
+
+    <select id="selectUserRoles" resultMap="UserRoleViewMap">
+        select u.id as user_id,
+               u.username,
+               u.real_name,
+               u.phone,
+               u.status as user_status,
+               r.id as role_id,
+               r.role_code,
+               r.role_name,
+               r.role_type,
+               urr.scope_type,
+               urr.scope_id,
+               case
+                   when urr.scope_type = 'GROUP' then g.group_name
+                   when urr.scope_type = 'STORE' then s.store_name
+                   else 'PLATFORM'
+                   end as scope_name,
+               urr.assigned_at
+        from sys_user u
+                 inner join sys_user_role_rel urr on urr.user_id = u.id and urr.status = 'ENABLED'
+                 inner join sys_role r on r.id = urr.role_id and r.status = 'ENABLED'
+                 left join sys_group g on g.id = urr.scope_id and urr.scope_type = 'GROUP'
+                 left join sys_store s on s.id = urr.scope_id and urr.scope_type = 'STORE'
+        where u.id = #{userId}
+        order by urr.assigned_at desc
+    </select>
+</mapper>
+

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.identity.infrastructure.persistence.mapper.LoginLogMapper">
+
+    <resultMap id="LoginLogDOResultMap" type="com.boboboom.jxc.identity.infrastructure.persistence.dataobject.LoginLogDO">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="phone" column="phone"/>
+        <result property="loginResult" column="login_result"/>
+        <result property="failureReason" column="failure_reason"/>
+        <result property="clientIp" column="client_ip"/>
+        <result property="userAgent" column="user_agent"/>
+        <result property="selectedScope" column="selected_scope"/>
+        <result property="selectedScopeId" column="selected_scope_id"/>
+        <result property="loginAt" column="login_at"/>
+    </resultMap>
+
+    <select id="selectRecentFailedByPhone" resultMap="LoginLogDOResultMap">
+        select id, user_id, phone, login_result, failure_reason, client_ip, user_agent, selected_scope, selected_scope_id, login_at
+        from sys_login_log
+        where phone = #{phone}
+          and login_result = 'FAILED'
+        order by login_at desc
+        limit #{limit}
+    </select>
+</mapper>
+

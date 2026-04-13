@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper">
+
+    <resultMap id="RoleDOResultMap" type="com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO">
+        <id property="id" column="id"/>
+        <result property="roleCode" column="role_code"/>
+        <result property="roleName" column="role_name"/>
+        <result property="roleType" column="role_type"/>
+        <result property="dataScopeType" column="data_scope_type"/>
+        <result property="description" column="description"/>
+        <result property="status" column="status"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="UserRoleViewMap" type="com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView">
+        <id property="roleId" column="role_id"/>
+        <result property="roleCode" column="role_code"/>
+        <result property="roleName" column="role_name"/>
+        <result property="roleType" column="role_type"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="scopeName" column="scope_name"/>
+        <result property="assignedAt" column="assigned_at"/>
+        <result property="userId" column="user_id"/>
+    </resultMap>
+
+    <select id="selectRolesByUserAndScope" resultMap="UserRoleViewMap">
+        select urr.user_id,
+               r.id as role_id,
+               r.role_code,
+               r.role_name,
+               r.role_type,
+               urr.scope_type,
+               urr.scope_id,
+               case
+                   when urr.scope_type = 'GROUP' then g.group_name
+                   when urr.scope_type = 'STORE' then s.store_name
+                   else 'PLATFORM'
+                   end as scope_name,
+               urr.assigned_at
+        from sys_user_role_rel urr
+                 inner join sys_role r on r.id = urr.role_id and r.status = 'ENABLED'
+                 left join sys_group g on g.id = urr.scope_id and urr.scope_type = 'GROUP'
+                 left join sys_store s on s.id = urr.scope_id and urr.scope_type = 'STORE'
+        where urr.user_id = #{userId}
+          and urr.status = 'ENABLED'
+          and urr.scope_type = #{scopeType}
+        <if test="scopeId != null">
+            and urr.scope_id = #{scopeId}
+        </if>
+        order by urr.assigned_at desc
+    </select>
+</mapper>
+

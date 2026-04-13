@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper">
+
+    <resultMap id="UserRoleRelDOResultMap" type="com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="roleId" column="role_id"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="assignedBy" column="assigned_by"/>
+        <result property="assignedAt" column="assigned_at"/>
+        <result property="expiresAt" column="expires_at"/>
+        <result property="status" column="status"/>
+    </resultMap>
+
+    <select id="selectActiveByUserId" resultMap="UserRoleRelDOResultMap">
+        select id, user_id, role_id, scope_type, scope_id, assigned_by, assigned_at, expires_at, status
+        from sys_user_role_rel
+        where user_id = #{userId}
+          and status = 'ENABLED'
+          and (expires_at is null or expires_at &gt; now())
+        order by assigned_at desc
+    </select>
+</mapper>
+

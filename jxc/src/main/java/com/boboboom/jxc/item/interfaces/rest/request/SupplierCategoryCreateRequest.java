@@ -1,0 +1,20 @@
+package com.boboboom.jxc.item.interfaces.rest.request;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
+public record SupplierCategoryCreateRequest(
+        @NotBlank(message = "类别编码不能为空")
+        @Size(max = 64, message = "类别编码长度不能超过64")
+        String categoryCode,
+
+        @NotBlank(message = "类别名称不能为空")
+        @Size(max = 128, message = "类别名称长度不能超过128")
+        String categoryName,
+
+        @NotBlank(message = "上级类别不能为空")
+        @Size(max = 128, message = "上级类别长度不能超过128")
+        String parentCategory
+) {
+}
+

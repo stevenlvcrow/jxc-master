@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.identity.infrastructure.persistence.mapper.AccountImportRecordMapper">
+
+    <resultMap id="AccountImportRecordDOResultMap" type="com.boboboom.jxc.identity.infrastructure.persistence.dataobject.AccountImportRecordDO">
+        <id property="id" column="id"/>
+        <result property="batchId" column="batch_id"/>
+        <result property="sourceSystem" column="source_system"/>
+        <result property="sourceRecordId" column="source_record_id"/>
+        <result property="realName" column="real_name"/>
+        <result property="phone" column="phone"/>
+        <result property="validateStatus" column="validate_status"/>
+        <result property="processStatus" column="process_status"/>
+        <result property="failureReason" column="failure_reason"/>
+        <result property="userId" column="user_id"/>
+        <result property="payloadJson" column="payload_json"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="ImportRecordViewMap" type="com.boboboom.jxc.identity.infrastructure.persistence.query.ImportRecordView">
+        <id property="id" column="id"/>
+        <result property="batchId" column="batch_id"/>
+        <result property="sourceRecordId" column="source_record_id"/>
+        <result property="realName" column="real_name"/>
+        <result property="phone" column="phone"/>
+        <result property="validateStatus" column="validate_status"/>
+        <result property="processStatus" column="process_status"/>
+        <result property="failureReason" column="failure_reason"/>
+        <result property="userId" column="user_id"/>
+        <result property="linkedUserStatus" column="linked_user_status"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="selectRecordViewsByBatchId" resultMap="ImportRecordViewMap">
+        select r.id,
+               r.batch_id,
+               r.source_record_id,
+               r.real_name,
+               r.phone,
+               r.validate_status,
+               r.process_status,
+               r.failure_reason,
+               r.user_id,
+               u.status as linked_user_status,
+               r.created_at
+        from ext_account_import_record r
+                 left join sys_user u on u.id = r.user_id
+        where r.batch_id = #{batchId}
+        order by r.id asc
+    </select>
+</mapper>
+

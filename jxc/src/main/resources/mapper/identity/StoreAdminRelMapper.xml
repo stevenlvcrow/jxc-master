@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreAdminRelMapper">
+
+    <resultMap id="StoreAdminRelDOResultMap" type="com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreAdminRelDO">
+        <id property="id" column="id"/>
+        <result property="storeId" column="store_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="assignedBy" column="assigned_by"/>
+        <result property="assignedAt" column="assigned_at"/>
+        <result property="status" column="status"/>
+    </resultMap>
+
+    <resultMap id="StoreAdminViewMap" type="com.boboboom.jxc.identity.infrastructure.persistence.query.StoreAdminView">
+        <id property="storeId" column="store_id"/>
+        <result property="storeCode" column="store_code"/>
+        <result property="storeName" column="store_name"/>
+        <result property="groupId" column="group_id"/>
+        <result property="groupName" column="group_name"/>
+        <result property="adminUserId" column="admin_user_id"/>
+        <result property="adminRealName" column="admin_real_name"/>
+        <result property="adminPhone" column="admin_phone"/>
+        <result property="status" column="status"/>
+    </resultMap>
+
+    <sql id="StoreAdminJoinSql">
+        select s.id as store_id,
+               s.store_code,
+               s.store_name,
+               s.group_id,
+               g.group_name,
+               sar.user_id as admin_user_id,
+               u.real_name as admin_real_name,
+               u.phone as admin_phone,
+               sar.status
+        from sys_store_admin_rel sar
+                 inner join sys_store s on s.id = sar.store_id
+                 inner join sys_group g on g.id = s.group_id
+                 inner join sys_user u on u.id = sar.user_id
+    </sql>
+
+    <select id="selectAdminByStoreId" resultMap="StoreAdminViewMap">
+        <include refid="StoreAdminJoinSql"/>
+        where sar.store_id = #{storeId}
+          and sar.status = 'ENABLED'
+        limit 1
+    </select>
+
+    <select id="selectStoreByAdminUserId" resultMap="StoreAdminViewMap">
+        <include refid="StoreAdminJoinSql"/>
+        where sar.user_id = #{userId}
+          and sar.status = 'ENABLED'
+        limit 1
+    </select>
+
+    <select id="selectAllActiveBindings" resultMap="StoreAdminViewMap">
+        <include refid="StoreAdminJoinSql"/>
+        where sar.status = 'ENABLED'
+        order by sar.assigned_at desc
+    </select>
+</mapper>
+

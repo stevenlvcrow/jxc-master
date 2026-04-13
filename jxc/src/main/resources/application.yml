@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: jxc
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${DB_HOST:192.168.88.168}:${DB_PORT:5432}/${DB_NAME:jxc}?currentSchema=${DB_SCHEMA:dev}
+    username: ${DB_USERNAME:lizhijie}
+    password: ${DB_PASSWORD:123456}
+  data:
+    redis:
+      host: ${REDIS_HOST:192.168.88.168}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:123456}
+      database: ${REDIS_DATABASE:0}
+      timeout: 5s
+  sql:
+    init:
+      schema-locations: classpath:init.sql
+
+server:
+  port: 8080
+
+mybatis-plus:
+  mapper-locations: classpath*:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    banner: false
+
+logging:
+  level:
+    com.boboboom.jxc: info
+    com.baomidou.mybatisplus: debug
+    org.mybatis: debug
