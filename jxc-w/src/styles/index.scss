@@ -263,6 +263,46 @@ a {
   margin-left: 4px;
 }
 
+.workspace-tab-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  user-select: none;
+}
+
+.tab-context-menu {
+  position: fixed;
+  z-index: 3000;
+  min-width: 120px;
+  padding: 4px 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+}
+
+.tab-context-menu__item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: #334155;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tab-context-menu__item:hover:not(:disabled) {
+  background: #eff6ff;
+  color: #0f172a;
+}
+
+.tab-context-menu__item:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
 .content > .el-main,
 .content-main {
   min-width: 0;

@@ -27,6 +27,25 @@ import DepartmentPickingView from '@/views/inventory/department-picking.vue';
 import DepartmentReturnView from '@/views/inventory/department-return.vue';
 import StockTransferInboundView from '@/views/inventory/stock-transfer-inbound.vue';
 import DepartmentTransferView from '@/views/inventory/department-transfer.vue';
+import StoreTransferView from '@/views/inventory/store-transfer.vue';
+import DamageOutboundView from '@/views/inventory/damage-outbound.vue';
+import OtherInboundView from '@/views/inventory/other-inbound.vue';
+import OtherOutboundView from '@/views/inventory/other-outbound.vue';
+import ProductionInboundView from '@/views/inventory/production-inbound.vue';
+import StockTransferOutboundView from '@/views/inventory/stock-transfer-outbound.vue';
+import CustomerSalesOutboundView from '@/views/inventory/customer-sales-outbound.vue';
+import CustomerReturnInboundView from '@/views/inventory/customer-return-inbound.vue';
+import InventoryCheckView from '@/views/inventory/inventory-check.vue';
+import MultiInventoryCheckView from '@/views/inventory/multi-inventory-check.vue';
+import ProfitInboundView from '@/views/inventory/profit-inbound.vue';
+import LossOutboundView from '@/views/inventory/loss-outbound.vue';
+import DishConsumptionOutboundView from '@/views/inventory/dish-consumption-outbound.vue';
+import BatchAdjustmentView from '@/views/inventory/batch-adjustment.vue';
+import InventoryTemplateView from '@/views/inventory/inventory-template.vue';
+import TransferGroupView from '@/views/inventory/transfer-group.vue';
+import StockLimitsView from '@/views/inventory/stock-limits.vue';
+import StockLockView from '@/views/inventory/stock-lock.vue';
+import StockLockLogView from '@/views/inventory/stock-lock-log.vue';
 
 const route = useRoute();
 
@@ -63,6 +82,25 @@ const isDepartmentPicking = computed(() => title.value === '部门领料');
 const isDepartmentReturn = computed(() => title.value === '部门退料');
 const isStockTransferInbound = computed(() => title.value === '移库入库');
 const isDepartmentTransfer = computed(() => title.value === '部门调拨');
+const isStoreTransfer = computed(() => title.value === '店间调拨');
+const isDamageOutbound = computed(() => title.value === '报损出库');
+const isOtherInbound = computed(() => title.value === '其他入库');
+const isOtherOutbound = computed(() => title.value === '其他出库');
+const isProductionInbound = computed(() => title.value === '生产入库');
+const isStockTransferOutbound = computed(() => title.value === '移库出库');
+const isCustomerSalesOutbound = computed(() => title.value === '客户销售出库');
+const isCustomerReturnInbound = computed(() => title.value === '客户退货入库');
+const isInventoryCheck = computed(() => title.value === '盘点单');
+const isMultiInventoryCheck = computed(() => title.value === '多人盘点单');
+const isProfitInbound = computed(() => title.value === '盘盈单');
+const isLossOutbound = computed(() => title.value === '盘亏单');
+const isDishConsumptionOutbound = computed(() => title.value === '菜品消耗出库');
+const isBatchAdjustment = computed(() => title.value === '批次调整单');
+const isInventoryTemplate = computed(() => title.value === '库存模板');
+const isTransferGroup = computed(() => title.value === '调拨分组');
+const isStockLimits = computed(() => title.value === '库存上下限');
+const isStockLock = computed(() => title.value === '库存锁库');
+const isStockLockLog = computed(() => title.value === '锁库日志');
 
 const pendingTasks = [
   '补充查询条件与默认筛选项',
@@ -149,6 +187,63 @@ const pendingTasks = [
   </div>
   <div v-else-if="isDepartmentTransfer" class="page-grid single">
     <DepartmentTransferView />
+  </div>
+  <div v-else-if="isStoreTransfer" class="page-grid single">
+    <StoreTransferView />
+  </div>
+  <div v-else-if="isDamageOutbound" class="page-grid single">
+    <DamageOutboundView />
+  </div>
+  <div v-else-if="isOtherInbound" class="page-grid single">
+    <OtherInboundView />
+  </div>
+  <div v-else-if="isOtherOutbound" class="page-grid single">
+    <OtherOutboundView />
+  </div>
+  <div v-else-if="isProductionInbound" class="page-grid single">
+    <ProductionInboundView />
+  </div>
+  <div v-else-if="isStockTransferOutbound" class="page-grid single">
+    <StockTransferOutboundView />
+  </div>
+  <div v-else-if="isCustomerSalesOutbound" class="page-grid single">
+    <CustomerSalesOutboundView />
+  </div>
+  <div v-else-if="isCustomerReturnInbound" class="page-grid single">
+    <CustomerReturnInboundView />
+  </div>
+  <div v-else-if="isInventoryCheck" class="page-grid single">
+    <InventoryCheckView />
+  </div>
+  <div v-else-if="isMultiInventoryCheck" class="page-grid single">
+    <MultiInventoryCheckView />
+  </div>
+  <div v-else-if="isProfitInbound" class="page-grid single">
+    <ProfitInboundView />
+  </div>
+  <div v-else-if="isLossOutbound" class="page-grid single">
+    <LossOutboundView />
+  </div>
+  <div v-else-if="isDishConsumptionOutbound" class="page-grid single">
+    <DishConsumptionOutboundView />
+  </div>
+  <div v-else-if="isBatchAdjustment" class="page-grid single">
+    <BatchAdjustmentView />
+  </div>
+  <div v-else-if="isInventoryTemplate" class="page-grid single">
+    <InventoryTemplateView />
+  </div>
+  <div v-else-if="isTransferGroup" class="page-grid single">
+    <TransferGroupView />
+  </div>
+  <div v-else-if="isStockLimits" class="page-grid single">
+    <StockLimitsView />
+  </div>
+  <div v-else-if="isStockLock" class="page-grid single">
+    <StockLockView />
+  </div>
+  <div v-else-if="isStockLockLog" class="page-grid single">
+    <StockLockLogView />
   </div>
 
   <div v-else class="page-grid">

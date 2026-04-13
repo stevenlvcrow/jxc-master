@@ -33,6 +33,14 @@ export const useAppStore = defineStore('app', () => {
     visitedTabs.value = visitedTabs.value.filter((item) => item.path !== path || !item.closable);
   };
 
+  const removeOtherVisitedTabs = (path: string) => {
+    visitedTabs.value = visitedTabs.value.filter((item) => item.path === path || !item.closable);
+  };
+
+  const removeAllClosableTabs = () => {
+    visitedTabs.value = visitedTabs.value.filter((item) => !item.closable);
+  };
+
   const resetVisitedTabs = () => {
     visitedTabs.value = [];
   };
@@ -48,6 +56,8 @@ export const useAppStore = defineStore('app', () => {
     toggleSidebar,
     addVisitedTab,
     removeVisitedTab,
+    removeOtherVisitedTabs,
+    removeAllClosableTabs,
     resetVisitedTabs,
     useActiveMenu,
   };

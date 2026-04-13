@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   ArrowDown,
@@ -62,6 +62,12 @@ const orgDialogVisible = ref(false);
 const orgKeyword = ref('');
 const orgCity = ref('');
 const activeGroupId = ref('');
+const tabContextMenuVisible = ref(false);
+const tabContextMenuPosition = ref({
+  x: 0,
+  y: 0,
+});
+const contextMenuTabPath = ref('');
 
 const cityOptions = computed(() => Array.from(new Set(sessionStore.flatOrgs.map((item) => item.city))));
 const currentOrg = computed(() => sessionStore.currentOrg);
@@ -96,6 +102,14 @@ const syncVisitedTab = () => {
   });
 };
 
+const contextMenuTab = computed(() => appStore.visitedTabs.find((item) => item.path === contextMenuTabPath.value) ?? null);
+const hasClosableTabs = computed(() => appStore.visitedTabs.some((item) => item.closable));
+const canCloseContextTab = computed(() => Boolean(contextMenuTab.value?.closable));
+const canCloseOthers = computed(() => {
+  const targetPath = contextMenuTabPath.value;
+  return appStore.visitedTabs.some((item) => item.closable && item.path !== targetPath);
+});
+
 const handleSelect = (path: string) => {
   if (!path.startsWith('/')) {
     return;
@@ -112,22 +126,90 @@ const handleTabClick = (path: string | number) => {
   router.push(String(path));
 };
 
-const handleTabRemove = (path: string | number) => {
-  const currentPath = String(path);
+const hideTabContextMenu = () => {
+  tabContextMenuVisible.value = false;
+};
+
+const resolveFallbackPathAfterClosing = (closedPath: string) => {
   const currentTabs = appStore.visitedTabs;
-  const currentIndex = currentTabs.findIndex((item) => item.path === currentPath);
+  const currentIndex = currentTabs.findIndex((item) => item.path === closedPath);
   if (currentIndex === -1) {
-    return;
-  }
-
-  appStore.removeVisitedTab(currentPath);
-
-  if (route.path !== currentPath) {
-    return;
+    return fallbackHomePath.value;
   }
 
   const nextTab = currentTabs[currentIndex + 1] ?? currentTabs[currentIndex - 1] ?? currentTabs[0];
-  router.push(nextTab?.path ?? fallbackHomePath.value);
+  return nextTab?.path ?? fallbackHomePath.value;
+};
+
+const closeTab = (path: string) => {
+  const targetTab = appStore.visitedTabs.find((item) => item.path === path);
+  if (!targetTab?.closable) {
+    return;
+  }
+
+  const nextPath = resolveFallbackPathAfterClosing(path);
+  appStore.removeVisitedTab(path);
+
+  if (route.path !== path) {
+    return;
+  }
+
+  router.push(nextPath);
+};
+
+const handleTabRemove = (path: string | number) => {
+  closeTab(String(path));
+};
+
+const closeOtherTabs = (path: string) => {
+  const targetTab = appStore.visitedTabs.find((item) => item.path === path);
+  if (!targetTab) {
+    return;
+  }
+
+  appStore.removeOtherVisitedTabs(path);
+
+  if (route.path !== path) {
+    router.push(path);
+  }
+};
+
+const closeAllTabs = () => {
+  appStore.removeAllClosableTabs();
+  const remainingActiveTab = appStore.visitedTabs.find((item) => item.path === route.path);
+  if (remainingActiveTab) {
+    return;
+  }
+  router.push(appStore.visitedTabs[0]?.path ?? fallbackHomePath.value);
+};
+
+const handleTabContextMenu = (event: MouseEvent, path: string) => {
+  contextMenuTabPath.value = path;
+  tabContextMenuPosition.value = {
+    x: event.clientX,
+    y: event.clientY,
+  };
+  tabContextMenuVisible.value = true;
+};
+
+const handleTabContextAction = async (action: 'close-current' | 'close-others' | 'close-all') => {
+  const targetPath = contextMenuTabPath.value;
+  hideTabContextMenu();
+  if (!targetPath) {
+    return;
+  }
+
+  if (action === 'close-current') {
+    closeTab(targetPath);
+    return;
+  }
+
+  if (action === 'close-others') {
+    closeOtherTabs(targetPath);
+    return;
+  }
+
+  closeAllTabs();
 };
 
 const openOrgDialog = () => {
@@ -171,7 +253,10 @@ const syncOrgTree = async () => {
 
 watch(
   () => route.path,
-  () => syncVisitedTab(),
+  () => {
+    syncVisitedTab();
+    hideTabContextMenu();
+  },
   { immediate: true },
 );
 
@@ -221,6 +306,18 @@ watch(
   },
   { immediate: true },
 );
+
+onMounted(() => {
+  window.addEventListener('click', hideTabContextMenu);
+  window.addEventListener('resize', hideTabContextMenu);
+  window.addEventListener('blur', hideTabContextMenu);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('click', hideTabContextMenu);
+  window.removeEventListener('resize', hideTabContextMenu);
+  window.removeEventListener('blur', hideTabContextMenu);
+});
 </script>
 
 <template>
@@ -305,11 +402,46 @@ watch(
             <el-tab-pane
               v-for="tab in appStore.visitedTabs"
               :key="tab.path"
-              :label="tab.title"
               :name="tab.path"
               :closable="tab.closable"
-            />
+            >
+              <template #label>
+                <div class="workspace-tab-label" @contextmenu.prevent="handleTabContextMenu($event, tab.path)">
+                  {{ tab.title }}
+                </div>
+              </template>
+            </el-tab-pane>
           </el-tabs>
+          <div
+            v-if="tabContextMenuVisible"
+            class="tab-context-menu"
+            :style="{
+              left: `${tabContextMenuPosition.x}px`,
+              top: `${tabContextMenuPosition.y}px`,
+            }"
+          >
+            <button
+              class="tab-context-menu__item"
+              :disabled="!canCloseContextTab"
+              @click.stop="handleTabContextAction('close-current')"
+            >
+              关闭当前
+            </button>
+            <button
+              class="tab-context-menu__item"
+              :disabled="!canCloseOthers"
+              @click.stop="handleTabContextAction('close-others')"
+            >
+              关闭其他
+            </button>
+            <button
+              class="tab-context-menu__item"
+              :disabled="!hasClosableTabs"
+              @click.stop="handleTabContextAction('close-all')"
+            >
+              关闭全部
+            </button>
+          </div>
         </div>
         <router-view />
       </el-main>

@@ -631,10 +631,6 @@ VALUES ('GROUP_WORKBENCH', '集团工作台', NULL, 'MENU', '/group/dashboard', 
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('STORE_WORKBENCH', '门店工作台', NULL, 'MENU', '/store/dashboard', 'store/dashboard/index', 'store:dashboard:view', 'shop', 30, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
 VALUES ('GROUP_MGMT', '集团管理', NULL, 'DIRECTORY', '/group', NULL, NULL, 'office-building', 40, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
 
@@ -660,30 +656,6 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
 VALUES ('GROUP_USER_ROLE_MGMT', '用户角色管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/user-role', 'group/user-role/index', 'group:user-role:manage', 'user', 46, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('STORE_MGMT', '门店管理中心', NULL, 'DIRECTORY', '/store', NULL, NULL, 'shop', 50, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('STORE_INFO', '门店信息', (SELECT id FROM sys_menu WHERE menu_code = 'STORE_MGMT'), 'MENU', '/store/info', 'store/info/index', 'store:info:view', 'document', 51, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('STORE_BIZ_MGMT', '门店业务管理', (SELECT id FROM sys_menu WHERE menu_code = 'STORE_MGMT'), 'MENU', '/store/business', 'store/business/index', 'store:business:manage', 'tickets', 52, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('STORE_DATA_STAT', '门店数据统计', (SELECT id FROM sys_menu WHERE menu_code = 'STORE_MGMT'), 'MENU', '/store/statistics', 'store/statistics/index', 'store:data:stat:view', 'data-analysis', 53, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('STORE_OPERATION', '门店运营功能', (SELECT id FROM sys_menu WHERE menu_code = 'STORE_MGMT'), 'MENU', '/store/operation', 'store/operation/index', 'store:operation:manage', 'operation', 54, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('STORE_STAFF_ROLE', '门店员工角色分配', (SELECT id FROM sys_menu WHERE menu_code = 'STORE_MGMT'), 'MENU', '/store/staff-role', 'store/staff-role/index', 'store:staff-role:assign', 'user', 55, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
@@ -744,13 +716,6 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'STORE_ADMIN'),
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_WORKBENCH')
-)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_role_menu_rel (role_id, menu_id)
-VALUES (
     (SELECT id FROM sys_role WHERE role_code = 'GROUP_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT')
 )
@@ -773,27 +738,6 @@ WHERE m.menu_code IN (
     'GROUP_STORE_MGMT',
     'GROUP_DATA_STAT',
     'GROUP_USER_ROLE_MGMT'
-)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_role_menu_rel (role_id, menu_id)
-VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'STORE_ADMIN'),
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_MGMT')
-)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_role_menu_rel (role_id, menu_id)
-SELECT
-    (SELECT id FROM sys_role WHERE role_code = 'STORE_ADMIN'),
-    m.id
-FROM sys_menu m
-WHERE m.menu_code IN (
-    'STORE_INFO',
-    'STORE_BIZ_MGMT',
-    'STORE_DATA_STAT',
-    'STORE_OPERATION',
-    'STORE_STAFF_ROLE'
 )
 ON CONFLICT DO NOTHING;
 
@@ -926,25 +870,9 @@ ON CONFLICT DO NOTHING;
 -- ??????????jxc-w/src/config/jxc-menu.json??????????????/???????
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_ROOT',
-    '??????',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_MGMT'),
-    'DIRECTORY',
-    NULL,
-    NULL,
-    NULL,
-    'shop',
-    100,
-    TRUE,
-    'ENABLED'
-)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES (
     'STORE_BIZ_MOD_01',
     '订货管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
@@ -1136,7 +1064,7 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES (
     'STORE_BIZ_MOD_02',
     '采购管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
@@ -1408,7 +1336,7 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES (
     'STORE_BIZ_MOD_03',
     '生产管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
@@ -1600,7 +1528,7 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES (
     'STORE_BIZ_MOD_04',
     '库存管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
@@ -2144,7 +2072,7 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES (
     'STORE_BIZ_MOD_05',
     '财务管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
@@ -2576,7 +2504,7 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES (
     'STORE_BIZ_MOD_06',
     '质量管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
@@ -2672,7 +2600,7 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES (
     'STORE_BIZ_MOD_07',
     '报表管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
@@ -3504,7 +3432,7 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES (
     'STORE_BIZ_MOD_08',
     '档案管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
@@ -4064,7 +3992,7 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES (
     'STORE_BIZ_MOD_09',
     '预警管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
@@ -4128,7 +4056,7 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES (
     'STORE_BIZ_MOD_10',
     '系统设置',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_ROOT'),
+    NULL,
     'DIRECTORY',
     NULL,
     NULL,
