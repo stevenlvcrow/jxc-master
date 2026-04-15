@@ -367,9 +367,6 @@ const handleDishTreeSelect = (node: TreeNode) => {
       <template v-else>
         <div class="dish-warehouse-page__content">
           <aside class="dish-warehouse-page__tree panel category-panel">
-            <div class="section-head">
-              <strong>菜品范围</strong>
-            </div>
             <el-tree
               :data="dishTreeData"
               node-key="value"

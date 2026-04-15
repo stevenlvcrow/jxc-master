@@ -262,10 +262,6 @@ const pendingTasks = [
     </section>
 
     <section class="panel">
-      <div class="section-head">
-        <strong>面包屑</strong>
-        <span>菜单来源于文字版思维导图</span>
-      </div>
       <el-breadcrumb separator="/">
         <el-breadcrumb-item v-for="item in breadcrumbs" :key="item">
           {{ item }}
@@ -274,10 +270,6 @@ const pendingTasks = [
     </section>
 
     <section class="panel">
-      <div class="section-head">
-        <strong>页面占位</strong>
-        <span>适合继续扩展业务组件</span>
-      </div>
       <el-descriptions :column="1" border>
         <el-descriptions-item label="当前功能">{{ title }}</el-descriptions-item>
         <el-descriptions-item label="所属模块">{{ breadcrumbs[0] ?? '-' }}</el-descriptions-item>
@@ -287,10 +279,6 @@ const pendingTasks = [
     </section>
 
     <section class="panel">
-      <div class="section-head">
-        <strong>下一步建议</strong>
-        <span>先补通用列表页能力，再逐模块接接口</span>
-      </div>
       <ul class="todo-list">
         <li v-for="task in pendingTasks" :key="task">{{ task }}</li>
       </ul>

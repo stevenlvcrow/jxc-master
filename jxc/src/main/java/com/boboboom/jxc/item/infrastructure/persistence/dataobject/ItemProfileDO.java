@@ -1,16 +1,23 @@
 package com.boboboom.jxc.item.infrastructure.persistence.dataobject;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.BaseAuditDO;
 
 @TableName("dev.item_profile")
 public class ItemProfileDO extends BaseAuditDO {
 
+    @TableField("scope_type")
     private String scopeType;
+    @TableField("scope_id")
     private Long scopeId;
+    @TableField("item_id")
     private String itemId;
+    @TableField("item_code")
     private String itemCode;
+    @TableField("detail_json")
     private String detailJson;
+    @TableField("is_draft")
     private Boolean draft;
 
     public String getScopeType() {

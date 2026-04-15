@@ -18,9 +18,8 @@ const STORAGE_LOGIN_KEY = 'jxc-login';
 const STORAGE_ORG_KEY = 'jxc-current-org';
 const STORAGE_PLATFORM_ADMIN_MODE_KEY = 'jxc-platform-admin-mode';
 
-const isPlatformAdminAccount = (account?: string) => {
-  const normalized = (account ?? '').trim().toLowerCase();
-  return normalized === 'admin';
+type LoginOptions = {
+  platformAdminMode?: boolean;
 };
 
 const defaultOrgTree: OrgNode[] = [
@@ -159,10 +158,10 @@ export const useSessionStore = defineStore('session', () => {
     localStorage.removeItem(STORAGE_PLATFORM_ADMIN_MODE_KEY);
   };
 
-  const login = (name = '李智杰', account = '') => {
+  const login = (name = '李智杰', account = '', options: LoginOptions = {}) => {
     isLoggedIn.value = true;
     userName.value = name;
-    platformAdminMode.value = isPlatformAdminAccount(account);
+    platformAdminMode.value = Boolean(options.platformAdminMode);
     if (platformAdminMode.value) {
       currentOrgId.value = '';
       persistOrg();

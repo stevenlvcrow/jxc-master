@@ -23,10 +23,14 @@ public class ApiBodyCachingFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         ContentCachingRequestWrapper wrappedRequest = new ContentCachingRequestWrapper(request, 1024 * 1024);
         ContentCachingResponseWrapper wrappedResponse = new ContentCachingResponseWrapper(response);
+        boolean completed = false;
         try {
             filterChain.doFilter(wrappedRequest, wrappedResponse);
+            completed = true;
         } finally {
-            wrappedResponse.copyBodyToResponse();
+            if (completed) {
+                wrappedResponse.copyBodyToResponse();
+            }
         }
     }
 }

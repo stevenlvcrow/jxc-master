@@ -66,6 +66,34 @@
                         or (urr.scope_type = 'PLATFORM' and urr.scope_id is null)
                     ))
                 )
+            union
+            select distinct r_store.id as role_id,
+                            r_store.role_code
+            from sys_role r_store
+            where #{scopeType} = 'STORE'
+              and r_store.status = 'ENABLED'
+              and r_store.role_code = 'STORE_ADMIN'
+              and exists (
+                select 1
+                from sys_user_role_rel urr
+                         inner join sys_role r on r.id = urr.role_id
+                where urr.user_id = #{userId}
+                  and urr.status = 'ENABLED'
+                  and r.status = 'ENABLED'
+                  and (
+                    (urr.scope_type = 'STORE' and urr.scope_id = #{scopeId})
+                        or (
+                        urr.scope_type = 'GROUP'
+                            and urr.scope_id = (
+                            select s.group_id
+                            from sys_store s
+                            where s.id = #{scopeId}
+                            limit 1
+                        )
+                        )
+                        or (urr.scope_type = 'PLATFORM' and urr.scope_id is null)
+                    )
+              )
         ),
         direct_menus as (
             select distinct m.id,
@@ -136,6 +164,10 @@
                         mt.role_code
         from menu_tree mt
         where mt.menu_type in ('DIRECTORY', 'MENU')
+          and (
+            #{scopeType} != 'STORE'
+                or mt.menu_code like 'STORE_BIZ_%'
+          )
         order by mt.sort_no asc, mt.id asc
     </select>
 </mapper>

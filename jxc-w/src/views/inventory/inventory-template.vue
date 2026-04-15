@@ -2,6 +2,7 @@
 import { computed, reactive, ref } from 'vue';
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 
 type Status = '启用' | '停用';
@@ -19,6 +20,7 @@ type InventoryTemplateRow = {
 const statusOptions: Status[] = ['启用', '停用'];
 const orgOptions = ['总部', '华东分公司', '华南分公司'];
 const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
+const router = useRouter();
 
 const query = reactive({
   keyword: '',
@@ -95,7 +97,7 @@ const handleReset = () => {
 };
 
 const handleAdd = () => {
-  ElMessage.info('新增功能待接入');
+  router.push('/inventory/5/1/create');
 };
 
 const handleView = (row: InventoryTemplateRow) => {

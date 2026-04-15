@@ -15,6 +15,7 @@ spring:
       timeout: 5s
   sql:
     init:
+      mode: never
       schema-locations: classpath:init.sql
 
 server:
@@ -27,6 +28,10 @@ mybatis-plus:
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     banner: false
+
+flowable:
+  database-schema-update: true
+  async-executor-activate: false
 
 logging:
   level:

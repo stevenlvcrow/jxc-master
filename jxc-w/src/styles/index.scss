@@ -1260,19 +1260,6 @@ a {
   }
 }
 
-.section-head {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.section-head span {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
 .timeline,
 .todo-list {
   display: grid;

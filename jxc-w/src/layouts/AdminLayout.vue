@@ -46,12 +46,35 @@ const iconMap = {
 };
 
 const menuItems = computed(() => [...menuStore.menuItems]);
+const flattenMenuPaths = (items: typeof menuItems.value): string[] => items.flatMap((item) => {
+  const childPaths = item.children?.length ? flattenMenuPaths(item.children) : [];
+  return item.path ? [item.path, ...childPaths] : childPaths;
+});
+const canResolvePath = (path: string) => {
+  const normalizedPath = String(path ?? '').trim().replace(/\/+$/, '');
+  if (!normalizedPath || !normalizedPath.startsWith('/')) {
+    return false;
+  }
+  return router.resolve(normalizedPath).matched.length > 0;
+};
+const resolveFirstAvailableMenuPath = (items: typeof menuItems.value) => flattenMenuPaths(items)
+  .find((path) => canResolvePath(path));
+const findMenuTitleByPath = (items: typeof menuItems.value, path: string): string | null => {
+  for (const item of items) {
+    if (item.path === path) {
+      return item.title;
+    }
+    if (item.children?.length) {
+      const childTitle = findMenuTitleByPath(item.children, path);
+      if (childTitle) {
+        return childTitle;
+      }
+    }
+  }
+  return null;
+};
 const fallbackHomePath = computed(() => {
-  const collectPaths = (items: typeof menuItems.value): string[] => items.flatMap((item) => {
-    const childPaths = item.children?.length ? collectPaths(item.children) : [];
-    return item.path ? [item.path, ...childPaths] : childPaths;
-  });
-  const firstPath = collectPaths(menuItems.value)[0];
+  const firstPath = resolveFirstAvailableMenuPath(menuItems.value);
   return firstPath ?? (sessionStore.requiresOrgSelection ? '/dashboard' : '/system/groups');
 });
 
@@ -95,9 +118,10 @@ const activeGroupRows = computed(() => {
 });
 
 const syncVisitedTab = () => {
+  const menuTitle = findMenuTitleByPath(menuItems.value, route.path);
   appStore.addVisitedTab({
     path: route.path,
-    title: String(route.meta.title ?? '未命名页面'),
+    title: String(menuTitle ?? route.meta.title ?? '未命名页面'),
     closable: true,
   });
 };
@@ -111,15 +135,16 @@ const canCloseOthers = computed(() => {
 });
 
 const handleSelect = (path: string) => {
-  if (!path.startsWith('/')) {
+  const normalizedPath = String(path ?? '').trim().replace(/\/+$/, '');
+  if (!normalizedPath.startsWith('/')) {
     return;
   }
-  const resolved = router.resolve(path);
+  const resolved = router.resolve(normalizedPath);
   if (!resolved.matched.length) {
     ElMessage.info('该菜单页面尚未配置路由');
     return;
   }
-  router.push(path);
+  router.push(normalizedPath);
 };
 
 const handleTabClick = (path: string | number) => {
@@ -219,10 +244,28 @@ const openOrgDialog = () => {
   orgDialogVisible.value = true;
 };
 
-const selectOrg = (org: OrgNode) => {
-  sessionStore.selectOrg(org.id);
-  ElMessage.success(`已切换到 ${org.name}`);
-  orgDialogVisible.value = false;
+const switchOrg = async (orgId: string) => {
+  sessionStore.selectOrg(orgId);
+  appStore.resetVisitedTabs();
+  menuStore.clearMenus();
+  await menuStore.loadMenus(orgId);
+
+  const targetPath = resolveFirstAvailableMenuPath(menuStore.menuItems);
+  if (targetPath) {
+    await router.replace(targetPath);
+    return;
+  }
+  await router.replace('/select-org');
+};
+
+const selectOrg = async (org: OrgNode) => {
+  try {
+    await switchOrg(org.id);
+    ElMessage.success(`已切换到 ${org.name}`);
+    orgDialogVisible.value = false;
+  } catch {
+    // Global error message handled in http interceptor.
+  }
 };
 
 const handleUserCommand = (command: string | number | object) => {
@@ -261,6 +304,14 @@ watch(
 );
 
 watch(
+  () => menuItems.value,
+  () => {
+    syncVisitedTab();
+  },
+  { deep: true },
+);
+
+watch(
   () => [sessionStore.currentOrgId, sessionStore.platformAdminMode, sessionStore.isLoggedIn] as const,
   async ([orgId, isPlatformAdminMode, isLoggedIn]) => {
     if (!isLoggedIn) {
@@ -275,6 +326,15 @@ watch(
     }
     try {
       await menuStore.loadMenus(targetOrgId || undefined);
+      const allowedPaths = new Set(flattenMenuPaths(menuStore.menuItems));
+      if (route.path !== '/select-org' && route.path !== '/login' && !allowedPaths.has(route.path)) {
+        const fallbackPath = resolveFirstAvailableMenuPath(menuStore.menuItems);
+        if (fallbackPath) {
+          await router.replace(fallbackPath);
+        } else if (sessionStore.requiresOrgSelection) {
+          await router.replace('/select-org');
+        }
+      }
     } catch {
       // Global error message handled in http interceptor.
     }

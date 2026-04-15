@@ -28,6 +28,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/api/identity/auth/me", "/api/identity/auth/logout", "/api/identity/org/**")
                 .addPathPatterns("/api/identity/**")
                 .addPathPatterns("/api/items/**")
+                .addPathPatterns("/api/inventory/**")
+                .addPathPatterns("/api/workflow/**")
                 .addPathPatterns("/api/users/**")
                 .excludePathPatterns(
                         "/api/identity/auth/login",

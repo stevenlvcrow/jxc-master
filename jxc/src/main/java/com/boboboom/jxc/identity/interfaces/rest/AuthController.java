@@ -1,13 +1,18 @@
 package com.boboboom.jxc.identity.interfaces.rest;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.LoginSession;
 import com.boboboom.jxc.identity.application.auth.PasswordCodec;
 import com.boboboom.jxc.identity.application.auth.TokenService;
 import com.boboboom.jxc.identity.application.auth.UnauthorizedException;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserAccountMapper;
+import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
 import com.boboboom.jxc.identity.interfaces.rest.request.AuthLoginRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.RefreshTokenRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.AuthLoginResult;
@@ -28,10 +33,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final UserAccountMapper userAccountMapper;
+    private final RoleMapper roleMapper;
+    private final UserRoleRelMapper userRoleRelMapper;
     private final TokenService tokenService;
 
-    public AuthController(UserAccountMapper userAccountMapper, TokenService tokenService) {
+    public AuthController(UserAccountMapper userAccountMapper,
+                          RoleMapper roleMapper,
+                          UserRoleRelMapper userRoleRelMapper,
+                          TokenService tokenService) {
         this.userAccountMapper = userAccountMapper;
+        this.roleMapper = roleMapper;
+        this.userRoleRelMapper = userRoleRelMapper;
         this.tokenService = tokenService;
     }
 
@@ -51,6 +63,7 @@ public class AuthController {
         result.setAccessToken(session.getToken());
         result.setRefreshToken(session.getToken());
         result.setUserName(user.getRealName());
+        result.setPlatformAdmin(isPlatformAdmin(user.getId()));
         return CodeDataResponse.ok(result);
     }
 
@@ -92,5 +105,21 @@ public class AuthController {
 
     private String normalizeAccount(String account) {
         return account == null ? "" : account.trim();
+    }
+
+    private boolean isPlatformAdmin(Long userId) {
+        RoleDO role = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
+                .eq(RoleDO::getRoleCode, "PLATFORM_SUPER_ADMIN")
+                .last("limit 1"));
+        if (role == null) {
+            return false;
+        }
+        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
+                .eq(UserRoleRelDO::getUserId, userId)
+                .eq(UserRoleRelDO::getRoleId, role.getId())
+                .eq(UserRoleRelDO::getScopeType, "PLATFORM")
+                .eq(UserRoleRelDO::getStatus, "ENABLED")
+                .last("limit 1"));
+        return rel != null;
     }
 }

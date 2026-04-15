@@ -460,9 +460,6 @@ onBeforeUnmount(() => {
 <template>
   <div class="item-management-layout">
     <section class="panel category-panel">
-      <div class="section-head">
-        <strong>菜品树</strong>
-      </div>
       <el-tree
         :data="dishTreeData"
         node-key="id"

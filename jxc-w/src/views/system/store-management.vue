@@ -175,10 +175,8 @@ onMounted(() => {
 <template>
   <div class="page-grid single">
     <section class="panel item-main-panel">
-      <div class="section-head">
-        <strong>门店管理</strong>
-        <el-space>
-          <span>集团：</span>
+      <CommonQuerySection :model="query">
+        <el-form-item label="集团">
           <el-select v-model="selectedGroupId" style="width: 260px" filterable>
             <el-option
               v-for="group in groups"
@@ -187,10 +185,7 @@ onMounted(() => {
               :value="group.id"
             />
           </el-select>
-        </el-space>
-      </div>
-
-      <CommonQuerySection :model="query">
+        </el-form-item>
         <el-form-item label="关键字">
           <el-input v-model="query.keyword" placeholder="门店编码/名称/联系方式" clearable style="width: 260px" />
         </el-form-item>

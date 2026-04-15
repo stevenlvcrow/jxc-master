@@ -1,11 +1,6 @@
 ﻿<template>
   <div class="page-grid single">
     <section class="panel item-main-panel">
-      <div class="section-head">
-        <strong>系统设置</strong>
-        <span>可继续扩展角色、菜单、字典与租户模块</span>
-      </div>
-
       <el-descriptions :column="1" border>
         <el-descriptions-item label="推荐 UI">Element Plus</el-descriptions-item>
         <el-descriptions-item label="状态管理">Pinia</el-descriptions-item>

@@ -9,6 +9,7 @@ export type LoginResult = {
   accessToken: string;
   refreshToken?: string;
   userName: string;
+  platformAdmin?: boolean;
 };
 
 export const loginApi = (payload: LoginRequest) =>

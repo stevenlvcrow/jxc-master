@@ -60,6 +60,8 @@ export type RoleAdminItem = {
   description: string;
   status: 'ENABLED' | 'DISABLED';
   menuIds: number[];
+  builtin?: boolean;
+  editable?: boolean;
 };
 
 export type MenuAdminItem = {

@@ -538,6 +538,22 @@ INSERT INTO sys_role (role_code, role_name, role_type, data_scope_type, descript
 VALUES ('STORE_ADMIN', '门店管理员', 'STORE', 'STORE', '系统初始化门店管理员角色', 'ENABLED')
 ON CONFLICT DO NOTHING;
 
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, role_type, data_scope_type, description, status)
+VALUES (0, 'STORE_MANAGER', '店长', 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
+
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, role_type, data_scope_type, description, status)
+VALUES (0, 'SALESMAN', '业务员', 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
+
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, role_type, data_scope_type, description, status)
+VALUES (0, 'FINANCE', '财务', 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
+
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, role_type, data_scope_type, description, status)
+VALUES (0, 'CASHIER', '收银员', 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
+
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
 VALUES ('SYS_MGMT', '系统管理', NULL, 'DIRECTORY', '/system', NULL, NULL, 'setting', 10, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
@@ -639,24 +655,52 @@ VALUES ('GROUP_INFO', '集团信息', (SELECT id FROM sys_menu WHERE menu_code =
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('GROUP_STORE_SELECTOR', '集团和门店选择', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/context-select', 'group/context-select/index', 'group:context:select', 'switch', 42, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('GROUP_STORE_OVERVIEW', '门店总览', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/store-overview', 'group/store-overview/index', 'group:store:overview:view', 'histogram', 43, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
 VALUES ('GROUP_STORE_MGMT', '门店管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/stores', 'group/stores/index', 'group:store:manage', 'shop', 44, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('GROUP_DATA_STAT', '集团数据统计', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/statistics', 'group/statistics/index', 'group:data:stat:view', 'data-analysis', 45, TRUE, 'ENABLED')
+VALUES ('GROUP_USER_ROLE_MGMT', '用户管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/user-role', 'group/user-role/index', 'group:user-role:manage', 'user', 46, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('GROUP_USER_ROLE_MGMT', '用户角色管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/user-role', 'group/user-role/index', 'group:user-role:manage', 'user', 46, TRUE, 'ENABLED')
+VALUES ('GROUP_ROLE_MGMT', '角色管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/roles', 'group/roles/index', 'group:role:manage', 'team', 47, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
+VALUES ('GROUP_MENU_PERMISSION_MGMT', '菜单权限管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/menu-permissions', 'group/menu-permissions/index', 'group:menu-permission:manage', 'setting', 48, TRUE, 'ENABLED')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
+VALUES ('GROUP_WORKFLOW_PROCESS_MGMT', '流程管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_WORKBENCH'), 'MENU', '/group/workflow-processes', 'group/workflow/processes/index', 'group:workflow:process:manage', 'setting', 48, TRUE, 'ENABLED')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
+VALUES ('GROUP_WORKFLOW_HISTORY_MGMT', '流程发布历史管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_WORKBENCH'), 'MENU', '/group/workflow-history', 'group/workflow/history/index', 'group:workflow:history:view', 'setting', 50, TRUE, 'ENABLED')
+ON CONFLICT DO NOTHING;
+
+UPDATE sys_menu
+SET menu_name = '用户管理'
+WHERE menu_code = 'GROUP_USER_ROLE_MGMT';
+
+DELETE FROM sys_role_menu_rel
+WHERE menu_id IN (
+    SELECT id
+    FROM sys_menu
+    WHERE menu_code IN ('GROUP_STORE_SELECTOR', 'GROUP_STORE_OVERVIEW', 'GROUP_DATA_STAT')
+);
+
+DELETE FROM sys_menu
+WHERE menu_code IN ('GROUP_STORE_SELECTOR', 'GROUP_STORE_OVERVIEW', 'GROUP_DATA_STAT');
+
+DELETE FROM sys_role_menu_rel
+WHERE menu_id IN (
+    SELECT id
+    FROM sys_menu
+    WHERE menu_code = 'GROUP_WORKFLOW_CONFIG'
+);
+
+DELETE FROM sys_menu
+WHERE menu_code = 'GROUP_WORKFLOW_CONFIG';
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
@@ -733,11 +777,12 @@ WHERE m.menu_code IN (
     'MENU_PERMISSION_MGMT',
     'GROUP_MGMT_ADMIN',
     'GROUP_INFO',
-    'GROUP_STORE_SELECTOR',
-    'GROUP_STORE_OVERVIEW',
     'GROUP_STORE_MGMT',
-    'GROUP_DATA_STAT',
-    'GROUP_USER_ROLE_MGMT'
+    'GROUP_USER_ROLE_MGMT',
+    'GROUP_ROLE_MGMT',
+    'GROUP_MENU_PERMISSION_MGMT',
+    'GROUP_WORKFLOW_PROCESS_MGMT',
+    'GROUP_WORKFLOW_HISTORY_MGMT'
 )
 ON CONFLICT DO NOTHING;
 
@@ -4812,3 +4857,168 @@ ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
 INSERT INTO supplier_category (scope_type, scope_id, category_code, category_name, parent_category, created_at, updated_at)
 VALUES ('PLATFORM', 0, 'SUPCAT-0004', '设备维保', '供应商类别', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS inventory_purchase_inbound
+(
+    id             BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type     VARCHAR(16)   NOT NULL DEFAULT 'PLATFORM',
+    scope_id       BIGINT        NOT NULL DEFAULT 0,
+    document_code  VARCHAR(64)   NOT NULL,
+    inbound_date   DATE          NOT NULL,
+    warehouse_name VARCHAR(128)  NOT NULL,
+    supplier_name  VARCHAR(128)  NOT NULL,
+    upstream_code  VARCHAR(64),
+    status         VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    remark         VARCHAR(500),
+    created_by     BIGINT,
+    approved_by    BIGINT,
+    approved_at    TIMESTAMP,
+    created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_purchase_inbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_purchase_inbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_purchase_inbound_scope ON inventory_purchase_inbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_purchase_inbound_inbound_date ON inventory_purchase_inbound (inbound_date DESC);
+
+COMMENT ON TABLE inventory_purchase_inbound IS '采购入库单';
+COMMENT ON COLUMN inventory_purchase_inbound.scope_type IS '数据范围：PLATFORM/GROUP/STORE';
+COMMENT ON COLUMN inventory_purchase_inbound.scope_id IS '范围ID，平台固定0';
+COMMENT ON COLUMN inventory_purchase_inbound.document_code IS '单据编号';
+COMMENT ON COLUMN inventory_purchase_inbound.status IS '状态：草稿/已提交/已审核';
+
+CREATE TABLE IF NOT EXISTS inventory_purchase_inbound_line
+(
+    id          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    inbound_id  BIGINT         NOT NULL,
+    item_code   VARCHAR(64)    NOT NULL,
+    item_name   VARCHAR(128)   NOT NULL,
+    quantity    NUMERIC(18,4)  NOT NULL,
+    unit_price  NUMERIC(18,4)  NOT NULL DEFAULT 0,
+    tax_rate    NUMERIC(10,4)  NOT NULL DEFAULT 0,
+    created_at  TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_purchase_inbound_line_inbound ON inventory_purchase_inbound_line (inbound_id);
+
+COMMENT ON TABLE inventory_purchase_inbound_line IS '采购入库单行';
+
+CREATE TABLE IF NOT EXISTS workflow_definition_config
+(
+    id                           BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                   VARCHAR(16)   NOT NULL DEFAULT 'GROUP',
+    scope_id                     BIGINT        NOT NULL,
+    business_code                VARCHAR(64)   NOT NULL,
+    workflow_code                VARCHAR(64)   NOT NULL,
+    workflow_name                VARCHAR(128)  NOT NULL,
+    status                       VARCHAR(16)   NOT NULL DEFAULT 'DRAFT',
+    version_no                   INTEGER       NOT NULL DEFAULT 0,
+    node_config_json             TEXT          NOT NULL,
+    process_definition_key       VARCHAR(128),
+    process_definition_id        VARCHAR(128),
+    deployed_at                  TIMESTAMP,
+    created_by                   BIGINT,
+    updated_by                   BIGINT,
+    created_at                   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                   TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_workflow_definition_cfg UNIQUE (scope_type, scope_id, business_code, workflow_code),
+    CONSTRAINT ck_workflow_definition_scope_type CHECK (scope_type IN ('GROUP', 'STORE')),
+    CONSTRAINT ck_workflow_definition_status CHECK (status IN ('DRAFT', 'PUBLISHED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_definition_scope ON workflow_definition_config (scope_type, scope_id);
+
+COMMENT ON TABLE workflow_definition_config IS '通用流程定义配置（集团/门店级）';
+COMMENT ON COLUMN workflow_definition_config.business_code IS '业务编码，如PURCHASE_INBOUND/ORDER_RECONCILE';
+COMMENT ON COLUMN workflow_definition_config.node_config_json IS '流程节点配置JSON';
+COMMENT ON COLUMN workflow_definition_config.status IS '状态：DRAFT/PUBLISHED';
+
+CREATE TABLE IF NOT EXISTS workflow_process_registry
+(
+    id             BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type     VARCHAR(16)   NOT NULL DEFAULT 'GROUP',
+    scope_id       BIGINT        NOT NULL,
+    process_code   VARCHAR(64)   NOT NULL,
+    business_name  VARCHAR(128)  NOT NULL,
+    template_id    VARCHAR(64),
+    created_by     BIGINT,
+    updated_by     BIGINT,
+    created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_workflow_process_registry UNIQUE (scope_type, scope_id, process_code),
+    CONSTRAINT ck_workflow_process_scope_type CHECK (scope_type IN ('GROUP'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_process_scope ON workflow_process_registry (scope_type, scope_id);
+
+COMMENT ON TABLE workflow_process_registry IS '流程管理主表（集团级）';
+COMMENT ON COLUMN workflow_process_registry.process_code IS '流程ID';
+COMMENT ON COLUMN workflow_process_registry.template_id IS '绑定模板ID';
+
+CREATE TABLE IF NOT EXISTS workflow_process_store_binding
+(
+    id                   BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    process_registry_id  BIGINT      NOT NULL,
+    group_id             BIGINT      NOT NULL,
+    store_id             BIGINT      NOT NULL,
+    created_by           BIGINT,
+    updated_by           BIGINT,
+    created_at           TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at           TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_workflow_process_store_binding UNIQUE (process_registry_id, store_id),
+    CONSTRAINT fk_workflow_process_binding_process FOREIGN KEY (process_registry_id) REFERENCES workflow_process_registry (id),
+    CONSTRAINT fk_workflow_process_binding_group FOREIGN KEY (group_id) REFERENCES sys_group (id),
+    CONSTRAINT fk_workflow_process_binding_store FOREIGN KEY (store_id) REFERENCES sys_store (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_process_store_binding_group ON workflow_process_store_binding (group_id, process_registry_id);
+CREATE INDEX IF NOT EXISTS idx_workflow_process_store_binding_store ON workflow_process_store_binding (store_id);
+
+COMMENT ON TABLE workflow_process_store_binding IS '流程与门店绑定关系表（集团级）';
+COMMENT ON COLUMN workflow_process_store_binding.process_registry_id IS '流程管理主表ID';
+COMMENT ON COLUMN workflow_process_store_binding.group_id IS '集团ID';
+COMMENT ON COLUMN workflow_process_store_binding.store_id IS '门店ID';
+
+CREATE TABLE IF NOT EXISTS inventory_balance
+(
+    id             BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type     VARCHAR(16)   NOT NULL DEFAULT 'PLATFORM',
+    scope_id       BIGINT        NOT NULL DEFAULT 0,
+    warehouse_name VARCHAR(128)  NOT NULL,
+    item_code      VARCHAR(64)   NOT NULL,
+    item_name      VARCHAR(128)  NOT NULL,
+    quantity       NUMERIC(18,4) NOT NULL DEFAULT 0,
+    created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_balance_scope_wh_item UNIQUE (scope_type, scope_id, warehouse_name, item_code),
+    CONSTRAINT ck_inventory_balance_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_balance_scope ON inventory_balance (scope_type, scope_id, warehouse_name);
+
+COMMENT ON TABLE inventory_balance IS '库存结存';
+
+CREATE TABLE IF NOT EXISTS inventory_transaction
+(
+    id             BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type     VARCHAR(16)   NOT NULL DEFAULT 'PLATFORM',
+    scope_id       BIGINT        NOT NULL DEFAULT 0,
+    biz_type       VARCHAR(64)   NOT NULL,
+    biz_id         BIGINT        NOT NULL,
+    biz_line_id    BIGINT,
+    warehouse_name VARCHAR(128)  NOT NULL,
+    item_code      VARCHAR(64)   NOT NULL,
+    item_name      VARCHAR(128)  NOT NULL,
+    quantity_delta NUMERIC(18,4) NOT NULL,
+    before_qty     NUMERIC(18,4) NOT NULL,
+    after_qty      NUMERIC(18,4) NOT NULL,
+    operator_id    BIGINT,
+    created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_inventory_transaction_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_transaction_scope ON inventory_transaction (scope_type, scope_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inventory_transaction_biz ON inventory_transaction (biz_type, biz_id);
+
+COMMENT ON TABLE inventory_transaction IS '库存流水';

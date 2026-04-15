@@ -11,6 +11,7 @@ import {
   type RoleAdminItem,
   type RoleUpsertPayload,
 } from '@/api/modules/system-admin';
+import { useSessionStore } from '@/stores/session';
 
 const loading = ref(false);
 const submitting = ref(false);
@@ -19,6 +20,7 @@ const editingRoleId = ref<number | null>(null);
 const roles = ref<RoleAdminItem[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
+const sessionStore = useSessionStore();
 
 const queryForm = reactive({
   keyword: '',
@@ -39,6 +41,11 @@ const form = reactive<RoleUpsertPayload>({
 
 const roleTypeOptions = ['PLATFORM', 'GROUP', 'STORE'];
 const dataScopeOptions = ['ALL', 'GROUP', 'STORE', 'CUSTOM'];
+const isRoleEditable = (role: RoleAdminItem) => role.editable !== false;
+const isBuiltinRole = (role: RoleAdminItem) => role.builtin === true;
+const roleTypeSelectableOptions = computed(() => (
+  sessionStore.platformAdminMode ? roleTypeOptions : roleTypeOptions.filter((item) => item !== 'PLATFORM')
+));
 
 const filteredRoles = computed(() => {
   const keyword = queryForm.keyword.trim().toLowerCase();
@@ -102,10 +109,18 @@ const loadRoles = async () => {
 
 const openCreate = () => {
   resetForm();
+  if (!sessionStore.platformAdminMode) {
+    form.roleType = 'GROUP';
+    form.dataScopeType = 'GROUP';
+  }
   dialogVisible.value = true;
 };
 
 const openEdit = (row: RoleAdminItem) => {
+  if (!isRoleEditable(row)) {
+    ElMessage.warning('内置角色不可编辑');
+    return;
+  }
   editingRoleId.value = row.id;
   form.roleCode = row.roleCode;
   form.roleName = row.roleName;
@@ -163,10 +178,6 @@ watch(
 <template>
   <div class="page-grid single">
     <section class="panel item-main-panel">
-      <div class="section-head">
-        <strong>角色管理</strong>
-      </div>
-
       <CommonQuerySection :model="queryForm">
         <el-form-item label="角色编码">
           <el-input
@@ -198,9 +209,21 @@ watch(
         <el-table-column prop="roleCode" label="角色编码" min-width="200" />
         <el-table-column prop="roleName" label="角色名称" min-width="180" />
         <el-table-column prop="roleType" label="角色类型" width="140" />
+        <el-table-column label="属性" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="isBuiltinRole(row)" type="warning" size="small">内置</el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
+            <el-tooltip
+              :content="isRoleEditable(row) ? '' : '内置角色不可编辑'"
+              :disabled="isRoleEditable(row)"
+              placement="top"
+            >
+              <el-button type="primary" link :disabled="!isRoleEditable(row)" @click="openEdit(row)">编辑</el-button>
+            </el-tooltip>
           </template>
         </el-table-column>
       </el-table>
@@ -231,7 +254,7 @@ watch(
         </el-form-item>
         <el-form-item label="角色类型">
           <el-select v-model="form.roleType" style="width: 100%">
-            <el-option v-for="item in roleTypeOptions" :key="item" :label="item" :value="item" />
+            <el-option v-for="item in roleTypeSelectableOptions" :key="item" :label="item" :value="item" />
           </el-select>
         </el-form-item>
         <el-form-item label="数据范围">

@@ -13,6 +13,11 @@ const password = ref('123654');
 const useRealAuthApi = import.meta.env.VITE_USE_REAL_AUTH_API === '1';
 const SYSTEM_ADMIN_HOME = '/system/groups';
 
+const isMockPlatformAccount = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  return normalized === 'admin' || normalized === '13800000000';
+};
+
 const submitLogin = async () => {
   if (!account.value.trim() || !password.value.trim()) {
     ElMessage.warning('请输入账号和密码');
@@ -21,7 +26,9 @@ const submitLogin = async () => {
 
   if (!useRealAuthApi) {
     const loginAccount = account.value.trim();
-    sessionStore.login('李智杰', loginAccount);
+    sessionStore.login('李智杰', loginAccount, {
+      platformAdminMode: isMockPlatformAccount(loginAccount),
+    });
     router.replace(sessionStore.requiresOrgSelection ? '/select-org' : SYSTEM_ADMIN_HOME);
     return;
   }
@@ -36,7 +43,9 @@ const submitLogin = async () => {
       refreshToken: result.refreshToken,
     });
     const loginAccount = account.value.trim();
-    sessionStore.login(result.userName || loginAccount, loginAccount);
+    sessionStore.login(result.userName || loginAccount, loginAccount, {
+      platformAdminMode: Boolean(result.platformAdmin),
+    });
     router.replace(sessionStore.requiresOrgSelection ? '/select-org' : SYSTEM_ADMIN_HOME);
   } catch {
     // Global error message handled in http interceptor.

@@ -1,22 +1,34 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import { useRoute } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import {
   assignAdminUserRolesApi,
   createAdminUserApi,
+  fetchAdminGroupsApi,
   fetchAdminRolesApi,
   fetchAdminUsersApi,
+  fetchGroupStoresApi,
   updateAdminUserStatusApi,
+  type GroupAdminItem,
+  type GroupStoreItem,
   type RoleAdminItem,
   type UserAdminItem,
 } from '@/api/modules/system-admin';
 
+type EditableAssignment = {
+  uid: string;
+  roleId?: number;
+  scopeType: string;
+  scopeId: number | null;
+};
+
 const loading = ref(false);
-const route = useRoute();
+const scopeLoading = ref(false);
 const users = ref<UserAdminItem[]>([]);
 const roles = ref<RoleAdminItem[]>([]);
+const groups = ref<GroupAdminItem[]>([]);
+const stores = ref<GroupStoreItem[]>([]);
 const filteredUsers = ref<UserAdminItem[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
@@ -26,7 +38,7 @@ const assignDialogVisible = ref(false);
 const submitting = ref(false);
 const assigning = ref(false);
 const selectedUser = ref<UserAdminItem | null>(null);
-const selectedRoleIds = ref<number[]>([]);
+const editableAssignments = ref<EditableAssignment[]>([]);
 
 const createForm = reactive({
   realName: '',
@@ -50,11 +62,35 @@ const roleOptions = computed(() => roles.value.map((item) => ({
   label: `${item.roleName}（${item.roleCode}）`,
   value: item.id,
 })));
-const pageTitle = computed(() => String(route.meta.title ?? '用户管理'));
 const pagedUsers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   return filteredUsers.value.slice(start, start + pageSize.value);
 });
+const groupScopeOptions = computed(() => groups.value.map((group) => ({
+  label: `${group.groupName}（${group.groupCode}）`,
+  value: group.id,
+})));
+const groupNameMap = computed(() => new Map(groups.value.map((group) => [group.id, group.groupName])));
+const storeScopeOptions = computed(() => stores.value.map((store) => ({
+  label: `${groupNameMap.value.get(store.groupId) ?? '集团'} / ${store.storeName}（${store.storeCode}）`,
+  value: store.id,
+})));
+
+let assignmentSeed = 0;
+
+const nextAssignmentUid = () => {
+  assignmentSeed += 1;
+  return `assignment-${assignmentSeed}`;
+};
+
+const buildEmptyAssignment = (): EditableAssignment => ({
+  uid: nextAssignmentUid(),
+  roleId: undefined,
+  scopeType: 'PLATFORM',
+  scopeId: null,
+});
+
+const getRoleById = (roleId?: number) => roles.value.find((role) => role.id === roleId);
 
 const applyQuery = () => {
   const realName = queryForm.realName.trim().toLowerCase();
@@ -95,6 +131,18 @@ const loadData = async () => {
   }
 };
 
+const loadManagedScopes = async () => {
+  scopeLoading.value = true;
+  try {
+    const groupList = await fetchAdminGroupsApi();
+    groups.value = groupList;
+    const storeBuckets = await Promise.all(groupList.map((group) => fetchGroupStoresApi(group.id)));
+    stores.value = storeBuckets.flat();
+  } finally {
+    scopeLoading.value = false;
+  }
+};
+
 const handleCreate = async () => {
   if (!createForm.realName.trim() || !createForm.phone.trim()) {
     ElMessage.warning('请填写姓名和手机号');
@@ -127,28 +175,74 @@ const handleStatusChange = async (row: UserAdminItem, value: boolean | string | 
   }
 };
 
-const openAssignDialog = (row: UserAdminItem) => {
+const updateAssignmentScopeByRole = (assignment: EditableAssignment) => {
+  const role = getRoleById(assignment.roleId);
+  const scopeType = roleTypeScopeMap[role?.roleType ?? 'PLATFORM'] ?? 'PLATFORM';
+  assignment.scopeType = scopeType;
+  assignment.scopeId = null;
+};
+
+const openAssignDialog = async (row: UserAdminItem) => {
   selectedUser.value = row;
-  selectedRoleIds.value = Array.from(new Set(row.roles.map((item) => item.roleId)));
+  await loadManagedScopes();
+  const rows = row.roles.map<EditableAssignment>((role) => ({
+    uid: nextAssignmentUid(),
+    roleId: role.roleId,
+    scopeType: role.scopeType,
+    scopeId: role.scopeId,
+  }));
+  editableAssignments.value = rows.length ? rows : [buildEmptyAssignment()];
   assignDialogVisible.value = true;
+};
+
+const addAssignmentRow = () => {
+  editableAssignments.value.push(buildEmptyAssignment());
+};
+
+const removeAssignmentRow = (uid: string) => {
+  editableAssignments.value = editableAssignments.value.filter((item) => item.uid !== uid);
+  if (!editableAssignments.value.length) {
+    editableAssignments.value = [buildEmptyAssignment()];
+  }
+};
+
+const handleAssignmentRoleChange = (row: EditableAssignment, value: string | number) => {
+  row.roleId = Number(value);
+  updateAssignmentScopeByRole(row);
 };
 
 const handleAssignRoles = async () => {
   if (!selectedUser.value) {
     return;
   }
+  const assignments = editableAssignments.value
+    .filter((item) => item.roleId != null)
+    .map((item) => ({
+      roleId: Number(item.roleId),
+      scopeType: item.scopeType,
+      scopeId: item.scopeType === 'PLATFORM' ? null : item.scopeId,
+    }));
+
+  if (!assignments.length) {
+    ElMessage.warning('请至少选择一个角色');
+    return;
+  }
+
+  const missingScope = assignments.find((item) => item.scopeType !== 'PLATFORM' && item.scopeId == null);
+  if (missingScope) {
+    ElMessage.warning('集团/门店角色必须指定作用域');
+    return;
+  }
+
+  const deduped = Array.from(
+    new Map(
+      assignments.map((item) => [`${item.roleId}-${item.scopeType}-${item.scopeId ?? 'null'}`, item]),
+    ).values(),
+  );
+
   assigning.value = true;
   try {
-    const assignments = selectedRoleIds.value.map((roleId) => {
-      const role = roles.value.find((item) => item.id === roleId);
-      const scopeType = roleTypeScopeMap[role?.roleType ?? 'PLATFORM'] ?? 'PLATFORM';
-      return {
-        roleId,
-        scopeType,
-        scopeId: null,
-      };
-    });
-    await assignAdminUserRolesApi(selectedUser.value.id, assignments);
+    await assignAdminUserRolesApi(selectedUser.value.id, deduped);
     ElMessage.success('角色分配成功');
     assignDialogVisible.value = false;
     await loadData();
@@ -172,10 +266,6 @@ onMounted(() => {
 <template>
   <div class="page-grid single">
     <section class="panel item-main-panel">
-      <div class="section-head">
-        <strong>{{ pageTitle }}</strong>
-      </div>
-
       <el-form :model="queryForm" :inline="true" class="filter-bar compact-filter-bar">
         <el-form-item label="姓名查询">
           <el-input
@@ -223,7 +313,7 @@ onMounted(() => {
         <el-table-column prop="username" label="用户编码" min-width="160" />
         <el-table-column prop="realName" label="姓名" min-width="140" />
         <el-table-column prop="phone" label="手机号" min-width="140" />
-        <el-table-column label="拥有角色" min-width="240">
+        <el-table-column label="拥有角色" min-width="280">
           <template #default="{ row }">
             <el-space wrap>
               <el-tag
@@ -231,7 +321,7 @@ onMounted(() => {
                 :key="`${role.roleId}-${role.scopeType}-${role.scopeId ?? 'null'}`"
                 size="small"
               >
-                {{ role.roleName }}
+                {{ role.roleName }}{{ role.scopeName ? ` / ${role.scopeName}` : '' }}
               </el-tag>
               <span v-if="!row.roles.length">-</span>
             </el-space>
@@ -290,15 +380,70 @@ onMounted(() => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="assignDialogVisible" title="分配角色" width="480px" class="standard-form-dialog">
-      <el-form label-width="90px" class="standard-dialog-form">
+    <el-dialog v-model="assignDialogVisible" title="分配角色" width="840px" class="standard-form-dialog">
+      <el-form label-width="90px" class="standard-dialog-form" v-loading="scopeLoading">
         <el-form-item label="用户">
           <span>{{ selectedUser?.realName }}（{{ selectedUser?.phone }}）</span>
         </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="selectedRoleIds" multiple filterable style="width: 100%">
-            <el-option v-for="item in roleOptions" :key="item.value" :label="item.label" :value="item.value" />
-          </el-select>
+        <el-form-item label="授权明细">
+          <div style="width: 100%">
+            <el-table :data="editableAssignments" border size="small">
+              <el-table-column label="角色" min-width="280">
+                <template #default="{ row }">
+                  <el-select
+                    :model-value="row.roleId"
+                    placeholder="请选择角色"
+                    filterable
+                    style="width: 100%"
+                    @change="handleAssignmentRoleChange(row, $event)"
+                  >
+                    <el-option v-for="item in roleOptions" :key="item.value" :label="item.label" :value="item.value" />
+                  </el-select>
+                </template>
+              </el-table-column>
+              <el-table-column label="作用域" min-width="260">
+                <template #default="{ row }">
+                  <el-select
+                    v-if="row.scopeType === 'GROUP'"
+                    v-model="row.scopeId"
+                    placeholder="请选择集团"
+                    filterable
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="item in groupScopeOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                  <el-select
+                    v-else-if="row.scopeType === 'STORE'"
+                    v-model="row.scopeId"
+                    placeholder="请选择门店"
+                    filterable
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="item in storeScopeOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                  <el-input v-else model-value="平台" disabled />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="100" align="center">
+                <template #default="{ row }">
+                  <el-button type="danger" link @click="removeAssignmentRow(row.uid)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div style="margin-top: 10px">
+              <el-button plain type="primary" @click="addAssignmentRow">新增一行</el-button>
+            </div>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -308,4 +453,3 @@ onMounted(() => {
     </el-dialog>
   </div>
 </template>
-

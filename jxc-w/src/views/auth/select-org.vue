@@ -20,6 +20,11 @@ const chooseOrg = (orgId: string) => {
   router.replace('/dashboard');
 };
 
+const handleLogout = () => {
+  sessionStore.logout();
+  router.replace('/login');
+};
+
 onMounted(async () => {
   if (!useRealOrgApi) {
     return;
@@ -37,7 +42,10 @@ onMounted(async () => {
 <template>
   <div class="select-org-page">
     <section class="select-org-wrap">
-      <h1 class="select-org-title">请选择机构</h1>
+      <div class="select-org-head">
+        <h1 class="select-org-title">请选择机构</h1>
+        <el-button text type="danger" @click="handleLogout">退出登录</el-button>
+      </div>
 
       <el-card
         v-for="trial in topTrialNodes"
@@ -110,3 +118,11 @@ onMounted(async () => {
     </section>
   </div>
 </template>
+
+<style scoped>
+.select-org-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+</style>

@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { onMounted, reactive, ref } from 'vue';
 import { Delete, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import {
+  batchApprovePurchaseInboundApi,
+  batchUnapprovePurchaseInboundApi,
+  fetchPurchaseInboundPageApi,
+  type PurchaseInboundRow,
+} from '@/api/modules/inventory';
+import { useSessionStore } from '@/stores/session';
 
 type TimeType = '入库日期' | '创建时间';
 type DocumentStatus = '草稿' | '已提交' | '已审核';
@@ -11,24 +19,6 @@ type ReconciliationStatus = '未对账' | '部分对账' | '已对账';
 type InvoiceStatus = '未开票' | '部分开票' | '已开票';
 type PrintStatus = '全部' | '未打印' | '已打印';
 type SplitStatus = '未分账' | '已分账';
-type PurchaseInboundRow = {
-  id: number;
-  documentCode: string;
-  inboundDate: string;
-  upstreamCode: string;
-  warehouse: string;
-  supplier: string;
-  amountTaxIncluded: string;
-  status: Exclude<DocumentStatus, '草稿'> | '草稿';
-  reviewStatus: Exclude<ReviewStatus, never>;
-  reconciliationStatus: Exclude<ReconciliationStatus, never>;
-  invoiceStatus: Exclude<InvoiceStatus, never>;
-  printStatus: Exclude<PrintStatus, '全部'>;
-  inspectionCount: string;
-  createdAt: string;
-  creator: string;
-  remark: string;
-};
 type TreeNode = {
   value: string;
   label: string;
@@ -65,6 +55,8 @@ const supplierTree: TreeNode[] = [
   },
 ];
 const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
+const sessionStore = useSessionStore();
+const router = useRouter();
 
 const query = reactive({
   timeType: '入库日期' as TimeType,
@@ -85,118 +77,62 @@ const query = reactive({
   remark: '',
 });
 
-const tableData: PurchaseInboundRow[] = [
-  {
-    id: 1,
-    documentCode: 'RK-202604-001',
-    inboundDate: '2026-04-13',
-    upstreamCode: 'PO-202604-001',
-    warehouse: '中央成品仓',
-    supplier: '鲜达食品',
-    amountTaxIncluded: '18,420.00',
-    status: '已审核',
-    reviewStatus: '已复审',
-    reconciliationStatus: '已对账',
-    invoiceStatus: '已开票',
-    printStatus: '已打印',
-    inspectionCount: '2',
-    createdAt: '2026-04-13 10:30:00',
-    creator: '张敏',
-    remark: '四月第一批收货',
-  },
-  {
-    id: 2,
-    documentCode: 'RK-202604-002',
-    inboundDate: '2026-04-12',
-    upstreamCode: 'PO-202604-008',
-    warehouse: '北区原料仓',
-    supplier: '优选农场',
-    amountTaxIncluded: '9,860.00',
-    status: '已提交',
-    reviewStatus: '未复审',
-    reconciliationStatus: '未对账',
-    invoiceStatus: '未开票',
-    printStatus: '未打印',
-    inspectionCount: '1',
-    createdAt: '2026-04-12 16:18:00',
-    creator: '李娜',
-    remark: '蔬菜临时补货',
-  },
-  {
-    id: 3,
-    documentCode: 'RK-202604-003',
-    inboundDate: '2026-04-11',
-    upstreamCode: 'PO-202604-010',
-    warehouse: '南区包材仓',
-    supplier: '盒马包材',
-    amountTaxIncluded: '4,320.00',
-    status: '草稿',
-    reviewStatus: '未复审',
-    reconciliationStatus: '部分对账',
-    invoiceStatus: '部分开票',
-    printStatus: '未打印',
-    inspectionCount: '0',
-    createdAt: '2026-04-11 09:12:00',
-    creator: '王磊',
-    remark: '包材补录单据',
-  },
-];
-
 const currentPage = ref(1);
 const pageSize = ref(10);
+const total = ref(0);
 const selectedIds = ref<number[]>([]);
+const tableData = ref<PurchaseInboundRow[]>([]);
+const loading = ref(false);
 
-const filteredRows = computed(() => {
-  const codeKeyword = query.documentCode.trim().toLowerCase();
-  const upstreamKeyword = query.upstreamCode.trim().toLowerCase();
-  const remarkKeyword = query.remark.trim().toLowerCase();
-
-  return tableData.filter((row) => {
-    const matchedDateRange = query.dateRange.length !== 2
-      || (row[query.timeType === '入库日期' ? 'inboundDate' : 'createdAt'] >= query.dateRange[0]
-        && row[query.timeType === '入库日期' ? 'inboundDate' : 'createdAt'] <= query.dateRange[1]);
-    const matchedWarehouse = !query.warehouse || row.warehouse === query.warehouse;
-    const matchedCode = !codeKeyword || row.documentCode.toLowerCase().includes(codeKeyword);
-    const matchedSupplier = !query.supplier || row.supplier === query.supplier;
-    const matchedItem = !query.itemName || row.remark.includes(query.itemName);
-    const matchedStatus = !query.documentStatus || row.status === query.documentStatus;
-    const matchedReviewStatus = !query.reviewStatus || row.reviewStatus === query.reviewStatus;
-    const matchedReconciliationStatus = !query.reconciliationStatus || row.reconciliationStatus === query.reconciliationStatus;
-    const matchedSplitStatus = !query.splitStatus || query.splitStatus === '未分账';
-    const matchedUpstream = !upstreamKeyword || row.upstreamCode.toLowerCase().includes(upstreamKeyword);
-    const matchedInvoiceStatus = !query.invoiceStatus || row.invoiceStatus === query.invoiceStatus;
-    const matchedAdjustedPrice = !query.adjustedPrice || row.status === '已审核';
-    const matchedInspectionCount = !query.inspectionCount || row.inspectionCount === query.inspectionCount;
-    const matchedPrintStatus = query.printStatus === '全部' || row.printStatus === query.printStatus;
-    const matchedRemark = !remarkKeyword || row.remark.toLowerCase().includes(remarkKeyword);
-    return matchedDateRange
-      && matchedWarehouse
-      && matchedCode
-      && matchedSupplier
-      && matchedItem
-      && matchedStatus
-      && matchedReviewStatus
-      && matchedReconciliationStatus
-      && matchedSplitStatus
-      && matchedUpstream
-      && matchedInvoiceStatus
-      && matchedAdjustedPrice
-      && matchedInspectionCount
-      && matchedPrintStatus
-      && matchedRemark;
-  });
-});
-
-const pagedRows = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  return filteredRows.value.slice(start, start + pageSize.value);
-});
-
-const handleSearch = () => {
-  currentPage.value = 1;
+const resolveOrgId = () => {
+  const orgId = (sessionStore.currentOrgId ?? '').trim();
+  if (!orgId) {
+    return undefined;
+  }
+  if (orgId.startsWith('group-') || orgId.startsWith('store-')) {
+    return orgId;
+  }
+  return undefined;
 };
 
-const handleReset = () => {
+const fetchTableData = async () => {
+  loading.value = true;
+  try {
+    const result = await fetchPurchaseInboundPageApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      timeType: query.timeType,
+      startDate: query.dateRange[0],
+      endDate: query.dateRange[1],
+      warehouse: query.warehouse || undefined,
+      documentCode: query.documentCode || undefined,
+      supplier: query.supplier || undefined,
+      itemName: query.itemName || undefined,
+      documentStatus: query.documentStatus || undefined,
+      reviewStatus: query.reviewStatus || undefined,
+      reconciliationStatus: query.reconciliationStatus || undefined,
+      splitStatus: query.splitStatus || undefined,
+      upstreamCode: query.upstreamCode || undefined,
+      invoiceStatus: query.invoiceStatus || undefined,
+      adjustedPrice: query.adjustedPrice || undefined,
+      inspectionCount: query.inspectionCount || undefined,
+      printStatus: query.printStatus === '全部' ? undefined : query.printStatus,
+      remark: query.remark || undefined,
+    }, resolveOrgId());
+    tableData.value = result.list;
+    total.value = result.total;
+    selectedIds.value = [];
+  } finally {
+    loading.value = false;
+  }
+};
+
+const handleSearch = async () => {
+  currentPage.value = 1;
+  await fetchTableData();
+};
+
+const handleReset = async () => {
   query.timeType = '入库日期';
   query.dateRange = [];
   query.warehouse = '';
@@ -214,9 +150,34 @@ const handleReset = () => {
   query.printStatus = '全部';
   query.remark = '';
   currentPage.value = 1;
+  await fetchTableData();
 };
 
-const handleToolbarAction = (action: string) => {
+const handleToolbarAction = async (action: string) => {
+  if (action === '新增') {
+    router.push('/inventory/1/2/create');
+    return;
+  }
+  if (action === '批量审核') {
+    if (!selectedIds.value.length) {
+      ElMessage.warning('请先选择单据');
+      return;
+    }
+    await batchApprovePurchaseInboundApi(selectedIds.value, resolveOrgId());
+    ElMessage.success('批量审核成功');
+    await fetchTableData();
+    return;
+  }
+  if (action === '批量反审核') {
+    if (!selectedIds.value.length) {
+      ElMessage.warning('请先选择单据');
+      return;
+    }
+    await batchUnapprovePurchaseInboundApi(selectedIds.value, resolveOrgId());
+    ElMessage.success('批量反审核成功');
+    await fetchTableData();
+    return;
+  }
   ElMessage.info(`${action}功能待接入`);
 };
 
@@ -232,14 +193,20 @@ const handleEdit = (row: PurchaseInboundRow) => {
   ElMessage.info(`编辑：${row.documentCode}`);
 };
 
-const handlePageChange = (page: number) => {
+const handlePageChange = async (page: number) => {
   currentPage.value = page;
+  await fetchTableData();
 };
 
-const handlePageSizeChange = (size: number) => {
+const handlePageSizeChange = async (size: number) => {
   pageSize.value = size;
   currentPage.value = 1;
+  await fetchTableData();
 };
+
+onMounted(async () => {
+  await fetchTableData();
+});
 </script>
 
 <template>
@@ -406,10 +373,11 @@ const handlePageSizeChange = (size: number) => {
     </div>
 
     <el-table
-      :data="pagedRows"
+      :data="tableData"
       border
       stripe
       class="erp-table"
+      v-loading="loading"
       :fit="false"
       :height="360"
       :empty-text="'当前机构暂无数据'"
@@ -446,7 +414,7 @@ const handlePageSizeChange = (size: number) => {
         :current-page="currentPage"
         :page-size="pageSize"
         :page-sizes="[10, 20, 50]"
-        :total="filteredRows.length"
+        :total="total"
         background
         small
         layout="total, sizes, prev, pager, next, jumper"

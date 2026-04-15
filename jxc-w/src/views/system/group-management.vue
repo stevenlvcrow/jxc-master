@@ -247,10 +247,6 @@ watch(
 <template>
   <div class="page-grid single">
     <section class="panel item-main-panel">
-      <div class="section-head">
-        <strong>集团管理</strong>
-      </div>
-
       <CommonQuerySection :model="queryForm">
         <el-form-item label="关键字">
           <el-input

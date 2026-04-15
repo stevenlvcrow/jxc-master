@@ -68,6 +68,8 @@ public class IdentityAdminController {
 
     private static final String STATUS_ENABLED = "ENABLED";
     private static final String STATUS_DISABLED = "DISABLED";
+    private static final String GROUP_ROLE_TEMPLATE_DESC = "GROUP_ROLE_TEMPLATE";
+    private static final Set<String> PROTECTED_ROLE_CODES = Set.of("GROUP_ADMIN", "STORE_ADMIN");
 
     private final UserAccountMapper userAccountMapper;
     private final UserRoleRelMapper userRoleRelMapper;
@@ -158,12 +160,24 @@ public class IdentityAdminController {
                     .filter(Objects::nonNull)
                     .distinct()
                     .toList();
-            if (scopedUserIds.isEmpty()) {
+
+            List<Long> unassignedUserIds = userAccountMapper.selectList(new LambdaQueryWrapper<UserAccountDO>()
+                            .select(UserAccountDO::getId)
+                            .notInSql(UserAccountDO::getId, "select distinct user_id from sys_user_role_rel where status = 'ENABLED'"))
+                    .stream()
+                    .map(UserAccountDO::getId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+
+            LinkedHashSet<Long> visibleUserIds = new LinkedHashSet<>(scopedUserIds);
+            visibleUserIds.addAll(unassignedUserIds);
+            if (visibleUserIds.isEmpty()) {
                 return CodeDataResponse.ok(Collections.emptyList());
             }
 
             users = userAccountMapper.selectList(new LambdaQueryWrapper<UserAccountDO>()
-                    .in(UserAccountDO::getId, scopedUserIds)
+                    .in(UserAccountDO::getId, visibleUserIds)
                     .orderByDesc(UserAccountDO::getCreatedAt)
                     .orderByDesc(UserAccountDO::getId));
         }
@@ -258,6 +272,7 @@ public class IdentityAdminController {
         group.setStatus(normalizeStatus(request.getStatus()));
         group.setRemark(trimNullable(request.getRemark()));
         groupMapper.insert(group);
+        ensureGroupBuiltinRoles(group.getId(), currentOperatorId());
         return CodeDataResponse.ok(new IdPayload(group.getId()));
     }
 
@@ -690,7 +705,9 @@ public class IdentityAdminController {
                 ? Collections.emptySet()
                 : new HashSet<>(listManagedStoreIds(managedGroupIds));
         if (!platformAdmin) {
-            ensureCanManageUser(id, managedGroupIds, managedStoreIds);
+            if (hasEnabledRoleAssignments(id)) {
+                ensureCanManageUser(id, managedGroupIds, managedStoreIds);
+            }
         }
 
         List<UserRoleRelDO> toInsert = new ArrayList<>();
@@ -769,12 +786,27 @@ public class IdentityAdminController {
                     .orderByDesc(RoleDO::getCreatedAt)
                     .orderByDesc(RoleDO::getId));
         } else {
+            if (managedGroupIdsForDisplay.isEmpty()) {
+                return CodeDataResponse.ok(Collections.emptyList());
+            }
+            for (Long groupId : managedGroupIdsForDisplay) {
+                ensureGroupBuiltinRoles(groupId, operatorId);
+            }
             Set<Long> manageableRoleIds = listManageableRoleIds(operatorId);
-            if (manageableRoleIds.isEmpty()) {
+            Set<Long> tenantRoleIds = roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
+                            .select(RoleDO::getId)
+                            .in(RoleDO::getTenantGroupId, managedGroupIdsForDisplay)
+                            .in(RoleDO::getRoleType, List.of("GROUP", "STORE")))
+                    .stream()
+                    .map(RoleDO::getId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            tenantRoleIds.addAll(manageableRoleIds);
+            if (tenantRoleIds.isEmpty()) {
                 return CodeDataResponse.ok(Collections.emptyList());
             }
             roles = roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
-                    .in(RoleDO::getId, manageableRoleIds)
+                    .in(RoleDO::getId, tenantRoleIds)
                     .in(RoleDO::getRoleType, List.of("GROUP", "STORE"))
                     .orderByDesc(RoleDO::getCreatedAt)
                     .orderByDesc(RoleDO::getId));
@@ -797,7 +829,9 @@ public class IdentityAdminController {
                     role.getDataScopeType(),
                     role.getDescription(),
                     role.getStatus(),
-                    menuIds
+                    menuIds,
+                    isRoleBuiltin(role),
+                    isRoleMutable(role)
             ));
         }
         return CodeDataResponse.ok(result);
@@ -843,6 +877,7 @@ public class IdentityAdminController {
         role.setCreatedBy(operatorId);
         roleMapper.insert(role);
 
+        validateRoleMenusByType(role, request.getMenuIds());
         saveRoleMenus(role.getId(), request.getMenuIds());
         return CodeDataResponse.ok(new IdPayload(role.getId()));
     }
@@ -857,6 +892,7 @@ public class IdentityAdminController {
             throw new BusinessException("角色不存在");
         }
         ensureCanManageRole(operatorId, role);
+        ensureRoleMutable(role);
         String roleType = trim(request.getRoleType());
         if (!isPlatformAdmin(operatorId) && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
             throw new BusinessException("集团账号仅可设置集团/门店角色");
@@ -868,6 +904,7 @@ public class IdentityAdminController {
         role.setStatus(normalizeStatus(request.getStatus()));
         roleMapper.updateById(role);
 
+        validateRoleMenusByType(role, request.getMenuIds());
         saveRoleMenus(id, request.getMenuIds());
         return CodeDataResponse.ok();
     }
@@ -882,7 +919,11 @@ public class IdentityAdminController {
             throw new BusinessException("角色不存在");
         }
         ensureCanManageRole(operatorId, role);
-        role.setStatus(normalizeStatus(request.getStatus()));
+        String nextStatus = normalizeStatus(request.getStatus());
+        if (STATUS_DISABLED.equals(nextStatus)) {
+            ensureRoleMutable(role);
+        }
+        role.setStatus(nextStatus);
         roleMapper.updateById(role);
         return CodeDataResponse.ok();
     }
@@ -890,19 +931,22 @@ public class IdentityAdminController {
     @PutMapping("/roles/{id}/menus")
     @Transactional
     public CodeDataResponse<Void> assignRoleMenus(@PathVariable Long id,
-                                                  @Valid @RequestBody RoleMenuAssignRequest request) {
+                                                   @Valid @RequestBody RoleMenuAssignRequest request) {
         Long operatorId = currentOperatorId();
         RoleDO role = roleMapper.selectById(id);
         if (role == null) {
             throw new BusinessException("角色不存在");
         }
         ensureCanManageRole(operatorId, role);
+        ensureRoleMenuAssignable(operatorId, role);
+        validateRoleMenusByType(role, request.getMenuIds());
         saveRoleMenus(id, request.getMenuIds());
         return CodeDataResponse.ok();
     }
 
     @GetMapping("/menus")
     public CodeDataResponse<List<MenuAdminView>> listMenus() {
+        ensureGroupMgmtMenusForGroupAdmin();
         Long operatorId = currentOperatorId();
         boolean platformAdmin = isPlatformAdmin(operatorId);
         List<MenuAdminView> result;
@@ -930,7 +974,14 @@ public class IdentityAdminController {
             if (managedGroups.isEmpty()) {
                 result = Collections.emptyList();
             } else {
-                List<MenuPermissionView> scopedMenus = menuMapper.selectMenusByUserContext(operatorId, "GROUP", managedGroups.get(0));
+                List<MenuPermissionView> scopedMenus = new ArrayList<>();
+                for (Long groupId : managedGroups) {
+                    scopedMenus.addAll(menuMapper.selectMenusByUserContext(operatorId, "GROUP", groupId));
+                }
+                List<Long> managedStoreIds = listManagedStoreIds(new LinkedHashSet<>(managedGroups));
+                for (Long storeId : managedStoreIds) {
+                    scopedMenus.addAll(menuMapper.selectMenusByUserContext(operatorId, "STORE", storeId));
+                }
                 LinkedHashMap<Long, MenuAdminView> deduped = new LinkedHashMap<>();
                 for (MenuPermissionView row : scopedMenus) {
                     if (!"ENABLED".equals(row.getStatus())) {
@@ -954,6 +1005,116 @@ public class IdentityAdminController {
         return CodeDataResponse.ok(result);
     }
 
+    private void ensureGroupMgmtMenusForGroupAdmin() {
+        MenuDO groupMgmt = menuMapper.selectOne(new LambdaQueryWrapper<MenuDO>()
+                .eq(MenuDO::getMenuCode, "GROUP_MGMT")
+                .last("limit 1"));
+        if (groupMgmt == null) {
+            return;
+        }
+
+        MenuDO userMgmt = menuMapper.selectOne(new LambdaQueryWrapper<MenuDO>()
+                .eq(MenuDO::getMenuCode, "GROUP_USER_ROLE_MGMT")
+                .last("limit 1"));
+        if (userMgmt == null) {
+            userMgmt = new MenuDO();
+            userMgmt.setMenuCode("GROUP_USER_ROLE_MGMT");
+            userMgmt.setMenuName("用户管理");
+            userMgmt.setParentId(groupMgmt.getId());
+            userMgmt.setMenuType("MENU");
+            userMgmt.setRoutePath("/group/user-role");
+            userMgmt.setComponentPath("group/user-role/index");
+            userMgmt.setPermissionCode("group:user-role:manage");
+            userMgmt.setIcon("user");
+            userMgmt.setSortNo(46);
+            userMgmt.setVisible(Boolean.TRUE);
+            userMgmt.setStatus(STATUS_ENABLED);
+            menuMapper.insert(userMgmt);
+        } else {
+            boolean changed = false;
+            if (!Objects.equals(userMgmt.getMenuName(), "用户管理")) {
+                userMgmt.setMenuName("用户管理");
+                changed = true;
+            }
+            if (!Objects.equals(userMgmt.getParentId(), groupMgmt.getId())) {
+                userMgmt.setParentId(groupMgmt.getId());
+                changed = true;
+            }
+            if (changed) {
+                menuMapper.updateById(userMgmt);
+            }
+        }
+
+        MenuDO roleMgmt = menuMapper.selectOne(new LambdaQueryWrapper<MenuDO>()
+                .eq(MenuDO::getMenuCode, "GROUP_ROLE_MGMT")
+                .last("limit 1"));
+        if (roleMgmt == null) {
+            roleMgmt = new MenuDO();
+            roleMgmt.setMenuCode("GROUP_ROLE_MGMT");
+            roleMgmt.setMenuName("角色管理");
+            roleMgmt.setParentId(groupMgmt.getId());
+            roleMgmt.setMenuType("MENU");
+            roleMgmt.setRoutePath("/group/roles");
+            roleMgmt.setComponentPath("group/roles/index");
+            roleMgmt.setPermissionCode("group:role:manage");
+            roleMgmt.setIcon("team");
+            roleMgmt.setSortNo(47);
+            roleMgmt.setVisible(Boolean.TRUE);
+            roleMgmt.setStatus(STATUS_ENABLED);
+            menuMapper.insert(roleMgmt);
+        }
+
+        MenuDO menuPermMgmt = menuMapper.selectOne(new LambdaQueryWrapper<MenuDO>()
+                .eq(MenuDO::getMenuCode, "GROUP_MENU_PERMISSION_MGMT")
+                .last("limit 1"));
+        if (menuPermMgmt == null) {
+            menuPermMgmt = new MenuDO();
+            menuPermMgmt.setMenuCode("GROUP_MENU_PERMISSION_MGMT");
+            menuPermMgmt.setMenuName("菜单权限管理");
+            menuPermMgmt.setParentId(groupMgmt.getId());
+            menuPermMgmt.setMenuType("MENU");
+            menuPermMgmt.setRoutePath("/group/menu-permissions");
+            menuPermMgmt.setComponentPath("group/menu-permissions/index");
+            menuPermMgmt.setPermissionCode("group:menu-permission:manage");
+            menuPermMgmt.setIcon("setting");
+            menuPermMgmt.setSortNo(48);
+            menuPermMgmt.setVisible(Boolean.TRUE);
+            menuPermMgmt.setStatus(STATUS_ENABLED);
+            menuMapper.insert(menuPermMgmt);
+        } else if (!Objects.equals(menuPermMgmt.getParentId(), groupMgmt.getId())) {
+            menuPermMgmt.setParentId(groupMgmt.getId());
+            menuMapper.updateById(menuPermMgmt);
+        }
+
+        RoleDO groupAdminRole = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
+                .eq(RoleDO::getRoleCode, "GROUP_ADMIN")
+                .last("limit 1"));
+        if (groupAdminRole == null) {
+            return;
+        }
+
+        ensureRoleMenuRel(groupAdminRole.getId(), userMgmt.getId());
+        ensureRoleMenuRel(groupAdminRole.getId(), roleMgmt.getId());
+        ensureRoleMenuRel(groupAdminRole.getId(), menuPermMgmt.getId());
+    }
+
+    private void ensureRoleMenuRel(Long roleId, Long menuId) {
+        if (roleId == null || menuId == null) {
+            return;
+        }
+        RoleMenuRelDO exists = roleMenuRelMapper.selectOne(new LambdaQueryWrapper<RoleMenuRelDO>()
+                .eq(RoleMenuRelDO::getRoleId, roleId)
+                .eq(RoleMenuRelDO::getMenuId, menuId)
+                .last("limit 1"));
+        if (exists != null) {
+            return;
+        }
+        RoleMenuRelDO rel = new RoleMenuRelDO();
+        rel.setRoleId(roleId);
+        rel.setMenuId(menuId);
+        roleMenuRelMapper.insert(rel);
+    }
+
     @GetMapping("/roles/{id}/menu-ids")
     public CodeDataResponse<List<Long>> listRoleMenuIds(@PathVariable Long id) {
         Long operatorId = currentOperatorId();
@@ -970,6 +1131,10 @@ public class IdentityAdminController {
     }
 
     private void saveRoleMenus(Long roleId, List<Long> menuIds) {
+        RoleDO role = roleMapper.selectById(roleId);
+        if (role == null) {
+            throw new BusinessException("角色不存在");
+        }
         roleMenuRelMapper.delete(new LambdaQueryWrapper<RoleMenuRelDO>().eq(RoleMenuRelDO::getRoleId, roleId));
         if (menuIds == null || menuIds.isEmpty()) {
             return;
@@ -984,13 +1149,94 @@ public class IdentityAdminController {
         List<MenuDO> validMenus = menuMapper.selectBatchIds(dedupedMenuIds);
         Map<Long, MenuDO> validMenuMap = validMenus.stream().collect(Collectors.toMap(MenuDO::getId, m -> m));
         for (Long menuId : dedupedMenuIds) {
-            if (!validMenuMap.containsKey(menuId)) {
+            MenuDO menu = validMenuMap.get(menuId);
+            if (menu == null) {
+                continue;
+            }
+            if (!isMenuAssignableToRoleType(role.getRoleType(), menu.getMenuCode())) {
                 continue;
             }
             RoleMenuRelDO rel = new RoleMenuRelDO();
             rel.setRoleId(roleId);
             rel.setMenuId(menuId);
             roleMenuRelMapper.insert(rel);
+        }
+    }
+
+    private boolean isMenuAssignableToRoleType(String roleType, String menuCode) {
+        String normalizedRoleType = trimNullable(roleType);
+        String normalizedMenuCode = trimNullable(menuCode);
+        if (normalizedMenuCode == null) {
+            return false;
+        }
+        if ("GROUP".equals(normalizedRoleType)) {
+            return normalizedMenuCode.startsWith("GROUP_");
+        }
+        if ("STORE".equals(normalizedRoleType)) {
+            return normalizedMenuCode.startsWith("STORE_BIZ_");
+        }
+        return true;
+    }
+
+    private void ensureGroupBuiltinRoles(Long groupId, Long operatorId) {
+        if (groupId == null || groupId <= 0) {
+            return;
+        }
+        List<RoleDO> templateRoles = roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
+                .eq(RoleDO::getTenantGroupId, 0L)
+                .eq(RoleDO::getStatus, STATUS_ENABLED)
+                .eq(RoleDO::getDescription, GROUP_ROLE_TEMPLATE_DESC)
+                .in(RoleDO::getRoleType, List.of("GROUP", "STORE"))
+                .orderByAsc(RoleDO::getId));
+        for (RoleDO template : templateRoles) {
+            RoleDO existing = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
+                    .eq(RoleDO::getTenantGroupId, groupId)
+                    .eq(RoleDO::getRoleCode, template.getRoleCode())
+                    .last("limit 1"));
+            if (existing != null) {
+                if (!STATUS_ENABLED.equals(existing.getStatus())) {
+                    existing.setStatus(STATUS_ENABLED);
+                    roleMapper.updateById(existing);
+                }
+                continue;
+            }
+            RoleDO role = new RoleDO();
+            role.setTenantGroupId(groupId);
+            role.setRoleCode(template.getRoleCode());
+            role.setRoleName(template.getRoleName());
+            role.setRoleType(template.getRoleType());
+            role.setDataScopeType(template.getDataScopeType());
+            role.setDescription(template.getDescription());
+            role.setStatus(STATUS_ENABLED);
+            role.setCreatedBy(operatorId);
+            roleMapper.insert(role);
+        }
+    }
+
+    private void validateRoleMenusByType(RoleDO role, List<Long> menuIds) {
+        if (role == null || menuIds == null || menuIds.isEmpty()) {
+            return;
+        }
+        Set<Long> dedupedMenuIds = menuIds.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (dedupedMenuIds.isEmpty()) {
+            return;
+        }
+        List<MenuDO> menus = menuMapper.selectBatchIds(dedupedMenuIds);
+        Map<Long, MenuDO> menuMap = menus.stream().collect(Collectors.toMap(MenuDO::getId, m -> m));
+        for (Long menuId : dedupedMenuIds) {
+            MenuDO menu = menuMap.get(menuId);
+            if (menu == null) {
+                continue;
+            }
+            boolean isStoreMenu = menu.getMenuCode() != null && menu.getMenuCode().startsWith("STORE_BIZ_");
+            if ("STORE".equals(role.getRoleType()) && !isStoreMenu) {
+                throw new BusinessException("门店角色仅可分配门店菜单");
+            }
+            if ("GROUP".equals(role.getRoleType()) && isStoreMenu) {
+                throw new BusinessException("集团角色仅可分配集团菜单");
+            }
         }
     }
 
@@ -1045,28 +1291,22 @@ public class IdentityAdminController {
 
     private Long normalizeScopeId(String scopeType, Long rawScopeId) {
         if ("PLATFORM".equals(scopeType)) {
+            if (rawScopeId != null) {
+                throw new BusinessException("平台角色不支持指定作用域ID");
+            }
             return null;
         }
-        if (rawScopeId != null) {
+        if ("GROUP".equals(scopeType)) {
+            if (rawScopeId == null) {
+                throw new BusinessException("集团角色必须指定集团作用域");
+            }
             return rawScopeId;
         }
-        if ("GROUP".equals(scopeType)) {
-            GroupDO group = groupMapper.selectOne(
-                    new LambdaQueryWrapper<GroupDO>()
-                            .eq(GroupDO::getStatus, STATUS_ENABLED)
-                            .orderByAsc(GroupDO::getId)
-                            .last("limit 1")
-            );
-            return group == null ? null : group.getId();
-        }
         if ("STORE".equals(scopeType)) {
-            StoreDO store = storeMapper.selectOne(
-                    new LambdaQueryWrapper<StoreDO>()
-                            .eq(StoreDO::getStatus, STATUS_ENABLED)
-                            .orderByAsc(StoreDO::getId)
-                            .last("limit 1")
-            );
-            return store == null ? null : store.getId();
+            if (rawScopeId == null) {
+                throw new BusinessException("门店角色必须指定门店作用域");
+            }
+            return rawScopeId;
         }
         return rawScopeId;
     }
@@ -1208,7 +1448,9 @@ public class IdentityAdminController {
                                 String dataScopeType,
                                 String description,
                                 String status,
-                                List<Long> menuIds) {
+                                List<Long> menuIds,
+                                Boolean builtin,
+                                Boolean editable) {
     }
 
     public record MenuAdminView(Long id,
@@ -1345,9 +1587,59 @@ public class IdentityAdminController {
         if (!"GROUP".equals(role.getRoleType()) && !"STORE".equals(role.getRoleType())) {
             throw new BusinessException("当前账号仅可操作集团/门店角色");
         }
+        List<Long> managedGroupIds = listManagedGroupIds(operatorId);
+        if (!managedGroupIds.isEmpty()
+                && role.getTenantGroupId() != null
+                && role.getTenantGroupId() > 0
+                && managedGroupIds.contains(role.getTenantGroupId())) {
+            return;
+        }
         Set<Long> manageableRoleIds = listManageableRoleIds(operatorId);
         if (!manageableRoleIds.contains(role.getId())) {
             throw new BusinessException("当前账号无该角色操作权限");
         }
     }
+
+    private boolean hasEnabledRoleAssignments(Long userId) {
+        if (userId == null) {
+            return false;
+        }
+        Long count = userRoleRelMapper.selectCount(new LambdaQueryWrapper<UserRoleRelDO>()
+                .eq(UserRoleRelDO::getUserId, userId)
+                .eq(UserRoleRelDO::getStatus, STATUS_ENABLED));
+        return count != null && count > 0;
+    }
+
+    private void ensureRoleMutable(RoleDO role) {
+        if (!isRoleMutable(role)) {
+            throw new BusinessException("内置角色不允许修改或删除");
+        }
+    }
+
+    private void ensureRoleMenuAssignable(Long operatorId, RoleDO role) {
+        if (isPlatformAdmin(operatorId)) {
+            return;
+        }
+        if (role != null && "GROUP_ADMIN".equals(role.getRoleCode())) {
+            throw new BusinessException("集团管理员角色菜单权限仅允许平台管理员配置");
+        }
+    }
+
+    private boolean isRoleMutable(RoleDO role) {
+        if (role == null) {
+            return true;
+        }
+        return !isRoleBuiltin(role);
+    }
+
+    private boolean isRoleBuiltin(RoleDO role) {
+        if (role == null) {
+            return false;
+        }
+        if (PROTECTED_ROLE_CODES.contains(role.getRoleCode())) {
+            return true;
+        }
+        return GROUP_ROLE_TEMPLATE_DESC.equals(role.getDescription());
+    }
+
 }

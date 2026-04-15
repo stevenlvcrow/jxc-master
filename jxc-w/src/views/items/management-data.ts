@@ -10,7 +10,7 @@ export const defaultItemQuery: ItemQuery = {
 };
 
 export const statusOptions = ['全部', '启用', '停用'];
-export const itemTypeOptions = ['全部', '普通物品', '套餐'];
+export const itemTypeOptions = ['全部', '普通物品'];
 export const statTypeOptions = [
   '全部',
   '原料类 (成本类)',
@@ -81,6 +81,8 @@ export const itemColumns: ItemTableColumn[] = [
   { prop: 'stockMax', label: '库存上限', width: 72 },
   { prop: 'source', label: '来源', width: 66 },
   { prop: 'status', label: '状态', width: 66 },
+  { prop: 'storageMode', label: '储存方式', width: 76 },
+  { prop: 'tag', label: '物品标签', width: 90 },
   { prop: 'image', label: '物品图片', width: 76 },
   { prop: 'createdAt', label: '创建时间', width: 126 },
   { prop: 'updatedAt', label: '操作时间', width: 126 },

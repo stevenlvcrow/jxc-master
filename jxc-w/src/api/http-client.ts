@@ -103,6 +103,14 @@ const createHttpClient = () => {
       const status = error.response?.status;
 
       if (status === 401 && config && !config.meta?.skipAuth && !config._retry) {
+        const hasRefreshToken = Boolean(authStorage.getRefreshToken());
+        if (!hasRefreshToken) {
+          const mapped401Error = toApiError(error);
+          if (!config.meta?.silent) {
+            ElMessage.error(mapped401Error.message);
+          }
+          return Promise.reject(mapped401Error);
+        }
         config._retry = true;
         try {
           const newToken = await refreshAccessToken();
