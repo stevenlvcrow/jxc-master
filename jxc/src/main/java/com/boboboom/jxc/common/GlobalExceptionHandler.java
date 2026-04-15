@@ -46,8 +46,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
+        log.error("系统内部异常", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.fail("系统异常: " + ex.getMessage()));
+                .body(ApiResponse.fail("系统繁忙，请稍后重试"));
     }
 
     @ExceptionHandler(BadSqlGrammarException.class)
@@ -64,7 +65,7 @@ public class GlobalExceptionHandler {
                     .body(ApiResponse.fail(INIT_DATA_MESSAGE));
         }
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.fail("数据库执行异常: " + (rootMessage == null ? ex.getMessage() : rootMessage)));
+                .body(ApiResponse.fail(INIT_DATA_MESSAGE));
     }
 
     private boolean isPostgresSqlException(Throwable root) {

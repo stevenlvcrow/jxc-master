@@ -1,79 +1,62 @@
-<script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+﻿<script setup lang="ts">
+import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import CommonToolbarSection, { type ToolbarButton } from '@/components/CommonToolbarSection.vue';
+import { useSessionStore } from '@/stores/session';
+import {
+  deleteItemRuleApi,
+  fetchItemRulesApi,
+  type ItemRuleRow,
+} from '@/api/modules/warehouse-item-rule';
 
-type WarehouseItemRuleRow = {
-  id: number;
-  ruleCode: string;
-  ruleName: string;
-  warehouseName: string;
-  creator: string;
-  createdAt: string;
-  updatedAt: string;
-};
+type RuleStatus = 'ENABLED' | 'DISABLED';
 
-const warehouseOptions = ['中央成品仓', '北区原料仓', '南区包材仓', '东区冷藏仓', '西区原料仓'];
-const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤', '蔬菜拼盘'];
+const router = useRouter();
+const sessionStore = useSessionStore();
+const loading = ref(false);
+
+const toolbarButtons: ToolbarButton[] = [
+  { key: '新增', label: '新增', type: 'primary' },
+];
 
 const query = reactive({
   ruleCode: '',
   ruleName: '',
-  warehouseName: '',
-  itemName: '',
 });
 
-const tableData: WarehouseItemRuleRow[] = [
-  {
-    id: 1,
-    ruleCode: 'RULE-001',
-    ruleName: '中央成品仓默认成品规则',
-    warehouseName: '中央成品仓',
-    creator: '张敏',
-    createdAt: '2026-04-12 10:20:00',
-    updatedAt: '2026-04-13 09:18:00',
-  },
-  {
-    id: 2,
-    ruleCode: 'RULE-002',
-    ruleName: '北区原料仓肉类控制规则',
-    warehouseName: '北区原料仓',
-    creator: '王磊',
-    createdAt: '2026-04-11 14:30:00',
-    updatedAt: '2026-04-12 16:05:00',
-  },
-  {
-    id: 3,
-    ruleCode: 'RULE-003',
-    ruleName: '南区包材仓耗材绑定规则',
-    warehouseName: '南区包材仓',
-    creator: '李娜',
-    createdAt: '2026-04-10 09:12:00',
-    updatedAt: '2026-04-11 10:40:00',
-  },
-  {
-    id: 4,
-    ruleCode: 'RULE-004',
-    ruleName: '东区冷藏仓冷链规则',
-    warehouseName: '东区冷藏仓',
-    creator: '周凯',
-    createdAt: '2026-04-09 13:00:00',
-    updatedAt: '2026-04-10 15:32:00',
-  },
-];
-
+const tableData = ref<ItemRuleRow[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
 
+const resolveGroupId = (): number | null => {
+  const orgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
+  if (!orgId.startsWith('group-')) return null;
+  const id = Number(orgId.slice('group-'.length));
+  return Number.isNaN(id) ? null : id;
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+};
+
 const filteredRows = computed(() => {
-  const ruleCodeKeyword = query.ruleCode.trim().toLowerCase();
-  const ruleNameKeyword = query.ruleName.trim().toLowerCase();
-  return tableData.filter((row) => {
-    const matchedRuleCode = !ruleCodeKeyword || row.ruleCode.toLowerCase().includes(ruleCodeKeyword);
-    const matchedRuleName = !ruleNameKeyword || row.ruleName.toLowerCase().includes(ruleNameKeyword);
-    const matchedWarehouse = !query.warehouseName || row.warehouseName === query.warehouseName;
-    const matchedItem = !query.itemName || row.ruleName.includes(query.itemName);
-    return matchedRuleCode && matchedRuleName && matchedWarehouse && matchedItem;
+  const codeKeyword = query.ruleCode.trim().toLowerCase();
+  const nameKeyword = query.ruleName.trim().toLowerCase();
+  return tableData.value.filter((row) => {
+    const matchCode = !codeKeyword || row.ruleCode.toLowerCase().includes(codeKeyword);
+    const matchName = !nameKeyword || row.ruleName.toLowerCase().includes(nameKeyword);
+    return matchCode && matchName;
   });
 });
 
@@ -82,6 +65,20 @@ const pagedRows = computed(() => {
   return filteredRows.value.slice(start, start + pageSize.value);
 });
 
+const loadData = async () => {
+  const groupId = resolveGroupId();
+  if (!groupId) {
+    tableData.value = [];
+    return;
+  }
+  loading.value = true;
+  try {
+    tableData.value = await fetchItemRulesApi(groupId);
+  } finally {
+    loading.value = false;
+  }
+};
+
 const handleSearch = () => {
   currentPage.value = 1;
 };
@@ -89,17 +86,30 @@ const handleSearch = () => {
 const handleReset = () => {
   query.ruleCode = '';
   query.ruleName = '';
-  query.warehouseName = '';
-  query.itemName = '';
   currentPage.value = 1;
 };
 
-const handleView = (row: WarehouseItemRuleRow) => {
-  ElMessage.info(`查看：${row.ruleName}`);
+const handleView = (row: ItemRuleRow) => {
+  ElMessage.info(`查看功能待接入，规则：${row.ruleName}`);
 };
 
-const handleEdit = (row: WarehouseItemRuleRow) => {
-  ElMessage.info(`编辑：${row.ruleName}`);
+const handleEdit = (row: ItemRuleRow) => {
+  ElMessage.info(`编辑功能待接入，规则：${row.ruleName}`);
+};
+
+const handleDelete = async (row: ItemRuleRow) => {
+  await ElMessageBox.confirm(`确认删除规则「${row.ruleName}」吗？`, '提示', { type: 'warning' });
+  await deleteItemRuleApi(row.id);
+  ElMessage.success('删除成功');
+  await loadData();
+};
+
+const statusText = (status: RuleStatus) => (status === 'ENABLED' ? '启用' : '停用');
+
+const handleToolbarAction = (action: string) => {
+  if (action === '新增') {
+    router.push({ name: 'ItemRuleCreate' });
+  }
 };
 
 const handlePageChange = (page: number) => {
@@ -110,62 +120,31 @@ const handlePageSizeChange = (size: number) => {
   pageSize.value = size;
   currentPage.value = 1;
 };
+
+watch(() => sessionStore.currentOrgId, () => {
+  currentPage.value = 1;
+  loadData();
+});
+
+onMounted(loadData);
 </script>
 
 <template>
   <section class="panel item-main-panel">
     <CommonQuerySection :model="query">
       <el-form-item label="规则编码">
-        <el-input
-          v-model="query.ruleCode"
-          placeholder="请输入规则编码"
-          clearable
-          style="width: 180px"
-        />
+        <el-input v-model="query.ruleCode" placeholder="请输入规则编码" clearable style="width: 180px" />
       </el-form-item>
       <el-form-item label="规则名称">
-        <el-input
-          v-model="query.ruleName"
-          placeholder="请输入规则名称"
-          clearable
-          style="width: 180px"
-        />
-      </el-form-item>
-      <el-form-item label="仓库名称">
-        <el-select
-          v-model="query.warehouseName"
-          clearable
-          placeholder="请选择仓库名称"
-          style="width: 180px"
-        >
-          <el-option
-            v-for="option in warehouseOptions"
-            :key="option"
-            :label="option"
-            :value="option"
-          />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="物品">
-        <el-select
-          v-model="query.itemName"
-          clearable
-          placeholder="请选择物品"
-          style="width: 180px"
-        >
-          <el-option
-            v-for="option in itemOptions"
-            :key="option"
-            :label="option"
-            :value="option"
-          />
-        </el-select>
+        <el-input v-model="query.ruleName" placeholder="请输入规则名称" clearable style="width: 180px" />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
       </el-form-item>
     </CommonQuerySection>
+
+    <CommonToolbarSection :buttons="toolbarButtons" @action="handleToolbarAction" />
 
     <el-table
       :data="pagedRows"
@@ -175,18 +154,29 @@ const handlePageSizeChange = (size: number) => {
       :fit="false"
       :height="360"
       :empty-text="'当前机构暂无数据'"
+      v-loading="loading"
     >
       <el-table-column type="index" label="序号" width="56" />
       <el-table-column prop="ruleCode" label="规则编码" min-width="140" show-overflow-tooltip />
       <el-table-column prop="ruleName" label="规则名称" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="warehouseName" label="仓库" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="creator" label="创建人" min-width="100" show-overflow-tooltip />
-      <el-table-column prop="createdAt" label="创建时间" min-width="170" show-overflow-tooltip />
-      <el-table-column prop="updatedAt" label="最新修改日期" min-width="170" show-overflow-tooltip />
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="业务管控" width="90" align="center">
+        <template #default="{ row }">{{ row.businessControl ? '是' : '否' }}</template>
+      </el-table-column>
+      <el-table-column label="状态" width="80" align="center">
+        <template #default="{ row }">{{ statusText(row.status as RuleStatus) }}</template>
+      </el-table-column>
+      <el-table-column prop="createdBy" label="创建人" min-width="100" show-overflow-tooltip />
+      <el-table-column label="创建时间" min-width="170" show-overflow-tooltip>
+        <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+      </el-table-column>
+      <el-table-column label="最新修改日期" min-width="170" show-overflow-tooltip>
+        <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
           <el-button text type="primary" @click="handleView(row)">查看</el-button>
           <el-button text @click="handleEdit(row)">编辑</el-button>
+          <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>

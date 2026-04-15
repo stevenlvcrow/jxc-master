@@ -92,45 +92,6 @@ DROP CONSTRAINT IF EXISTS uk_sys_unit_code;
 ALTER TABLE sys_unit
 DROP CONSTRAINT IF EXISTS uk_sys_unit_name;
 
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'uk_sys_unit_scope_code'
-    ) THEN
-        ALTER TABLE sys_unit
-            ADD CONSTRAINT uk_sys_unit_scope_code UNIQUE (scope_type, scope_id, unit_code);
-    END IF;
-END
-$$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'uk_sys_unit_scope_name'
-    ) THEN
-        ALTER TABLE sys_unit
-            ADD CONSTRAINT uk_sys_unit_scope_name UNIQUE (scope_type, scope_id, unit_name);
-    END IF;
-END
-$$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'ck_sys_unit_scope_type'
-    ) THEN
-        ALTER TABLE sys_unit
-            ADD CONSTRAINT ck_sys_unit_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'));
-    END IF;
-END
-$$;
-
 INSERT INTO sys_unit (scope_type, scope_id, unit_code, unit_name, unit_type, status, remark)
 VALUES ('PLATFORM', 0, 'U001', '件', 'STANDARD', 'ENABLED', '初始化数据：前端静态数据迁移')
 ON CONFLICT (scope_type, scope_id, unit_code) DO NOTHING;
@@ -237,18 +198,6 @@ ADD COLUMN IF NOT EXISTS tenant_group_id BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE sys_role
 DROP CONSTRAINT IF EXISTS uk_sys_role_code;
 
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'uk_sys_role_tenant_code'
-    ) THEN
-        ALTER TABLE sys_role
-            ADD CONSTRAINT uk_sys_role_tenant_code UNIQUE (tenant_group_id, role_code);
-    END IF;
-END
-$$;
 
 CREATE TABLE IF NOT EXISTS sys_menu
 (
@@ -670,9 +619,6 @@ INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, co
 VALUES ('GROUP_MENU_PERMISSION_MGMT', '菜单权限管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/menu-permissions', 'group/menu-permissions/index', 'group:menu-permission:manage', 'setting', 48, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
-VALUES ('GROUP_WORKFLOW_PROCESS_MGMT', '流程管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_WORKBENCH'), 'MENU', '/group/workflow-processes', 'group/workflow/processes/index', 'group:workflow:process:manage', 'setting', 48, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, component_path, permission_code, icon, sort_no, visible, status)
 VALUES ('GROUP_WORKFLOW_HISTORY_MGMT', '流程发布历史管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_WORKBENCH'), 'MENU', '/group/workflow-history', 'group/workflow/history/index', 'group:workflow:history:view', 'setting', 50, TRUE, 'ENABLED')
@@ -771,17 +717,11 @@ SELECT
     m.id
 FROM sys_menu m
 WHERE m.menu_code IN (
-    'SYS_MGMT',
-    'ROLE_MGMT',
-    'USER_MGMT',
-    'MENU_PERMISSION_MGMT',
-    'GROUP_MGMT_ADMIN',
     'GROUP_INFO',
     'GROUP_STORE_MGMT',
     'GROUP_USER_ROLE_MGMT',
     'GROUP_ROLE_MGMT',
     'GROUP_MENU_PERMISSION_MGMT',
-    'GROUP_WORKFLOW_PROCESS_MGMT',
     'GROUP_WORKFLOW_HISTORY_MGMT'
 )
 ON CONFLICT DO NOTHING;
@@ -4343,47 +4283,7 @@ DROP CONSTRAINT IF EXISTS item_statistics_type_code_key;
 ALTER TABLE item_statistics_type
 DROP CONSTRAINT IF EXISTS uk_item_statistics_type_code;
 
-DO
-$$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'uk_item_statistics_type_scope_code'
-    ) THEN
-        ALTER TABLE item_statistics_type
-            ADD CONSTRAINT uk_item_statistics_type_scope_code UNIQUE (scope_type, scope_id, code);
-    END IF;
-END
-$$;
 
-DO
-$$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'uk_item_statistics_type_scope_name_category'
-    ) THEN
-        ALTER TABLE item_statistics_type
-            ADD CONSTRAINT uk_item_statistics_type_scope_name_category UNIQUE (scope_type, scope_id, name, statistics_category);
-    END IF;
-END
-$$;
-
-DO
-$$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'ck_item_statistics_type_scope_type'
-    ) THEN
-        ALTER TABLE item_statistics_type
-            ADD CONSTRAINT ck_item_statistics_type_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'));
-    END IF;
-END
-$$;
 
 CREATE INDEX IF NOT EXISTS idx_item_statistics_type_scope ON item_statistics_type (scope_type, scope_id);
 CREATE INDEX IF NOT EXISTS idx_item_statistics_type_name ON item_statistics_type (name);
@@ -4457,47 +4357,7 @@ DROP CONSTRAINT IF EXISTS item_category_category_code_key;
 ALTER TABLE item_category
 DROP CONSTRAINT IF EXISTS item_category_category_name_key;
 
-DO
-$$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'uk_item_category_scope_code'
-    ) THEN
-        ALTER TABLE item_category
-            ADD CONSTRAINT uk_item_category_scope_code UNIQUE (scope_type, scope_id, category_code);
-    END IF;
-END
-$$;
 
-DO
-$$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'uk_item_category_scope_name'
-    ) THEN
-        ALTER TABLE item_category
-            ADD CONSTRAINT uk_item_category_scope_name UNIQUE (scope_type, scope_id, category_name);
-    END IF;
-END
-$$;
-
-DO
-$$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'ck_item_category_scope_type'
-    ) THEN
-        ALTER TABLE item_category
-            ADD CONSTRAINT ck_item_category_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'));
-    END IF;
-END
-$$;
 
 CREATE INDEX IF NOT EXISTS idx_item_category_parent ON item_category (parent_category);
 CREATE INDEX IF NOT EXISTS idx_item_category_status ON item_category (status);
@@ -4673,6 +4533,190 @@ COMMENT ON COLUMN item_profile.item_code IS '物品编码（如 SP000001）';
 COMMENT ON COLUMN item_profile.detail_json IS '完整物品表单 JSON（含营养成分表）';
 COMMENT ON COLUMN item_profile.is_draft IS '是否草稿';
 
+CREATE TABLE IF NOT EXISTS dish_category
+(
+    id                BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type        VARCHAR(16)  NOT NULL DEFAULT 'PLATFORM',
+    scope_id          BIGINT       NOT NULL DEFAULT 0,
+    category_code     VARCHAR(64)  NOT NULL,
+    category_name     VARCHAR(128) NOT NULL,
+    parent_category   VARCHAR(128) NOT NULL DEFAULT '菜品分类',
+    status            VARCHAR(16)  NOT NULL DEFAULT '启用',
+    created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_dish_category_scope_code UNIQUE (scope_type, scope_id, category_code),
+    CONSTRAINT uk_dish_category_scope_name UNIQUE (scope_type, scope_id, category_name),
+    CONSTRAINT ck_dish_category_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE')),
+    CONSTRAINT ck_dish_category_status CHECK (status IN ('启用', '停用'))
+);
+
+ALTER TABLE dish_category
+ADD COLUMN IF NOT EXISTS scope_type VARCHAR(16) NOT NULL DEFAULT 'PLATFORM';
+
+ALTER TABLE dish_category
+ADD COLUMN IF NOT EXISTS scope_id BIGINT NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_dish_category_scope ON dish_category (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_dish_category_parent ON dish_category (parent_category);
+CREATE INDEX IF NOT EXISTS idx_dish_category_status ON dish_category (status);
+
+COMMENT ON TABLE dish_category IS '菜品分类表';
+COMMENT ON COLUMN dish_category.id IS '主键ID';
+COMMENT ON COLUMN dish_category.scope_type IS '作用域类型：PLATFORM/GROUP/STORE';
+COMMENT ON COLUMN dish_category.scope_id IS '作用域ID，PLATFORM 固定为 0';
+COMMENT ON COLUMN dish_category.category_code IS '分类编码';
+COMMENT ON COLUMN dish_category.category_name IS '分类名称';
+COMMENT ON COLUMN dish_category.parent_category IS '上级分类名称';
+COMMENT ON COLUMN dish_category.status IS '状态：启用/停用';
+COMMENT ON COLUMN dish_category.created_at IS '创建时间';
+COMMENT ON COLUMN dish_category.updated_at IS '更新时间';
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('PLATFORM', 0, 'DCAT-0001', '堂食', '菜品分类', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('PLATFORM', 0, 'DCAT-1001', '荤菜', '堂食', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('PLATFORM', 0, 'DCAT-1002', '饮品', '堂食', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('PLATFORM', 0, 'DCAT-0002', '外卖', '菜品分类', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('PLATFORM', 0, 'DCAT-2001', '美团外卖', '外卖', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('PLATFORM', 0, 'DCAT-2002', '饿了么外卖', '外卖', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS dish_profile
+(
+    id                BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type        VARCHAR(16)  NOT NULL DEFAULT 'PLATFORM',
+    scope_id          BIGINT       NOT NULL DEFAULT 0,
+    dish_id           VARCHAR(64)  NOT NULL,
+    spu_code          VARCHAR(64)  NOT NULL,
+    dish_name         VARCHAR(128) NOT NULL,
+    spec              VARCHAR(128),
+    category_id       BIGINT       NOT NULL,
+    dish_type         VARCHAR(64)  NOT NULL,
+    deleted           VARCHAR(1)   NOT NULL DEFAULT 'N',
+    linked_cost_card  VARCHAR(2)   NOT NULL DEFAULT '否',
+    created_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_dish_profile_dish_id UNIQUE (dish_id),
+    CONSTRAINT ck_dish_profile_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE')),
+    CONSTRAINT ck_dish_profile_deleted CHECK (deleted IN ('Y', 'N')),
+    CONSTRAINT ck_dish_profile_linked_cost_card CHECK (linked_cost_card IN ('是', '否'))
+);
+
+ALTER TABLE dish_profile
+ADD COLUMN IF NOT EXISTS scope_type VARCHAR(16) NOT NULL DEFAULT 'PLATFORM';
+
+ALTER TABLE dish_profile
+ADD COLUMN IF NOT EXISTS scope_id BIGINT NOT NULL DEFAULT 0;
+
+CREATE INDEX IF NOT EXISTS idx_dish_profile_scope ON dish_profile (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_dish_profile_spu_code ON dish_profile (spu_code);
+CREATE INDEX IF NOT EXISTS idx_dish_profile_category_id ON dish_profile (category_id);
+CREATE INDEX IF NOT EXISTS idx_dish_profile_dish_type ON dish_profile (dish_type);
+CREATE INDEX IF NOT EXISTS idx_dish_profile_deleted ON dish_profile (deleted);
+
+COMMENT ON TABLE dish_profile IS '菜品档案表';
+COMMENT ON COLUMN dish_profile.id IS '主键ID';
+COMMENT ON COLUMN dish_profile.scope_type IS '作用域类型：PLATFORM/GROUP/STORE';
+COMMENT ON COLUMN dish_profile.scope_id IS '作用域ID，PLATFORM 固定为 0';
+COMMENT ON COLUMN dish_profile.dish_id IS '菜品ID（如 dish-0001）';
+COMMENT ON COLUMN dish_profile.spu_code IS '菜品SPU编码';
+COMMENT ON COLUMN dish_profile.dish_name IS '菜品名称';
+COMMENT ON COLUMN dish_profile.spec IS '规格';
+COMMENT ON COLUMN dish_profile.category_id IS '菜品分类ID';
+COMMENT ON COLUMN dish_profile.dish_type IS '菜品类型';
+COMMENT ON COLUMN dish_profile.deleted IS '是否删除：Y/N';
+COMMENT ON COLUMN dish_profile.linked_cost_card IS '是否关联成本卡：是/否';
+COMMENT ON COLUMN dish_profile.created_at IS '创建时间';
+COMMENT ON COLUMN dish_profile.updated_at IS '更新时间';
+
+INSERT INTO dish_profile (scope_type, scope_id, dish_id, spu_code, dish_name, spec, category_id, dish_type, deleted, linked_cost_card, created_at, updated_at)
+SELECT 'PLATFORM', 0, 'dish-0001', '11305942227', '红烧猪蹄', '大份', id, '堂食菜品', 'N', '是', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM dish_category
+WHERE scope_type = 'PLATFORM' AND scope_id = 0 AND category_name = '荤菜'
+ON CONFLICT (dish_id) DO NOTHING;
+
+INSERT INTO dish_profile (scope_type, scope_id, dish_id, spu_code, dish_name, spec, category_id, dish_type, deleted, linked_cost_card, created_at, updated_at)
+SELECT 'PLATFORM', 0, 'dish-0002', '11305942228', '红烧猪蹄', '小份', id, '堂食菜品', 'N', '是', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM dish_category
+WHERE scope_type = 'PLATFORM' AND scope_id = 0 AND category_name = '荤菜'
+ON CONFLICT (dish_id) DO NOTHING;
+
+INSERT INTO dish_profile (scope_type, scope_id, dish_id, spu_code, dish_name, spec, category_id, dish_type, deleted, linked_cost_card, created_at, updated_at)
+SELECT 'PLATFORM', 0, 'dish-0003', '11304951195', '原味咖啡', '大份', id, '堂食菜品', 'N', '是', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM dish_category
+WHERE scope_type = 'PLATFORM' AND scope_id = 0 AND category_name = '饮品'
+ON CONFLICT (dish_id) DO NOTHING;
+
+INSERT INTO dish_profile (scope_type, scope_id, dish_id, spu_code, dish_name, spec, category_id, dish_type, deleted, linked_cost_card, created_at, updated_at)
+SELECT 'PLATFORM', 0, 'dish-0004', '11304951196', '冰美式', '中杯', id, '美团外卖', 'N', '否', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM dish_category
+WHERE scope_type = 'PLATFORM' AND scope_id = 0 AND category_name = '饮品'
+ON CONFLICT (dish_id) DO NOTHING;
+
+INSERT INTO dish_profile (scope_type, scope_id, dish_id, spu_code, dish_name, spec, category_id, dish_type, deleted, linked_cost_card, created_at, updated_at)
+SELECT 'PLATFORM', 0, 'dish-0005', '11304951197', '热拿铁', '中杯', id, '饿了么外卖', 'Y', '否', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM dish_category
+WHERE scope_type = 'PLATFORM' AND scope_id = 0 AND category_name = '饮品'
+ON CONFLICT (dish_id) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('GROUP', 1, 'DCAT-G-0001', '集团推荐菜', '菜品分类', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('GROUP', 1, 'DCAT-G-1001', '招牌菜', '集团推荐菜', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('GROUP', 1, 'DCAT-G-1002', '时令菜', '集团推荐菜', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_profile (scope_type, scope_id, dish_id, spu_code, dish_name, spec, category_id, dish_type, deleted, linked_cost_card, created_at, updated_at)
+SELECT 'GROUP', 1, 'dish-g-0001', '22305942227', '小炒黄牛肉', '标准份', id, '堂食菜品', 'N', '是', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM dish_category
+WHERE scope_type = 'GROUP' AND scope_id = 1 AND category_name = '招牌菜'
+ON CONFLICT (dish_id) DO NOTHING;
+
+INSERT INTO dish_profile (scope_type, scope_id, dish_id, spu_code, dish_name, spec, category_id, dish_type, deleted, linked_cost_card, created_at, updated_at)
+SELECT 'GROUP', 1, 'dish-g-0002', '22304951195', '春笋炒腊肉', '标准份', id, '堂食菜品', 'N', '否', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM dish_category
+WHERE scope_type = 'GROUP' AND scope_id = 1 AND category_name = '时令菜'
+ON CONFLICT (dish_id) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('STORE', 1, 'DCAT-S-0001', '门店快销', '菜品分类', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_category (scope_type, scope_id, category_code, category_name, parent_category, status, created_at, updated_at)
+VALUES ('STORE', 1, 'DCAT-S-1001', '快手菜', '门店快销', '启用', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+
+INSERT INTO dish_profile (scope_type, scope_id, dish_id, spu_code, dish_name, spec, category_id, dish_type, deleted, linked_cost_card, created_at, updated_at)
+SELECT 'STORE', 1, 'dish-s-0001', '32305942227', '香辣鸡腿堡', '单人份', id, '美团外卖', 'N', '否', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM dish_category
+WHERE scope_type = 'STORE' AND scope_id = 1 AND category_name = '快手菜'
+ON CONFLICT (dish_id) DO NOTHING;
+
+INSERT INTO dish_profile (scope_type, scope_id, dish_id, spu_code, dish_name, spec, category_id, dish_type, deleted, linked_cost_card, created_at, updated_at)
+SELECT 'STORE', 1, 'dish-s-0002', '32304951195', '芝士厚蛋三明治', '单人份', id, '饿了么外卖', 'N', '否', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM dish_category
+WHERE scope_type = 'STORE' AND scope_id = 1 AND category_name = '快手菜'
+ON CONFLICT (dish_id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS supplier_profile
 (
     id                                 BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -4844,19 +4888,19 @@ CREATE INDEX IF NOT EXISTS idx_supplier_category_parent ON supplier_category (pa
 
 INSERT INTO supplier_category (scope_type, scope_id, category_code, category_name, parent_category, created_at, updated_at)
 VALUES ('PLATFORM', 0, 'SUPCAT-0001', '生鲜类', '供应商类别', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+ON CONFLICT (scope_type, scope_id, category_name) DO NOTHING;
 
 INSERT INTO supplier_category (scope_type, scope_id, category_code, category_name, parent_category, created_at, updated_at)
 VALUES ('PLATFORM', 0, 'SUPCAT-0002', '干货类', '供应商类别', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+ON CONFLICT (scope_type, scope_id, category_name) DO NOTHING;
 
 INSERT INTO supplier_category (scope_type, scope_id, category_code, category_name, parent_category, created_at, updated_at)
 VALUES ('PLATFORM', 0, 'SUPCAT-0003', '物流服务', '供应商类别', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+ON CONFLICT (scope_type, scope_id, category_name) DO NOTHING;
 
 INSERT INTO supplier_category (scope_type, scope_id, category_code, category_name, parent_category, created_at, updated_at)
 VALUES ('PLATFORM', 0, 'SUPCAT-0004', '设备维保', '供应商类别', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-ON CONFLICT (scope_type, scope_id, category_code) DO NOTHING;
+ON CONFLICT (scope_type, scope_id, category_name) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS inventory_purchase_inbound
 (
@@ -5022,3 +5066,159 @@ CREATE INDEX IF NOT EXISTS idx_inventory_transaction_scope ON inventory_transact
 CREATE INDEX IF NOT EXISTS idx_inventory_transaction_biz ON inventory_transaction (biz_type, biz_id);
 
 COMMENT ON TABLE inventory_transaction IS '库存流水';
+
+CREATE TABLE IF NOT EXISTS sys_warehouse
+(
+    id                    BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    group_id              BIGINT       NOT NULL,
+    warehouse_code        VARCHAR(64)  NOT NULL,
+    warehouse_name        VARCHAR(128) NOT NULL,
+    department            VARCHAR(64),
+    status                VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',
+    warehouse_type        VARCHAR(32)  NOT NULL DEFAULT '普通仓库',
+    contact_name          VARCHAR(64),
+    contact_phone         VARCHAR(32),
+    region_path           VARCHAR(255),
+    address               VARCHAR(500),
+    target_gross_margin   VARCHAR(16),
+    ideal_purchase_sale_ratio VARCHAR(32),
+    is_default            BOOLEAN      NOT NULL DEFAULT FALSE,
+    remark                VARCHAR(500),
+    created_at            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_warehouse_code UNIQUE (warehouse_code),
+    CONSTRAINT fk_warehouse_group FOREIGN KEY (group_id) REFERENCES sys_group (id),
+    CONSTRAINT ck_warehouse_status CHECK (status IN ('ENABLED', 'DISABLED')),
+    CONSTRAINT ck_warehouse_type CHECK (warehouse_type IN ('出品及生产部门', '行政部门', '普通仓库'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_warehouse_group_id ON sys_warehouse (group_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_status ON sys_warehouse (status);
+
+COMMENT ON TABLE sys_warehouse IS '仓库档案表';
+COMMENT ON COLUMN sys_warehouse.group_id IS '所属集团ID';
+COMMENT ON COLUMN sys_warehouse.warehouse_code IS '仓库编码';
+COMMENT ON COLUMN sys_warehouse.warehouse_name IS '仓库名称';
+COMMENT ON COLUMN sys_warehouse.department IS '所属部门';
+COMMENT ON COLUMN sys_warehouse.status IS '状态：ENABLED/DISABLED';
+COMMENT ON COLUMN sys_warehouse.warehouse_type IS '仓库类型：出品及生产部门/行政部门/普通仓库';
+COMMENT ON COLUMN sys_warehouse.contact_name IS '联系人';
+COMMENT ON COLUMN sys_warehouse.contact_phone IS '联系电话';
+COMMENT ON COLUMN sys_warehouse.region_path IS '区域路径（省/市/区）';
+COMMENT ON COLUMN sys_warehouse.address IS '详细地址';
+COMMENT ON COLUMN sys_warehouse.target_gross_margin IS '目标毛利率';
+COMMENT ON COLUMN sys_warehouse.ideal_purchase_sale_ratio IS '理想采销比';
+COMMENT ON COLUMN sys_warehouse.is_default IS '是否默认仓库';
+COMMENT ON COLUMN sys_warehouse.remark IS '备注';
+
+-- ============================================================
+-- 仓库物品规则表（主表）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS warehouse_item_rule
+(
+    id                      BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    group_id                BIGINT       NOT NULL,
+    rule_code               VARCHAR(64)  NOT NULL,
+    rule_name               VARCHAR(128) NOT NULL,
+    business_control        BOOLEAN      NOT NULL DEFAULT FALSE,
+    control_order           BOOLEAN      NOT NULL DEFAULT FALSE,
+    control_purchase_inbound BOOLEAN     NOT NULL DEFAULT FALSE,
+    control_transfer_inbound BOOLEAN     NOT NULL DEFAULT FALSE,
+    status                  VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',
+    created_by              VARCHAR(64),
+    created_at              TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_by              VARCHAR(64),
+    updated_at              TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_rule_code UNIQUE (rule_code),
+    CONSTRAINT fk_rule_group FOREIGN KEY (group_id) REFERENCES sys_group (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rule_group_id ON warehouse_item_rule (group_id);
+CREATE INDEX IF NOT EXISTS idx_rule_status ON warehouse_item_rule (status);
+
+COMMENT ON TABLE warehouse_item_rule IS '仓库物品规则主表';
+COMMENT ON COLUMN warehouse_item_rule.group_id IS '所属集团ID';
+COMMENT ON COLUMN warehouse_item_rule.rule_code IS '规则编码';
+COMMENT ON COLUMN warehouse_item_rule.rule_name IS '规则名称';
+COMMENT ON COLUMN warehouse_item_rule.business_control IS '是否启用业务管控';
+COMMENT ON COLUMN warehouse_item_rule.control_order IS '管控适用机构订货';
+COMMENT ON COLUMN warehouse_item_rule.control_purchase_inbound IS '管控适用机构采购入库';
+COMMENT ON COLUMN warehouse_item_rule.control_transfer_inbound IS '管控适用机构调拨入库';
+COMMENT ON COLUMN warehouse_item_rule.status IS '状态：ENABLED/DISABLED';
+COMMENT ON COLUMN warehouse_item_rule.created_by IS '创建人';
+COMMENT ON COLUMN warehouse_item_rule.created_at IS '创建时间';
+COMMENT ON COLUMN warehouse_item_rule.updated_by IS '最后修改人';
+COMMENT ON COLUMN warehouse_item_rule.updated_at IS '最后修改时间';
+
+-- ============================================================
+-- 规则适用物品明细表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS warehouse_item_rule_item
+(
+    id                      BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    rule_id                 BIGINT       NOT NULL,
+    item_code               VARCHAR(64),
+    item_name               VARCHAR(128),
+    spec_model              VARCHAR(128),
+    item_category           VARCHAR(64),
+    sort_order              INT          DEFAULT 0,
+    created_at              TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_rti_rule FOREIGN KEY (rule_id) REFERENCES warehouse_item_rule (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_rti_rule_id ON warehouse_item_rule_item (rule_id);
+
+COMMENT ON TABLE warehouse_item_rule_item IS '规则适用物品明细';
+COMMENT ON COLUMN warehouse_item_rule_item.rule_id IS '规则ID';
+COMMENT ON COLUMN warehouse_item_rule_item.item_code IS '物品编码';
+COMMENT ON COLUMN warehouse_item_rule_item.item_name IS '物品名称';
+COMMENT ON COLUMN warehouse_item_rule_item.spec_model IS '规格型号';
+COMMENT ON COLUMN warehouse_item_rule_item.item_category IS '物品类别';
+COMMENT ON COLUMN warehouse_item_rule_item.sort_order IS '排序';
+
+-- ============================================================
+-- 规则适用分类明细表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS warehouse_item_rule_category
+(
+    id                      BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    rule_id                 BIGINT       NOT NULL,
+    category_code           VARCHAR(64),
+    category_name           VARCHAR(128),
+    parent_category         VARCHAR(128),
+    child_category          VARCHAR(128),
+    sort_order              INT          DEFAULT 0,
+    created_at              TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_rtc_rule FOREIGN KEY (rule_id) REFERENCES warehouse_item_rule (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_rtc_rule_id ON warehouse_item_rule_category (rule_id);
+
+COMMENT ON TABLE warehouse_item_rule_category IS '规则适用分类明细';
+COMMENT ON COLUMN warehouse_item_rule_category.rule_id IS '规则ID';
+COMMENT ON COLUMN warehouse_item_rule_category.category_code IS '分类编码';
+COMMENT ON COLUMN warehouse_item_rule_category.category_name IS '分类名称';
+COMMENT ON COLUMN warehouse_item_rule_category.parent_category IS '上级分类';
+COMMENT ON COLUMN warehouse_item_rule_category.child_category IS '下级分类';
+COMMENT ON COLUMN warehouse_item_rule_category.sort_order IS '排序';
+
+-- ============================================================
+-- 规则适用仓库明细表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS warehouse_item_rule_warehouse
+(
+    id                      BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    rule_id                 BIGINT       NOT NULL,
+    warehouse_id            BIGINT,
+    warehouse_name          VARCHAR(128),
+    sort_order              INT          DEFAULT 0,
+    created_at              TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_rtw_rule FOREIGN KEY (rule_id) REFERENCES warehouse_item_rule (id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_rtw_rule_id ON warehouse_item_rule_warehouse (rule_id);
+COMMENT ON TABLE warehouse_item_rule_warehouse IS '规则适用仓库明细';
+COMMENT ON COLUMN warehouse_item_rule_warehouse.rule_id IS '规则ID';
+COMMENT ON COLUMN warehouse_item_rule_warehouse.warehouse_id IS '仓库/档口ID';
+COMMENT ON COLUMN warehouse_item_rule_warehouse.warehouse_name IS '仓库/档口名称';
+COMMENT ON COLUMN warehouse_item_rule_warehouse.sort_order IS '排序';

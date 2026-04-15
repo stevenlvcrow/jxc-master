@@ -69,14 +69,6 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        path: 'group/workflow-processes',
-        name: 'GroupWorkflowProcesses',
-        component: () => import('@/views/system/workflow-process-management.vue'),
-        meta: {
-          title: '流程管理',
-        },
-      },
-      {
         path: 'group/workflow-config',
         name: 'GroupWorkflowTemplateConfig',
         component: () => import('@/views/system/workflow-config.vue'),
@@ -106,6 +98,17 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/system/role-management.vue'),
         meta: {
           title: '角色管理',
+        },
+      },
+      {
+        path: 'system/item-rule-create',
+        name: 'ItemRuleCreate',
+        component: () => import('@/views/system/warehouse-item-rule-create.vue'),
+        meta: {
+          title: '仓库物品规则',
+          activeMenu: '/archive/7/2',
+          breadcrumbs: ['档案管理', '仓库', '仓库物品规则', '新增规则'],
+          openKeys: ['m8', 'm8-m7'],
         },
       },
       {
@@ -293,7 +296,7 @@ router.beforeEach(async (to) => {
     const allowedPaths = new Set(flattenMenuPaths(menuStore.menuItems));
     const activeMenuPath = typeof to.meta.activeMenu === 'string' ? to.meta.activeMenu : '';
     const canAccessWorkflowConfig = to.path === '/group/workflow-config'
-      && (allowedPaths.has('/group/workflow-history') || allowedPaths.has('/group/workflow-processes'));
+      && allowedPaths.has('/group/workflow-history');
     const canAccess = allowedPaths.has(to.path)
       || (activeMenuPath && allowedPaths.has(activeMenuPath))
       || canAccessWorkflowConfig;
@@ -310,7 +313,7 @@ router.beforeEach(async (to) => {
 });
 
 router.afterEach((to) => {
-  document.title = `${to.meta.title ?? '管理后台'} | ${import.meta.env.VITE_APP_TITLE}`;
+  document.title = `${to.meta.title ?? '管理后台'} | 进销存管`;
 });
 
 export default router;

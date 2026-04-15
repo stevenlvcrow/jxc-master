@@ -2,6 +2,7 @@
 export * from '@/api/errors';
 export * from '@/api/http-client';
 export * from '@/api/modules/auth';
+export * from '@/api/modules/dish';
 export * from '@/api/modules/item';
 export * from '@/api/modules/menu';
 export * from '@/api/modules/org';

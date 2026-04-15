@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -42,6 +42,17 @@ const bindingStoreBusinessId = ref<number | null>(null);
 const storeOptions = ref<WorkflowProcessStoreOption[]>([]);
 const bindStoreForm = reactive({
   storeIds: [] as number[],
+});
+const bindStoreSearch = ref('');
+const bindStoreSelectedRows = ref<WorkflowProcessStoreOption[]>([]);
+const bindStoreTableRef = ref<InstanceType<typeof import('element-plus').ElTable> | null>(null);
+
+const filteredStoreOptions = computed(() => {
+  const kw = bindStoreSearch.value.trim().toLowerCase();
+  if (!kw) return storeOptions.value;
+  return storeOptions.value.filter((item) =>
+    `${item.storeName}（${item.storeCode}）`.toLowerCase().includes(kw)
+  );
 });
 
 const historyMap = computed(() => {
@@ -192,20 +203,34 @@ const openWorkflowConfig = (payload?: { businessCode?: string; workflowCode?: st
 
 const openBindStores = async (business: WorkflowProcessItem) => {
   bindingStoreBusinessId.value = business.id;
-  bindStoreForm.storeIds = Array.isArray(business.storeIds) ? [...business.storeIds] : [];
+  bindStoreSearch.value = '';
   if (!storeOptions.value.length) {
     await loadStoreOptions();
   }
+  const existingIds = Array.isArray(business.storeIds) ? [...business.storeIds] : [];
+  const selected = storeOptions.value.filter((s) => existingIds.includes(s.storeId));
+  bindStoreSelectedRows.value = [...selected];
   bindStoreDialogVisible.value = true;
+  await nextTick();
+  if (bindStoreTableRef.value) {
+    storeOptions.value.forEach((row) => {
+      (bindStoreTableRef.value as any).toggleRowSelection(row, selected.some((s) => s.storeId === row.storeId));
+    });
+  }
+};
+
+const onBindStoreSelectionChange = (rows: WorkflowProcessStoreOption[]) => {
+  bindStoreSelectedRows.value = rows;
 };
 
 const submitBindStores = async () => {
   if (!bindingStoreBusinessId.value) {
     return;
   }
+  const storeIds = bindStoreSelectedRows.value.map((s) => s.storeId);
   bindStoreSubmitting.value = true;
   try {
-    await bindWorkflowProcessStoresApi(bindingStoreBusinessId.value, bindStoreForm.storeIds, sessionStore.currentOrgId);
+    await bindWorkflowProcessStoresApi(bindingStoreBusinessId.value, storeIds, sessionStore.currentOrgId);
     ElMessage.success('门店绑定成功');
     bindStoreDialogVisible.value = false;
     await loadRows();
@@ -361,29 +386,26 @@ onMounted(() => {
       <el-dialog
         v-model="bindStoreDialogVisible"
         title="绑定门店"
-        width="560px"
+        width="680px"
         append-to-body
         destroy-on-close
       >
-        <el-form label-width="86px">
-          <el-form-item label="门店">
-            <el-select
-              v-model="bindStoreForm.storeIds"
-              multiple
-              clearable
-              filterable
-              placeholder="请选择门店"
-              style="width: 100%"
-            >
-              <el-option
-                v-for="item in storeOptions"
-                :key="item.storeId"
-                :label="`${item.storeName}（${item.storeCode}）`"
-                :value="item.storeId"
-              />
-            </el-select>
-          </el-form-item>
-        </el-form>
+        <div style="margin-bottom: 10px">
+          <el-input v-model="bindStoreSearch" placeholder="搜索门店名称/编码" clearable style="width: 260px" />
+        </div>
+        <el-table
+          ref="bindStoreTableRef"
+          :data="filteredStoreOptions"
+          border
+          stripe
+          size="small"
+          max-height="400"
+          @selection-change="onBindStoreSelectionChange"
+        >
+          <el-table-column type="selection" width="50" align="center" />
+          <el-table-column prop="storeCode" label="门店编码" width="140" show-overflow-tooltip />
+          <el-table-column prop="storeName" label="门店名称" min-width="200" show-overflow-tooltip />
+        </el-table>
         <template #footer>
           <el-button @click="bindStoreDialogVisible = false">取消</el-button>
           <el-button type="primary" :loading="bindStoreSubmitting" @click="submitBindStores">保存</el-button>

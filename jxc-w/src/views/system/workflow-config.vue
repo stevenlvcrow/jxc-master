@@ -417,6 +417,40 @@ const applyNodeEdit = () => {
   editDialogVisible.value = false;
 };
 
+const rectRayIntersection = (
+  rx: number, ry: number, rw: number, rh: number,
+  ox: number, oy: number,
+  dx: number, dy: number,
+) => {
+  const PAD = 3;
+  let tMin = Number.NEGATIVE_INFINITY;
+  let tMax = Number.POSITIVE_INFINITY;
+
+  if (Math.abs(dx) > 1e-6) {
+    let t1 = ((rx + PAD) - ox) / dx;
+    let t2 = ((rx + rw - PAD) - ox) / dx;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+  } else {
+    return null;
+  }
+
+  if (Math.abs(dy) > 1e-6) {
+    let t1 = ((ry + PAD) - oy) / dy;
+    let t2 = ((ry + rh - PAD) - oy) / dy;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+  } else {
+    return null;
+  }
+
+  if (tMin > tMax || tMax < 0) return null;
+  const t = tMin >= 0 ? tMin : tMax;
+  return { x: ox + dx * t, y: oy + dy * t };
+};
+
 const edgeAnchorPoint = (nodeKey: string, targetKey: string, yOffset = 0) => {
   const node = form.nodes.find((item) => item.nodeKey === nodeKey);
   const target = form.nodes.find((item) => item.nodeKey === targetKey);
@@ -426,22 +460,31 @@ const edgeAnchorPoint = (nodeKey: string, targetKey: string, yOffset = 0) => {
   const size = getNodeSize(node.nodeType);
   const centerX = node.x + (size.width / 2);
   const centerY = node.y + (size.height / 2);
-  const anchorY = Math.max(node.y + 6, Math.min(centerY + yOffset, node.y + size.height - 6));
   const targetSize = getNodeSize(target.nodeType);
   const targetCenterX = target.x + (targetSize.width / 2);
   const targetCenterY = target.y + (targetSize.height / 2);
-  const dx = targetCenterX - centerX;
-  const dy = targetCenterY - centerY;
-  if (Math.abs(dy) > Math.abs(dx) * 1.2) {
-    if (dy >= 0) {
-      return { x: centerX, y: node.y + size.height };
-    }
+
+  let dx = targetCenterX - centerX;
+  let dy = targetCenterY - centerY;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) {
+    return { x: node.x + size.width, y: centerY };
+  }
+  dx /= len; dy /= len;
+
+  const hit = rectRayIntersection(
+    node.x, node.y, size.width, size.height,
+    centerX + yOffset * 0.01, centerY + yOffset,
+    dx, dy,
+  );
+  if (hit) return hit;
+
+  if (Math.abs(dy) > Math.abs(dx)) {
+    if (dy >= 0) return { x: centerX, y: node.y + size.height };
     return { x: centerX, y: node.y };
   }
-  if (dx >= 0) {
-    return { x: node.x + size.width, y: anchorY };
-  }
-  return { x: node.x, y: anchorY };
+  if (dx >= 0) return { x: node.x + size.width, y: centerY };
+  return { x: node.x, y: centerY };
 };
 
 const edgeSegment = (from: string, to: string) => ({
@@ -749,8 +792,8 @@ const connectNodeClick = (node: EditableNode) => {
   const sourceNode = form.nodes.find((item) => item.nodeKey === connectingFromKey.value);
   const sourceType = normalizeNodeTypeValue(sourceNode?.nodeType);
   if (sourceType === 'FAIL') {
-    if (!isFailRollbackTarget(connectingFromKey.value, node.nodeKey)) {
-      ElMessage.warning('失败节点只能回连到之前的普通节点或结束节点');
+      if (!isFailRollbackTarget(connectingFromKey.value, node.nodeKey)) {
+        ElMessage.warning('失败节点只能回连到之前的普通节点或结束节点');
       connectingFromKey.value = '';
       return;
     }
@@ -833,9 +876,11 @@ const edgePortOffset = (edge: EdgeItem) => {
     });
   const outIndex = Math.max(0, outgoing.findIndex((item) => item.id === edge.id));
   const inIndex = Math.max(0, incoming.findIndex((item) => item.id === edge.id));
-  const startOffset = (outIndex - ((outgoing.length - 1) / 2)) * 8;
-  const endOffset = (inIndex - ((incoming.length - 1) / 2)) * 8;
-  return { startOffset, endOffset };
+  const outCount = outgoing.length || 1;
+  const inCount = incoming.length || 1;
+  const startOffset = ((outIndex + 1) / (outCount + 1)) * 2 - 1;
+  const endOffset = ((inIndex + 1) / (inCount + 1)) * 2 - 1;
+  return { startOffset: startOffset * 10, endOffset: endOffset * 10 };
 };
 
 const edgePath = (edge: EdgeItem) => {
@@ -848,7 +893,8 @@ const edgePath = (edge: EdgeItem) => {
     const sign = to.x >= from.x ? 1 : -1;
     const arrowGap = 8;
     const endX = to.x - (sign * arrowGap);
-    const dx = Math.max(30, Math.abs(endX - from.x) * 0.4);
+    const dist = Math.abs(endX - from.x);
+    const dx = Math.max(dist * 0.35, 28);
     const c1x = from.x + (sign * dx);
     const c2x = endX - (sign * dx);
     return `M ${from.x} ${from.y} C ${c1x} ${from.y}, ${c2x} ${to.y}, ${endX} ${to.y}`;
@@ -856,7 +902,8 @@ const edgePath = (edge: EdgeItem) => {
   const signY = to.y >= from.y ? 1 : -1;
   const arrowGapY = 6;
   const endY = to.y - (signY * arrowGapY);
-  const dy = Math.max(24, Math.abs(endY - from.y) * 0.45);
+  const distY = Math.abs(endY - from.y);
+  const dy = Math.max(distY * 0.35, 22);
   const c1y = from.y + (signY * dy);
   const c2y = endY - (signY * dy);
   return `M ${from.x} ${from.y} C ${from.x} ${c1y}, ${to.x} ${c2y}, ${to.x} ${endY}`;
@@ -1037,6 +1084,8 @@ const applyRouteSelection = () => {
   applyBusinessSelection(routeBusinessCode);
   if (routeWorkflowCode) {
     form.workflowCode = routeWorkflowCode;
+  } else {
+    form.workflowCode = '';
   }
 };
 

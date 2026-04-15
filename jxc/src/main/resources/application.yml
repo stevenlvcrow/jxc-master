@@ -15,7 +15,7 @@ spring:
       timeout: 5s
   sql:
     init:
-      mode: never
+      mode: always
       schema-locations: classpath:init.sql
 
 server:

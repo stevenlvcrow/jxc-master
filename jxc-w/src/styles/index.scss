@@ -103,75 +103,132 @@ a {
 
 .menu.el-menu {
   --el-menu-bg-color: transparent;
-  --el-menu-text-color: rgba(255, 255, 255, 0.72);
-  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.1);
+  --el-menu-text-color: rgba(255, 255, 255, 0.78);
+  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.12);
   --el-menu-active-color: #ffffff;
-  --el-menu-base-level-padding: 4px;
-  --el-menu-level-padding: 4px;
+  --el-menu-base-level-padding: 6px;
+  --el-menu-level-padding: 10px;
   font-size: 11px;
 }
 
-.menu .el-menu-item {
-  border-radius: 4px;
-  margin-bottom: 0;
-  height: 20px !important;
-  min-height: 20px !important;
-  line-height: 20px !important;
+.menu .menu-node.el-menu-item,
+.menu .menu-node > .el-sub-menu__title {
+  border-radius: 5px;
+  margin-bottom: 1px;
+  width: 100%;
+  height: 22px !important;
+  min-height: 22px !important;
+  line-height: 22px !important;
   font-size: 11px;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  padding-top: 0;
-  padding-bottom: 0;
+  display: flex;
+  align-items: center;
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
-.menu .el-sub-menu__title {
-  border-radius: 4px;
-  margin-bottom: 0;
-  height: 20px !important;
-  min-height: 20px !important;
-  line-height: 20px !important;
-  font-size: 11px;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  padding-top: 0;
-  padding-bottom: 0;
+.menu .menu-node > .el-sub-menu__title {
+  position: relative;
+  padding-right: 18px !important;
 }
 
-.menu .el-sub-menu .el-menu {
-  margin: 0;
-  padding: 0 0 0 1px;
-  border-radius: 4px;
-  background: rgba(8, 17, 31, 0.08);
+.menu .menu-node.el-menu-item > span,
+.menu .menu-node > .el-sub-menu__title > span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.menu .menu-level-1.el-menu-item,
+.menu .menu-level-1 > .el-sub-menu__title {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.menu .menu-level-2.el-menu-item,
+.menu .menu-level-2 > .el-sub-menu__title {
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.menu .menu-level-3.el-menu-item,
+.menu .menu-level-3 > .el-sub-menu__title {
+  font-size: 10px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.menu .el-sub-menu > .el-menu {
+  margin: 2px 0 4px 5px;
+  padding: 2px 0 2px 6px;
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(8, 17, 31, 0.14);
+}
+
+.menu .el-sub-menu.is-opened > .el-sub-menu__title {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .menu .el-menu-item.is-active {
-  background: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.1));
+  box-shadow: inset 2px 0 0 rgba(255, 255, 255, 0.92);
+  color: #fff;
+  font-weight: 600;
 }
 
-.menu .el-menu-item,
-.menu .el-sub-menu__title {
-  width: 100%;
-}
-
-.menu .el-menu-item .el-icon,
-.menu .el-sub-menu__title .el-icon {
-  font-size: 12px;
-  width: 10px;
-  margin-right: 3px;
+.menu .menu-node.el-menu-item .el-icon,
+.menu .menu-node > .el-sub-menu__title .el-icon {
+  font-size: 11px;
+  width: 11px;
+  margin-right: 4px;
 }
 
 .menu .el-sub-menu .el-menu-item,
 .menu .el-sub-menu .el-sub-menu__title {
-  height: 18px !important;
-  min-height: 18px !important;
-  line-height: 18px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  line-height: 20px !important;
   font-size: 10px;
 }
 
 .menu .el-sub-menu .el-sub-menu__icon-arrow {
-  margin-top: -2px;
+  position: absolute;
+  top: 50%;
+  margin-top: 0;
   right: 4px;
   font-size: 9px;
+  transform: translateY(-50%);
+  transition: transform 0.2s ease;
+}
+
+.menu .el-sub-menu.is-opened > .el-sub-menu__title .el-sub-menu__icon-arrow {
+  transform: translateY(-50%) rotateZ(180deg);
+}
+
+/* Force alignment for Element Plus submenu title/content/arrow. */
+.menu.el-menu .el-sub-menu__title {
+  display: flex !important;
+  align-items: center !important;
+  position: relative !important;
+  padding-right: 18px !important;
+}
+
+.menu.el-menu .el-sub-menu__title > span {
+  display: inline-flex !important;
+  align-items: center !important;
+  line-height: 1.2 !important;
+}
+
+.menu.el-menu .el-sub-menu__title .el-sub-menu__icon-arrow {
+  position: absolute !important;
+  top: 50% !important;
+  right: 4px !important;
+  margin-top: 0 !important;
+  transform: translateY(-50%) !important;
+}
+
+.menu.el-menu .el-sub-menu.is-opened > .el-sub-menu__title .el-sub-menu__icon-arrow {
+  transform: translateY(-50%) rotateZ(180deg) !important;
 }
 
 .menu .el-menu-item span,

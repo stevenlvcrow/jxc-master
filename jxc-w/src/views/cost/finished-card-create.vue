@@ -1,9 +1,26 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import type { ComponentPublicInstance } from 'vue';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonSelectorDialog, {
+  type SelectorColumn,
+  type SelectorTreeNode,
+} from '@/components/CommonSelectorDialog.vue';
+import {
+  fetchDishCategoryTreeApi,
+  fetchDishesApi,
+  type DishListRow,
+  type DishTreeNode,
+} from '@/api/modules/dish';
+import {
+  fetchItemCategoryTreeApi,
+  fetchItemsApi,
+  type ItemCategoryTreeNode,
+  type ItemVO,
+} from '@/api/modules/item';
+import { useSessionStore } from '@/stores/session';
 
 type BaseForm = {
   name: string;
@@ -21,6 +38,17 @@ type DishRow = {
   spec: string;
   category: string;
   dishType: string;
+};
+
+type DishCandidate = {
+  id: string;
+  spuCode: string;
+  dishName: string;
+  spec: string;
+  category: string;
+  dishType: string;
+  deleted: 'Y' | 'N';
+  linkedCostCard: '是' | '否';
 };
 
 type MaterialRow = {
@@ -42,12 +70,25 @@ type MaterialRow = {
   remark: string;
 };
 
+type ItemCandidate = {
+  id: string;
+  code: string;
+  name: string;
+  spec: string;
+  category: string;
+  type: string;
+  costUnit: string;
+  baseUnit: string;
+  status: string;
+};
+
 type SectionNav = {
   key: string;
   label: string;
 };
 
 const router = useRouter();
+const sessionStore = useSessionStore();
 
 const baseForm = reactive<BaseForm>({
   name: '',
@@ -99,6 +140,143 @@ const sectionNavs: SectionNav[] = [
 const activeSectionKey = ref('basic');
 const sectionRefs = ref<Record<string, HTMLElement | null>>({});
 
+const dishSelectorVisible = ref(false);
+const dishSelectorKeyword = ref('');
+const dishSelectorDeleted = ref('');
+const activeDishTreeId = ref<string>('all');
+const dishSelectorCurrentPage = ref(1);
+const dishSelectorPageSize = ref(10);
+const dishSelectorLoading = ref(false);
+const dishSelectorTotal = ref(0);
+const selectingDishRowIndex = ref<number | null>(null);
+const selectedDishCandidates = ref<Array<Record<string, unknown>>>([]);
+const dishTreeData = ref<SelectorTreeNode[]>([]);
+
+const dishTableColumns: SelectorColumn[] = [
+  { prop: 'spuCode', label: '菜品SPU编码', minWidth: 130 },
+  { prop: 'dishName', label: '菜品名称', minWidth: 130 },
+  { prop: 'spec', label: '规格', minWidth: 100 },
+  { prop: 'category', label: '菜品分类', minWidth: 120 },
+  { prop: 'dishType', label: '菜品类型', minWidth: 120 },
+  { prop: 'linkedCostCard', label: '是否关联成本卡', minWidth: 130 },
+];
+
+const itemSelectorVisible = ref(false);
+const itemSelectorKeyword = ref('');
+const itemSelectorStatus = ref('');
+const activeItemTreeId = ref<string>('all');
+const itemSelectorCurrentPage = ref(1);
+const itemSelectorPageSize = ref(10);
+const itemSelectorLoading = ref(false);
+const itemSelectorTotal = ref(0);
+const selectingMaterialRowIndex = ref<number | null>(null);
+const selectedItemCandidates = ref<Array<Record<string, unknown>>>([]);
+const itemTreeData = ref<SelectorTreeNode[]>([]);
+
+const itemTableColumns: SelectorColumn[] = [
+  { prop: 'code', label: '物品编码', minWidth: 130 },
+  { prop: 'name', label: '物品名称', minWidth: 130 },
+  { prop: 'spec', label: '规格型号', minWidth: 120 },
+  { prop: 'category', label: '物品类别', minWidth: 120 },
+  { prop: 'type', label: '物品类型', minWidth: 100 },
+  { prop: 'costUnit', label: '成本单位', minWidth: 100 },
+];
+
+const dishCandidateSource = ref<DishCandidate[]>([]);
+const itemCandidateSource = ref<ItemCandidate[]>([]);
+
+const resolveOrgId = () => {
+  const orgId = (sessionStore.currentOrgId ?? '').trim();
+  return orgId || undefined;
+};
+
+const normalizeTreeNodes = (nodes: DishTreeNode[]): SelectorTreeNode[] => nodes.map((node) => ({
+  id: node.id,
+  label: String(node.label ?? ''),
+  children: Array.isArray(node.children) ? normalizeTreeNodes(node.children) : undefined,
+}));
+
+const normalizeItemTreeNodes = (nodes: ItemCategoryTreeNode[]): SelectorTreeNode[] => nodes.map((node) => ({
+  id: String(node.label ?? 'all'),
+  label: String(node.label ?? ''),
+  children: Array.isArray(node.children) ? normalizeItemTreeNodes(node.children) : undefined,
+}));
+
+const loadDishTree = async () => {
+  const tree = await fetchDishCategoryTreeApi(resolveOrgId());
+  if (!Array.isArray(tree) || !tree.length) {
+    dishTreeData.value = [{ id: 'all', label: '全部' }];
+    return;
+  }
+  dishTreeData.value = normalizeTreeNodes(tree);
+};
+
+const mapDishCandidate = (row: DishListRow): DishCandidate => ({
+  id: row.dishId || String(row.id),
+  spuCode: row.spuCode,
+  dishName: row.dishName,
+  spec: row.spec,
+  category: row.category,
+  dishType: row.dishType,
+  deleted: row.deleted,
+  linkedCostCard: row.linkedCostCard,
+});
+
+const loadDishCandidates = async () => {
+  dishSelectorLoading.value = true;
+  try {
+    const page = await fetchDishesApi({
+      pageNo: dishSelectorCurrentPage.value,
+      pageSize: dishSelectorPageSize.value,
+      keyword: dishSelectorKeyword.value.trim() || undefined,
+      deleted: (dishSelectorDeleted.value || undefined) as 'Y' | 'N' | undefined,
+      categoryId: activeDishTreeId.value === 'all' ? undefined : activeDishTreeId.value,
+    }, resolveOrgId());
+    dishCandidateSource.value = page.list.map(mapDishCandidate);
+    dishSelectorTotal.value = Number(page.total ?? 0);
+  } finally {
+    dishSelectorLoading.value = false;
+  }
+};
+
+const loadItemTree = async () => {
+  const tree = await fetchItemCategoryTreeApi(resolveOrgId());
+  if (!Array.isArray(tree) || !tree.length) {
+    itemTreeData.value = [{ id: 'all', label: '全部' }];
+    return;
+  }
+  itemTreeData.value = [{ id: 'all', label: '全部', children: normalizeItemTreeNodes(tree) }];
+};
+
+const mapItemCandidate = (row: ItemVO): ItemCandidate => ({
+  id: row.id || row.code,
+  code: row.code,
+  name: row.name,
+  spec: row.spec,
+  category: row.category,
+  type: row.type,
+  costUnit: row.costUnit,
+  baseUnit: row.baseUnit,
+  status: row.status,
+});
+
+const loadItemCandidates = async () => {
+  itemSelectorLoading.value = true;
+  try {
+    const page = await fetchItemsApi({
+      pageNo: itemSelectorCurrentPage.value,
+      pageSize: itemSelectorPageSize.value,
+      keyword: itemSelectorKeyword.value.trim() || undefined,
+      category: activeItemTreeId.value === 'all' ? undefined : activeItemTreeId.value,
+      status: itemSelectorStatus.value || undefined,
+    }, resolveOrgId());
+    itemCandidateSource.value = page.list.map(mapItemCandidate);
+    itemSelectorTotal.value = Number(page.total ?? 0);
+  } finally {
+    itemSelectorLoading.value = false;
+  }
+};
+
 const addDishRow = () => {
   dishRows.value.push({
     spuCode: '',
@@ -114,6 +292,153 @@ const removeDishRow = (index: number) => {
     return;
   }
   dishRows.value.splice(index, 1);
+};
+
+const openDishSelector = async (index: number) => {
+  selectingDishRowIndex.value = index;
+  selectedDishCandidates.value = [];
+  if (!dishTreeData.value.length) {
+    await loadDishTree();
+  }
+  await loadDishCandidates();
+  dishSelectorVisible.value = true;
+};
+
+const handleDishSelectorSearch = (payload: { keyword: string; status: string }) => {
+  dishSelectorKeyword.value = payload.keyword;
+  dishSelectorDeleted.value = payload.status;
+  dishSelectorCurrentPage.value = 1;
+  loadDishCandidates();
+};
+
+const handleDishNodeChange = (node: SelectorTreeNode | null) => {
+  activeDishTreeId.value = String(node?.id ?? 'all');
+  dishSelectorCurrentPage.value = 1;
+  loadDishCandidates();
+};
+
+const handleDishSelectionChange = (rows: Array<Record<string, unknown>>) => {
+  selectedDishCandidates.value = rows;
+};
+
+const handleDishClear = () => {
+  selectedDishCandidates.value = [];
+};
+
+const applyDishToRow = (row: DishRow, dish: DishCandidate) => {
+  row.spuCode = dish.spuCode;
+  row.dishName = dish.dishName;
+  row.spec = dish.spec;
+  row.category = dish.category;
+  row.dishType = dish.dishType;
+};
+
+const handleDishSelectorConfirm = (rows: Array<Record<string, unknown>>) => {
+  const picked = rows as DishCandidate[];
+  if (!picked.length) {
+    ElMessage.warning('请至少选择一个菜品');
+    return;
+  }
+  const targetIndex = selectingDishRowIndex.value ?? 0;
+  const targetRow = dishRows.value[targetIndex];
+  if (!targetRow) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  applyDishToRow(targetRow, picked[0]);
+  if (picked.length > 1) {
+    const extras = picked.slice(1);
+    extras.forEach((dish) => {
+      dishRows.value.push({
+        spuCode: dish.spuCode,
+        dishName: dish.dishName,
+        spec: dish.spec,
+        category: dish.category,
+        dishType: dish.dishType,
+      });
+    });
+    ElMessage.success(`已选择${picked.length}个菜品，额外新增${extras.length}行`);
+  }
+  dishSelectorVisible.value = false;
+};
+
+const openItemSelector = async (index: number) => {
+  selectingMaterialRowIndex.value = index;
+  selectedItemCandidates.value = [];
+  if (!itemTreeData.value.length) {
+    await loadItemTree();
+  }
+  await loadItemCandidates();
+  itemSelectorVisible.value = true;
+};
+
+const handleItemSelectorSearch = (payload: { keyword: string; status: string }) => {
+  itemSelectorKeyword.value = payload.keyword;
+  itemSelectorStatus.value = payload.status;
+  itemSelectorCurrentPage.value = 1;
+  loadItemCandidates();
+};
+
+const handleItemNodeChange = (node: SelectorTreeNode | null) => {
+  activeItemTreeId.value = String(node?.id ?? 'all');
+  itemSelectorCurrentPage.value = 1;
+  loadItemCandidates();
+};
+
+const handleItemSelectionChange = (rows: Array<Record<string, unknown>>) => {
+  selectedItemCandidates.value = rows;
+};
+
+const handleItemClear = () => {
+  selectedItemCandidates.value = [];
+};
+
+const applyItemToRow = (row: MaterialRow, item: ItemCandidate) => {
+  row.itemCode = item.code;
+  row.itemName = item.name;
+  row.specModel = item.spec;
+  row.costUnit = item.costUnit;
+  row.baseUnit = item.baseUnit;
+};
+
+const handleItemSelectorConfirm = (rows: Array<Record<string, unknown>>) => {
+  const picked = rows as ItemCandidate[];
+  if (!picked.length) {
+    ElMessage.warning('请至少选择一个物品');
+    return;
+  }
+  const targetIndex = selectingMaterialRowIndex.value ?? 0;
+  const targetRow = materialRows.value[targetIndex];
+  if (!targetRow) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  applyItemToRow(targetRow, picked[0]);
+  if (picked.length > 1) {
+    const extras = picked.slice(1);
+    extras.forEach((item) => {
+      materialRows.value.push({
+        itemCode: item.code,
+        itemName: item.name,
+        specModel: item.spec,
+        costUnit: item.costUnit,
+        netAmount: 0,
+        netRate: 100,
+        grossAmount: 0,
+        taxPrice: 0,
+        taxAmount: 0,
+        isMainMaterial: false,
+        assistDeductMode: '否',
+        baseUnit: item.baseUnit,
+        baseGrossAmount: 0,
+        baseTaxPrice: 0,
+        substituteMaterial: '',
+        remark: '',
+      });
+    });
+    ElMessage.success(`已选择${picked.length}个物品，额外新增${extras.length}行`);
+  }
+  itemSelectorVisible.value = false;
 };
 
 const addMaterialRow = () => {
@@ -176,6 +501,17 @@ const saveDraft = () => {
 const saveCard = () => {
   ElMessage.success('成品卡已保存（示例）');
 };
+
+watch(() => sessionStore.currentOrgId, () => {
+  dishTreeData.value = [];
+  dishCandidateSource.value = [];
+  dishSelectorTotal.value = 0;
+  activeDishTreeId.value = 'all';
+  itemTreeData.value = [];
+  itemCandidateSource.value = [];
+  itemSelectorTotal.value = 0;
+  activeItemTreeId.value = 'all';
+});
 </script>
 
 <template>
@@ -236,28 +572,30 @@ const saveCard = () => {
               </template>
             </el-table-column>
             <el-table-column label="菜品SPU编码" min-width="130">
-              <template #default="{ row }">
-                <el-input v-model="row.spuCode" />
+              <template #default="{ row, $index }">
+                <div @click="openDishSelector($index)">
+                  {{ row.spuCode || '点击选择菜品' }}
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="菜品名称" min-width="120">
               <template #default="{ row }">
-                <el-input v-model="row.dishName" />
+                <span>{{ row.dishName || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column label="规格" min-width="100">
               <template #default="{ row }">
-                <el-input v-model="row.spec" />
+                <span>{{ row.spec || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column label="菜品分类" min-width="110">
               <template #default="{ row }">
-                <el-input v-model="row.category" />
+                <span>{{ row.category || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column label="菜品类型" min-width="100">
               <template #default="{ row }">
-                <el-input v-model="row.dishType" />
+                <span>{{ row.dishType || '-' }}</span>
               </template>
             </el-table-column>
           </el-table>
@@ -274,23 +612,25 @@ const saveCard = () => {
               </template>
             </el-table-column>
             <el-table-column label="物品编码" width="120">
-              <template #default="{ row }">
-                <el-input v-model="row.itemCode" />
+              <template #default="{ row, $index }">
+                <div @click="openItemSelector($index)">
+                  {{ row.itemCode || '点击选择物品' }}
+                </div>
               </template>
             </el-table-column>
             <el-table-column label="物品名称" width="120">
               <template #default="{ row }">
-                <el-input v-model="row.itemName" />
+                <span>{{ row.itemName || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column label="规格型号" width="120">
               <template #default="{ row }">
-                <el-input v-model="row.specModel" />
+                <span>{{ row.specModel || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column label="成本单位" width="96">
               <template #default="{ row }">
-                <el-input v-model="row.costUnit" />
+                <span>{{ row.costUnit || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column label="净料量" width="90">
@@ -333,7 +673,7 @@ const saveCard = () => {
             </el-table-column>
             <el-table-column label="基准单位" width="96">
               <template #default="{ row }">
-                <el-input v-model="row.baseUnit" />
+                <span>{{ row.baseUnit || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column label="基准单位毛料量" width="126">
@@ -360,5 +700,69 @@ const saveCard = () => {
         </section>
       </el-form>
     </section>
+
+    <CommonSelectorDialog
+      v-model="dishSelectorVisible"
+      title="选择菜品"
+      :tree-data="dishTreeData"
+      :table-data="dishCandidateSource"
+      :loading="dishSelectorLoading"
+      :columns="dishTableColumns"
+      row-key="id"
+      selected-label-key="dishName"
+      :selected-rows="selectedDishCandidates"
+      :keyword-value="dishSelectorKeyword"
+      :status-value="dishSelectorDeleted"
+      keyword-label="菜品"
+      keyword-placeholder="支持按名称和拼音助记码..."
+      status-label="菜品是否删除"
+      :status-options="[
+        { label: '全部', value: '' },
+        { label: '否', value: 'N' },
+        { label: '是', value: 'Y' },
+      ]"
+      :total="dishSelectorTotal"
+      :current-page="dishSelectorCurrentPage"
+      :page-size="dishSelectorPageSize"
+      @search="handleDishSelectorSearch"
+      @node-change="handleDishNodeChange"
+      @selection-change="handleDishSelectionChange"
+      @clear-selection="handleDishClear"
+      @page-change="(p) => { dishSelectorCurrentPage = p; loadDishCandidates(); }"
+      @page-size-change="(s) => { dishSelectorPageSize = s; dishSelectorCurrentPage = 1; loadDishCandidates(); }"
+      @confirm="handleDishSelectorConfirm"
+    />
+
+    <CommonSelectorDialog
+      v-model="itemSelectorVisible"
+      title="选择物品"
+      :tree-data="itemTreeData"
+      :table-data="itemCandidateSource"
+      :loading="itemSelectorLoading"
+      :columns="itemTableColumns"
+      row-key="id"
+      selected-label-key="name"
+      :selected-rows="selectedItemCandidates"
+      :keyword-value="itemSelectorKeyword"
+      :status-value="itemSelectorStatus"
+      keyword-label="物品"
+      keyword-placeholder="支持按物品编码和名称查询..."
+      status-label="启用状态"
+      :status-options="[
+        { label: '全部', value: '' },
+        { label: '启用', value: '启用' },
+        { label: '停用', value: '停用' },
+      ]"
+      :total="itemSelectorTotal"
+      :current-page="itemSelectorCurrentPage"
+      :page-size="itemSelectorPageSize"
+      @search="handleItemSelectorSearch"
+      @node-change="handleItemNodeChange"
+      @selection-change="handleItemSelectionChange"
+      @clear-selection="handleItemClear"
+      @page-change="(p) => { itemSelectorCurrentPage = p; loadItemCandidates(); }"
+      @page-size-change="(s) => { itemSelectorPageSize = s; itemSelectorCurrentPage = 1; loadItemCandidates(); }"
+      @confirm="handleItemSelectorConfirm"
+    />
   </div>
 </template>

@@ -1,6 +1,8 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
@@ -159,7 +161,6 @@ public class ItemController {
         ItemScope scope = resolveItemScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
         int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
-        int offset = (safePageNo - 1) * safePageSize;
 
         String keywordValue = trimNullable(keyword);
         Set<String> categorySet = parseCategorySet(trimNullable(category));
@@ -169,14 +170,17 @@ public class ItemController {
         String storageModeValue = trimNullable(storageMode);
         String tagValue = trimNullable(tag);
 
-        List<ItemProfileDO> profiles = itemProfileMapper.selectList(
+        // 使用 MyBatis-Plus IPage 数据库分页，仅查询当前页数据
+        IPage<ItemProfileDO> pageResult = itemProfileMapper.selectPage(
+                new Page<>(safePageNo, safePageSize),
                 scopeQuery(scope)
                         .eq(ItemProfileDO::getDraft, Boolean.FALSE)
                         .orderByDesc(ItemProfileDO::getCreatedAt)
                         .orderByDesc(ItemProfileDO::getId)
         );
 
-        List<ItemListRow> filtered = profiles.stream()
+        // 仅对当前页数据进行投影和内存过滤（detailJson字段无法下推SQL）
+        List<ItemListRow> filtered = pageResult.getRecords().stream()
                 .map(this::toListProjection)
                 .filter(row -> matchKeyword(row, keywordValue))
                 .filter(row -> matchCategory(row.category(), categorySet))
@@ -187,42 +191,7 @@ public class ItemController {
                 .filter(row -> matchTag(row.tag(), tagValue))
                 .toList();
 
-        List<ItemListRow> list = new ArrayList<>();
-        for (int i = offset; i < Math.min(offset + safePageSize, filtered.size()); i++) {
-            ItemListRow row = filtered.get(i);
-            list.add(new ItemListRow(
-                    row.id(),
-                    i + 1,
-                    row.code(),
-                    row.name(),
-                    row.spec(),
-                    row.type(),
-                    row.category(),
-                    row.brand(),
-                    row.productionCost(),
-                    row.baseUnit(),
-                    row.purchaseUnit(),
-                    row.orderUnit(),
-                    row.stockUnit(),
-                    row.costUnit(),
-                    row.suggestPrice(),
-                    row.volume(),
-                    row.weight(),
-                    row.statType(),
-                    row.thirdPartyCode(),
-                    row.abcClass(),
-                    row.stockMin(),
-                    row.stockMax(),
-                    row.source(),
-                    row.status(),
-                    row.storageMode(),
-                    row.tag(),
-                    row.image(),
-                    row.createdAt(),
-                    row.updatedAt()
-            ));
-        }
-        return CodeDataResponse.ok(new PageData<>(list, filtered.size(), safePageNo, safePageSize));
+        return CodeDataResponse.ok(new PageData<>(filtered, pageResult.getTotal(), safePageNo, safePageSize));
     }
 
     @PostMapping("/batch-status")

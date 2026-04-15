@@ -17,5 +17,15 @@
         where role_id = #{roleId}
         order by id asc
     </select>
+
+    <select id="selectByRoleIds" resultMap="RoleMenuRelDOResultMap">
+        select id, role_id, menu_id, created_at
+        from sys_role_menu_rel
+        where role_id in
+            <foreach collection="roleIds" item="roleId" open="(" separator="," close=")">
+                #{roleId}
+            </foreach>
+        order by role_id, id asc
+    </select>
 </mapper>
 

@@ -386,8 +386,8 @@ onBeforeUnmount(() => {
       <div class="brand">
         <div class="brand-mark">J</div>
         <div v-show="!appStore.sidebarCollapsed" class="brand-copy">
-          <strong>JXC Admin</strong>
-          <span>Vue 3 管理平台</span>
+          <strong>BoBo</strong>
+          <span>进销存管理平台</span>
         </div>
       </div>
 
@@ -403,6 +403,7 @@ onBeforeUnmount(() => {
           :key="item.key"
           :item="item"
           :icon-map="iconMap"
+          :level="1"
         />
       </el-menu>
     </el-aside>

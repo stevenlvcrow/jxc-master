@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseMapper">
+
+    <resultMap id="WarehouseDOResultMap" type="com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO">
+        <id property="id" column="id"/>
+        <result property="groupId" column="group_id"/>
+        <result property="warehouseCode" column="warehouse_code"/>
+        <result property="warehouseName" column="warehouse_name"/>
+        <result property="department" column="department"/>
+        <result property="status" column="status"/>
+        <result property="warehouseType" column="warehouse_type"/>
+        <result property="contactName" column="contact_name"/>
+        <result property="contactPhone" column="contact_phone"/>
+        <result property="regionPath" column="region_path"/>
+        <result property="address" column="address"/>
+        <result property="targetGrossMargin" column="target_gross_margin"/>
+        <result property="idealPurchaseSaleRatio" column="ideal_purchase_sale_ratio"/>
+        <result property="isDefault" column="is_default"/>
+        <result property="remark" column="remark"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+</mapper>

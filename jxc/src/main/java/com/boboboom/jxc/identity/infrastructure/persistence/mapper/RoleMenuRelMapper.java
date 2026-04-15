@@ -9,5 +9,7 @@ import java.util.List;
 public interface RoleMenuRelMapper extends BaseMapper<RoleMenuRelDO> {
 
     List<RoleMenuRelDO> selectByRoleId(@Param("roleId") Long roleId);
+
+    List<RoleMenuRelDO> selectByRoleIds(@Param("roleIds") List<Long> roleIds);
 }
 

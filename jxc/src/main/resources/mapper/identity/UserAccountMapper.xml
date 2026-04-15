@@ -72,5 +72,35 @@
         where u.id = #{userId}
         order by urr.assigned_at desc
     </select>
+
+    <select id="selectUserRolesByUserIds" resultMap="UserRoleViewMap">
+        select u.id as user_id,
+               u.username,
+               u.real_name,
+               u.phone,
+               u.status as user_status,
+               r.id as role_id,
+               r.role_code,
+               r.role_name,
+               r.role_type,
+               urr.scope_type,
+               urr.scope_id,
+               case
+                   when urr.scope_type = 'GROUP' then g.group_name
+                   when urr.scope_type = 'STORE' then s.store_name
+                   else 'PLATFORM'
+                   end as scope_name,
+               urr.assigned_at
+        from sys_user u
+                 inner join sys_user_role_rel urr on urr.user_id = u.id and urr.status = 'ENABLED'
+                 inner join sys_role r on r.id = urr.role_id and r.status = 'ENABLED'
+                 left join sys_group g on g.id = urr.scope_id and urr.scope_type = 'GROUP'
+                 left join sys_store s on s.id = urr.scope_id and urr.scope_type = 'STORE'
+        where u.id in
+            <foreach collection="userIds" item="userId" open="(" separator="," close=")">
+                #{userId}
+            </foreach>
+        order by u.id, urr.assigned_at desc
+    </select>
 </mapper>
 

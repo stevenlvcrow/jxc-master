@@ -10,6 +10,11 @@ import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleMenuRelDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseItemRuleDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseItemRuleItemDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseItemRuleCategoryDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseItemRuleWarehouseDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.GroupMapper;
@@ -18,6 +23,11 @@ import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMenuRelMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UnitMapper;
+import com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseMapper;
+import com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleMapper;
+import com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleItemMapper;
+import com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleCategoryMapper;
+import com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleWarehouseMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserAccountMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.query.MenuPermissionView;
@@ -30,6 +40,10 @@ import com.boboboom.jxc.identity.interfaces.rest.request.GroupAdminBindRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupStoreCreateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserRoleAssignRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseCreateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseUpdateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleCreateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemCategoryDO;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemStatisticsTypeDO;
@@ -47,6 +61,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
@@ -79,6 +94,11 @@ public class IdentityAdminController {
     private final GroupMapper groupMapper;
     private final StoreMapper storeMapper;
     private final UnitMapper unitMapper;
+    private final WarehouseMapper warehouseMapper;
+    private final WarehouseItemRuleMapper warehouseItemRuleMapper;
+    private final WarehouseItemRuleItemMapper ruleItemMapper;
+    private final WarehouseItemRuleCategoryMapper ruleCategoryMapper;
+    private final WarehouseItemRuleWarehouseMapper ruleWarehouseMapper;
     private final ItemCategoryMapper itemCategoryMapper;
     private final ItemStatisticsTypeMapper itemStatisticsTypeMapper;
     private final ItemTagMapper itemTagMapper;
@@ -91,6 +111,11 @@ public class IdentityAdminController {
                                    GroupMapper groupMapper,
                                    StoreMapper storeMapper,
                                    UnitMapper unitMapper,
+                                   WarehouseMapper warehouseMapper,
+                                   WarehouseItemRuleMapper warehouseItemRuleMapper,
+                                   WarehouseItemRuleItemMapper ruleItemMapper,
+                                   WarehouseItemRuleCategoryMapper ruleCategoryMapper,
+                                   WarehouseItemRuleWarehouseMapper ruleWarehouseMapper,
                                    ItemCategoryMapper itemCategoryMapper,
                                    ItemStatisticsTypeMapper itemStatisticsTypeMapper,
                                    ItemTagMapper itemTagMapper) {
@@ -102,6 +127,11 @@ public class IdentityAdminController {
         this.groupMapper = groupMapper;
         this.storeMapper = storeMapper;
         this.unitMapper = unitMapper;
+        this.warehouseMapper = warehouseMapper;
+        this.warehouseItemRuleMapper = warehouseItemRuleMapper;
+        this.ruleItemMapper = ruleItemMapper;
+        this.ruleCategoryMapper = ruleCategoryMapper;
+        this.ruleWarehouseMapper = ruleWarehouseMapper;
         this.itemCategoryMapper = itemCategoryMapper;
         this.itemStatisticsTypeMapper = itemStatisticsTypeMapper;
         this.itemTagMapper = itemTagMapper;
@@ -183,8 +213,17 @@ public class IdentityAdminController {
         }
 
         List<UserAdminView> result = new ArrayList<>(users.size());
+        if (users.isEmpty()) {
+            return CodeDataResponse.ok(result);
+        }
+        // 批量查询所有用户角色（替代循环内N次selectUserRoles）
+        List<Long> userIds = users.stream().map(UserAccountDO::getId).toList();
+        List<UserRoleView> allUserRoles = userAccountMapper.selectUserRolesByUserIds(userIds);
+        // 按用户ID分组
+        Map<Long, List<UserRoleView>> userRolesMap = allUserRoles.stream()
+                .collect(Collectors.groupingBy(UserRoleView::getUserId));
         for (UserAccountDO user : users) {
-            List<UserRoleView> userRoles = userAccountMapper.selectUserRoles(user.getId());
+            List<UserRoleView> userRoles = userRolesMap.getOrDefault(user.getId(), Collections.emptyList());
             List<RoleAssignmentView> roles = userRoles.stream()
                     .map(v -> new RoleAssignmentView(
                             v.getRoleId(),
@@ -470,6 +509,181 @@ public class IdentityAdminController {
         initializeStoreSampleData(store.getId());
         return CodeDataResponse.ok(new IdPayload(store.getId()));
     }
+
+    // ==================== 仓库档案 CRUD ====================
+
+    @GetMapping("/groups/{groupId}/warehouses")
+    public CodeDataResponse<List<WarehouseAdminView>> listGroupWarehouses(@PathVariable Long groupId,
+                                                                           @RequestParam(required = false) String keyword,
+                                                                           @RequestParam(required = false) String status,
+                                                                           @RequestParam(required = false) String warehouseType) {
+        ensureCanManageGroup(groupId);
+        LambdaQueryWrapper<WarehouseDO> wrapper = new LambdaQueryWrapper<WarehouseDO>()
+                .eq(WarehouseDO::getGroupId, groupId)
+                .orderByDesc(WarehouseDO::getCreatedAt)
+                .orderByDesc(WarehouseDO::getId);
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            String kw = keyword.trim();
+            wrapper.and(w -> w.like(WarehouseDO::getWarehouseCode, kw)
+                    .or().like(WarehouseDO::getWarehouseName, kw)
+                    .or().like(WarehouseDO::getContactName, kw));
+        }
+        if (status != null && !status.trim().isEmpty()) {
+            wrapper.eq(WarehouseDO::getStatus, status);
+        }
+        if (warehouseType != null && !warehouseType.trim().isEmpty()) {
+            wrapper.eq(WarehouseDO::getWarehouseType, warehouseType);
+        }
+        List<WarehouseDO> warehouses = warehouseMapper.selectList(wrapper);
+        List<WarehouseAdminView> result = warehouses.stream()
+                .map(this::toWarehouseAdminView)
+                .toList();
+        return CodeDataResponse.ok(result);
+    }
+
+    @PostMapping("/groups/{groupId}/warehouses")
+    @Transactional
+    public CodeDataResponse<IdPayload> createWarehouse(@PathVariable Long groupId,
+                                                        @Valid @RequestBody WarehouseCreateRequest request) {
+        ensureCanManageGroup(groupId);
+        requireGroup(groupId);
+
+        String code = trim(request.getWarehouseCode());
+        WarehouseDO codeExists = warehouseMapper.selectOne(
+                new LambdaQueryWrapper<WarehouseDO>().eq(WarehouseDO::getWarehouseCode, code).last("limit 1"));
+        if (codeExists != null) {
+            throw new BusinessException("仓库编码已存在");
+        }
+
+        WarehouseDO warehouse = new WarehouseDO();
+        warehouse.setGroupId(groupId);
+        warehouse.setWarehouseCode(code);
+        warehouse.setWarehouseName(trim(request.getWarehouseName()));
+        warehouse.setDepartment(trimNullable(request.getDepartment()));
+        warehouse.setStatus(normalizeStatus(request.getStatus()));
+        warehouse.setWarehouseType(trimNullable(request.getWarehouseType()) != null ? trimNullable(request.getWarehouseType()) : "普通仓库");
+        warehouse.setContactName(trimNullable(request.getContactName()));
+        warehouse.setContactPhone(trimNullable(request.getContactPhone()));
+        warehouse.setRegionPath(trimNullable(request.getRegionPath()));
+        warehouse.setAddress(trimNullable(request.getAddress()));
+        warehouse.setTargetGrossMargin(trimNullable(request.getTargetGrossMargin()));
+        warehouse.setIdealPurchaseSaleRatio(trimNullable(request.getIdealPurchaseSaleRatio()));
+        warehouse.setIsDefault(false);
+        warehouseMapper.insert(warehouse);
+
+        return CodeDataResponse.ok(new IdPayload(warehouse.getId()));
+    }
+
+    @PutMapping("/warehouses/{id}")
+    @Transactional
+    public CodeDataResponse<Void> updateWarehouse(@PathVariable Long id,
+                                                   @Valid @RequestBody WarehouseUpdateRequest request) {
+        WarehouseDO warehouse = requireWarehouse(id);
+        ensureCanManageGroup(warehouse.getGroupId());
+
+        warehouse.setWarehouseName(trim(request.getWarehouseName()));
+        warehouse.setDepartment(trimNullable(request.getDepartment()));
+        if (request.getStatus() != null && !request.getStatus().isBlank()) {
+            warehouse.setStatus(normalizeStatus(request.getStatus()));
+        }
+        if (request.getWarehouseType() != null && !request.getWarehouseType().isBlank()) {
+            warehouse.setWarehouseType(request.getWarehouseType());
+        }
+        warehouse.setContactName(trimNullable(request.getContactName()));
+        warehouse.setContactPhone(trimNullable(request.getContactPhone()));
+        warehouse.setRegionPath(trimNullable(request.getRegionPath()));
+        warehouse.setAddress(trimNullable(request.getAddress()));
+        warehouse.setTargetGrossMargin(trimNullable(request.getTargetGrossMargin()));
+        warehouse.setIdealPurchaseSaleRatio(trimNullable(request.getIdealPurchaseSaleRatio()));
+
+        warehouseMapper.updateById(warehouse);
+        return CodeDataResponse.ok(null);
+    }
+
+    @DeleteMapping("/warehouses/{id}")
+    @Transactional
+    public CodeDataResponse<Void> deleteWarehouse(@PathVariable Long id) {
+        WarehouseDO warehouse = requireWarehouse(id);
+        ensureCanManageGroup(warehouse.getGroupId());
+        warehouseMapper.deleteById(id);
+        return CodeDataResponse.ok(null);
+    }
+
+    @PutMapping("/warehouses/{id}/default")
+    @Transactional
+    public CodeDataResponse<Void> setWarehouseDefault(@PathVariable Long id) {
+        WarehouseDO warehouse = requireWarehouse(id);
+        ensureCanManageGroup(warehouse.getGroupId());
+
+        WarehouseDO resetDefault = new WarehouseDO();
+        resetDefault.setIsDefault(false);
+        warehouseMapper.update(resetDefault, new LambdaQueryWrapper<WarehouseDO>()
+                .eq(WarehouseDO::getGroupId, warehouse.getGroupId()));
+
+        warehouse.setIsDefault(true);
+        warehouseMapper.updateById(warehouse);
+        return CodeDataResponse.ok(null);
+    }
+
+    @PutMapping("/warehouses/{id}/status")
+    @Transactional
+    public CodeDataResponse<Void> updateWarehouseStatus(@PathVariable Long id,
+                                                         @RequestBody StatusUpdateRequest request) {
+        WarehouseDO warehouse = requireWarehouse(id);
+        ensureCanManageGroup(warehouse.getGroupId());
+        warehouse.setStatus(normalizeStatus(request.getStatus()));
+        warehouseMapper.updateById(warehouse);
+        return CodeDataResponse.ok(null);
+    }
+
+    private WarehouseDO requireWarehouse(Long id) {
+        WarehouseDO w = warehouseMapper.selectById(id);
+        if (w == null) {
+            throw new BusinessException("仓库不存在");
+        }
+        return w;
+    }
+
+    private WarehouseAdminView toWarehouseAdminView(WarehouseDO w) {
+        StringBuilder fullAddress = new StringBuilder();
+        if (w.getRegionPath() != null && !w.getRegionPath().isBlank()) {
+            fullAddress.append(w.getRegionPath()).append(" ");
+        }
+        if (w.getAddress() != null && !w.getAddress().isBlank()) {
+            fullAddress.append(w.getAddress());
+        }
+        return new WarehouseAdminView(
+                w.getId(),
+                w.getWarehouseCode(),
+                w.getWarehouseName(),
+                w.getDepartment(),
+                w.getStatus(),
+                w.getWarehouseType(),
+                w.getContactName(),
+                w.getContactPhone(),
+                fullAddress.toString().trim(),
+                w.getTargetGrossMargin(),
+                w.getIdealPurchaseSaleRatio(),
+                w.getIsDefault() != null ? w.getIsDefault() : false,
+                w.getUpdatedAt()
+        );
+    }
+
+    public record WarehouseAdminView(
+            Long id,
+            String warehouseCode,
+            String warehouseName,
+            String department,
+            String status,
+            String warehouseType,
+            String contactName,
+            String contactPhone,
+            String address,
+            String targetGrossMargin,
+            String idealPurchaseSaleRatio,
+            boolean isDefault,
+            LocalDateTime updatedAt
+    ) {}
 
     private void initializeStoreSampleData(Long storeId) {
         copyUnitSamplesToStore(storeId);
@@ -813,11 +1027,22 @@ public class IdentityAdminController {
         }
 
         List<RoleAdminView> result = new ArrayList<>(roles.size());
+        if (roles.isEmpty()) {
+            return CodeDataResponse.ok(result);
+        }
+        // 批量查询所有角色的菜单ID（替代循环内N次selectByRoleId）
+        List<Long> roleIds = roles.stream().map(RoleDO::getId).toList();
+        List<RoleMenuRelDO> allRoleMenuRels = roleMenuRelMapper.selectByRoleIds(roleIds);
+        // 按角色ID分组
+        Map<Long, List<Long>> roleMenuIdMap = allRoleMenuRels.stream()
+                .collect(Collectors.groupingBy(
+                        RoleMenuRelDO::getRoleId,
+                        Collectors.mapping(RoleMenuRelDO::getMenuId, Collectors.toCollection(LinkedHashSet::new))
+                ))
+                .entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> new ArrayList<>(e.getValue())));
         for (RoleDO role : roles) {
-            List<Long> menuIds = roleMenuRelMapper.selectByRoleId(role.getId()).stream()
-                    .map(RoleMenuRelDO::getMenuId)
-                    .distinct()
-                    .toList();
+            List<Long> menuIds = roleMenuIdMap.getOrDefault(role.getId(), Collections.emptyList());
             String displayRoleCode = platformAdmin
                     ? role.getRoleCode()
                     : toTenantDisplayRoleCode(role.getRoleCode(), managedGroupIdsForDisplay);
@@ -1641,5 +1866,251 @@ public class IdentityAdminController {
         }
         return GROUP_ROLE_TEMPLATE_DESC.equals(role.getDescription());
     }
+
+    // ==================== 仓库物品规则 CRUD ====================
+
+    @GetMapping("/groups/{groupId}/item-rules")
+    public CodeDataResponse<List<RuleListView>> listItemRules(@PathVariable Long groupId) {
+        ensureCanManageGroup(groupId);
+        List<WarehouseItemRuleDO> rules = warehouseItemRuleMapper.selectList(
+                new LambdaQueryWrapper<WarehouseItemRuleDO>()
+                        .eq(WarehouseItemRuleDO::getGroupId, groupId)
+                        .orderByDesc(WarehouseItemRuleDO::getCreatedAt));
+        List<RuleListView> result = rules.stream().map(r -> new RuleListView(
+                r.getId(), r.getRuleCode(), r.getRuleName(),
+                r.getBusinessControl() != null ? r.getBusinessControl() : false,
+                r.getStatus(), r.getCreatedBy(), r.getCreatedAt(),
+                r.getUpdatedBy(), r.getUpdatedAt()
+        )).toList();
+        return CodeDataResponse.ok(result);
+    }
+
+    @GetMapping("/item-rules/{id}")
+    public CodeDataResponse<RuleDetailView> getRuleDetail(@PathVariable Long id) {
+        WarehouseItemRuleDO rule = requireItemRule(id);
+        ensureCanManageGroup(rule.getGroupId());
+
+        List<ItemDetailRow> items = ruleItemMapper.selectList(
+                new LambdaQueryWrapper<WarehouseItemRuleItemDO>()
+                        .eq(WarehouseItemRuleItemDO::getRuleId, id)
+                        .orderByAsc(WarehouseItemRuleItemDO::getSortOrder))
+                .stream().map(i -> new ItemDetailRow(
+                        i.getId(), i.getItemCode(), i.getItemName(),
+                        i.getSpecModel(), i.getItemCategory()
+                )).toList();
+
+        List<CategoryDetailRow> categories = ruleCategoryMapper.selectList(
+                new LambdaQueryWrapper<WarehouseItemRuleCategoryDO>()
+                        .eq(WarehouseItemRuleCategoryDO::getRuleId, id)
+                        .orderByAsc(WarehouseItemRuleCategoryDO::getSortOrder))
+                .stream().map(c -> new CategoryDetailRow(
+                        c.getId(), c.getCategoryCode(), c.getCategoryName(),
+                        c.getParentCategory(), c.getChildCategory()
+                )).toList();
+
+        List<WarehouseDetailRow> warehouses = ruleWarehouseMapper.selectList(
+                new LambdaQueryWrapper<WarehouseItemRuleWarehouseDO>()
+                        .eq(WarehouseItemRuleWarehouseDO::getRuleId, id)
+                        .orderByAsc(WarehouseItemRuleWarehouseDO::getSortOrder))
+                .stream().map(w -> new WarehouseDetailRow(
+                        w.getId(), w.getWarehouseId(), w.getWarehouseName()
+                )).toList();
+
+        RuleDetailView detail = new RuleDetailView(
+                rule.getId(), rule.getRuleCode(), rule.getRuleName(),
+                rule.getBusinessControl() != null ? rule.getBusinessControl() : false,
+                rule.getControlOrder() != null ? rule.getControlOrder() : false,
+                rule.getControlPurchaseInbound() != null ? rule.getControlPurchaseInbound() : false,
+                rule.getControlTransferInbound() != null ? rule.getControlTransferInbound() : false,
+                rule.getStatus(), rule.getCreatedBy(), rule.getCreatedAt(),
+                rule.getUpdatedBy(), rule.getUpdatedAt(),
+                items, categories, warehouses
+        );
+        return CodeDataResponse.ok(detail);
+    }
+
+    @PostMapping("/groups/{groupId}/item-rules")
+    @Transactional
+    public CodeDataResponse<IdPayload> createItemRule(@PathVariable Long groupId,
+                                                         @Valid @RequestBody WarehouseItemRuleCreateRequest req) {
+        ensureCanManageGroup(groupId);
+        String code = trim(req.ruleCode());
+        WarehouseItemRuleDO existing = warehouseItemRuleMapper.selectOne(
+                new LambdaQueryWrapper<WarehouseItemRuleDO>()
+                        .eq(WarehouseItemRuleDO::getRuleCode, code)
+                        .last("limit 1"));
+        if (existing != null) {
+            throw new BusinessException("规则编码已存在");
+        }
+
+        WarehouseItemRuleDO rule = new WarehouseItemRuleDO();
+        rule.setGroupId(groupId);
+        rule.setRuleCode(code);
+        rule.setRuleName(trim(req.ruleName()));
+        rule.setBusinessControl(req.businessControl() != null ? req.businessControl() : false);
+        rule.setControlOrder(req.controlOrder() != null ? req.controlOrder() : false);
+        rule.setControlPurchaseInbound(req.controlPurchaseInbound() != null ? req.controlPurchaseInbound() : false);
+        rule.setControlTransferInbound(req.controlTransferInbound() != null ? req.controlTransferInbound() : false);
+        rule.setStatus(STATUS_ENABLED);
+        rule.setCreatedBy(currentOperatorUsername());
+        warehouseItemRuleMapper.insert(rule);
+
+        java.util.List<RuleItemPayload> crItems = req.items() != null
+                ? req.items().stream()
+                        .map(i -> new RuleItemPayload(i.itemCode(), i.itemName(), i.specModel(), i.itemCategory()))
+                        .toList() : null;
+        java.util.List<RuleCategoryPayload> crCats = req.categories() != null
+                ? req.categories().stream()
+                        .map(c -> new RuleCategoryPayload(c.categoryCode(), c.categoryName(), c.parentCategory(), c.childCategory()))
+                        .toList() : null;
+        java.util.List<RuleWarehousePayload> crWhs = req.warehouses() != null
+                ? req.warehouses().stream()
+                        .map(w -> new RuleWarehousePayload(w.warehouseId()))
+                        .toList() : null;
+        saveRuleDetails(rule.getId(), crItems, crCats, crWhs);
+        return CodeDataResponse.ok(new IdPayload(rule.getId()));
+    }
+
+    @PutMapping("/item-rules/{id}")
+    @Transactional
+    public CodeDataResponse<Void> updateItemRule(@PathVariable Long id,
+                                                    @Valid @RequestBody WarehouseItemRuleUpdateRequest req) {
+        WarehouseItemRuleDO rule = requireItemRule(id);
+        ensureCanManageGroup(rule.getGroupId());
+        rule.setRuleName(trim(req.ruleName()));
+        if (req.businessControl() != null) rule.setBusinessControl(req.businessControl());
+        if (req.controlOrder() != null) rule.setControlOrder(req.controlOrder());
+        if (req.controlPurchaseInbound() != null) rule.setControlPurchaseInbound(req.controlPurchaseInbound());
+        if (req.controlTransferInbound() != null) rule.setControlTransferInbound(req.controlTransferInbound());
+        rule.setUpdatedBy(currentOperatorUsername());
+        warehouseItemRuleMapper.updateById(rule);
+
+        // Replace details
+        ruleItemMapper.delete(new LambdaQueryWrapper<WarehouseItemRuleItemDO>().eq(WarehouseItemRuleItemDO::getRuleId, id));
+        ruleCategoryMapper.delete(new LambdaQueryWrapper<WarehouseItemRuleCategoryDO>().eq(WarehouseItemRuleCategoryDO::getRuleId, id));
+        ruleWarehouseMapper.delete(new LambdaQueryWrapper<WarehouseItemRuleWarehouseDO>().eq(WarehouseItemRuleWarehouseDO::getRuleId, id));
+
+        java.util.List<RuleItemPayload> upItems = req.items() != null
+                ? req.items().stream()
+                        .map(i -> new RuleItemPayload(i.itemCode(), i.itemName(), i.specModel(), i.itemCategory()))
+                        .toList() : null;
+        java.util.List<RuleCategoryPayload> upCats = req.categories() != null
+                ? req.categories().stream()
+                        .map(c -> new RuleCategoryPayload(c.categoryCode(), c.categoryName(), c.parentCategory(), c.childCategory()))
+                        .toList() : null;
+        java.util.List<RuleWarehousePayload> upWhs = req.warehouses() != null
+                ? req.warehouses().stream()
+                        .map(w -> new RuleWarehousePayload(w.warehouseId()))
+                        .toList() : null;
+        saveRuleDetails(id, upItems, upCats, upWhs);
+        return CodeDataResponse.ok(null);
+    }
+
+    @DeleteMapping("/item-rules/{id}")
+    @Transactional
+    public CodeDataResponse<Void> deleteItemRule(@PathVariable Long id) {
+        WarehouseItemRuleDO rule = requireItemRule(id);
+        ensureCanManageGroup(rule.getGroupId());
+        // Cascade delete via DB constraint
+        ruleItemMapper.delete(new LambdaQueryWrapper<WarehouseItemRuleItemDO>().eq(WarehouseItemRuleItemDO::getRuleId, id));
+        ruleCategoryMapper.delete(new LambdaQueryWrapper<WarehouseItemRuleCategoryDO>().eq(WarehouseItemRuleCategoryDO::getRuleId, id));
+        ruleWarehouseMapper.delete(new LambdaQueryWrapper<WarehouseItemRuleWarehouseDO>().eq(WarehouseItemRuleWarehouseDO::getRuleId, id));
+        warehouseItemRuleMapper.deleteById(id);
+        return CodeDataResponse.ok(null);
+    }
+
+    // ==================== 规则内部记录（供 saveRuleDetails 使用） ====================
+
+    public record RuleItemPayload(
+            String itemCode, String itemName,
+            String specModel, String itemCategory) {}
+    public record RuleCategoryPayload(
+            String categoryCode, String categoryName,
+            String parentCategory, String childCategory) {}
+    public record RuleWarehousePayload(Long warehouseId) {}
+
+    private void saveRuleDetails(Long ruleId,
+                                   List<RuleItemPayload> items,
+                                   List<RuleCategoryPayload> cats,
+                                   List<RuleWarehousePayload> whs) {
+        int idx = 0;
+        if (items != null) {
+            for (var item : items) {
+                WarehouseItemRuleItemDO row = new WarehouseItemRuleItemDO();
+                row.setRuleId(ruleId);
+                row.setItemCode(item.itemCode());
+                row.setItemName(item.itemName());
+                row.setSpecModel(item.specModel());
+                row.setItemCategory(item.itemCategory());
+                row.setSortOrder(idx++);
+                ruleItemMapper.insert(row);
+            }
+        }
+        idx = 0;
+        if (cats != null) {
+            for (var cat : cats) {
+                WarehouseItemRuleCategoryDO row = new WarehouseItemRuleCategoryDO();
+                row.setRuleId(ruleId);
+                row.setCategoryCode(cat.categoryCode());
+                row.setCategoryName(cat.categoryName());
+                row.setParentCategory(cat.parentCategory());
+                row.setChildCategory(cat.childCategory());
+                row.setSortOrder(idx++);
+                ruleCategoryMapper.insert(row);
+            }
+        }
+        idx = 0;
+        if (whs != null) {
+            for (var wh : whs) {
+                WarehouseItemRuleWarehouseDO row = new WarehouseItemRuleWarehouseDO();
+                row.setRuleId(ruleId);
+                row.setWarehouseId(wh.warehouseId());
+                if (wh.warehouseId() != null) {
+                    WarehouseDO whDo = warehouseMapper.selectById(wh.warehouseId());
+                    row.setWarehouseName(whDo != null ? whDo.getWarehouseName() : null);
+                }
+                row.setSortOrder(idx++);
+                ruleWarehouseMapper.insert(row);
+            }
+        }
+    }
+
+    private WarehouseItemRuleDO requireItemRule(Long id) {
+        WarehouseItemRuleDO r = warehouseItemRuleMapper.selectById(id);
+        if (r == null) throw new BusinessException("规则不存在");
+        return r;
+    }
+
+    private String currentOperatorUsername() {
+        try { return AuthContextHolder.require().getRealName(); } catch (Exception e) { return "system"; }
+    }
+
+    // ==================== 规则 Record 定义 ====================
+
+    public record RuleListView(
+            Long id, String ruleCode, String ruleName,
+            boolean businessControl, String status,
+            String createdBy, LocalDateTime createdAt,
+            String updatedBy, LocalDateTime updatedAt) {}
+
+    public record RuleDetailView(
+            Long id, String ruleCode, String ruleName,
+            boolean businessControl, boolean controlOrder,
+            boolean controlPurchaseInbound, boolean controlTransferInbound,
+            String status, String createdBy, LocalDateTime createdAt,
+            String updatedBy, LocalDateTime updatedAt,
+            List<ItemDetailRow> items, List<CategoryDetailRow> categories,
+            List<WarehouseDetailRow> warehouses) {}
+
+    public record ItemDetailRow(
+            Long id, String itemCode, String itemName,
+            String specModel, String itemCategory) {}
+
+    public record CategoryDetailRow(
+            Long id, String categoryCode, String categoryName,
+            String parentCategory, String childCategory) {}
+
+    public record WarehouseDetailRow(
+            Long id, Long warehouseId, String warehouseName) {}
 
 }

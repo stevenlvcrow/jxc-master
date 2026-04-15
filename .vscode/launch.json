@@ -7,12 +7,6 @@
         
         {
             "type": "java",
-            "name": "Current File",
-            "request": "launch",
-            "mainClass": "${file}"
-        },
-        {
-            "type": "java",
             "name": "JxcApplication",
             "request": "launch",
             "mainClass": "com.boboboom.jxc.JxcApplication",
