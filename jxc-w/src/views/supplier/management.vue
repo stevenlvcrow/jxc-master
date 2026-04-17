@@ -43,13 +43,11 @@ const supplierCategoryTree = ref<SupplierCategoryTreeNode[]>([]);
 const categoryDialogVisible = ref(false);
 const categoryFormRef = ref<FormInstance>();
 const categoryForm = reactive({
-  categoryCode: '',
   categoryName: '',
   parentCategory: '供应商类别',
 });
 
 const categoryFormRules: FormRules = {
-  categoryCode: [{ required: true, message: '请输入类别编码', trigger: 'blur' }],
   categoryName: [{ required: true, message: '请输入类别名称', trigger: 'blur' }],
   parentCategory: [{ required: true, message: '请选择上级类别', trigger: 'change' }],
 };
@@ -181,7 +179,6 @@ const handleCategorySelect = async (id: string) => {
 };
 
 const openAddCategoryDialog = () => {
-  categoryForm.categoryCode = '';
   categoryForm.categoryName = '';
   categoryForm.parentCategory = selectedCategoryId.value === 'all' ? '供应商类别' : selectedCategoryLabel.value;
   categoryDialogVisible.value = true;
@@ -201,7 +198,7 @@ const handleAddCategorySubmit = async () => {
     return;
   }
   await createSupplierCategoryApi({
-    categoryCode: categoryForm.categoryCode.trim(),
+    categoryCode: undefined,
     categoryName: categoryForm.categoryName.trim(),
     parentCategory: categoryForm.parentCategory,
   }, resolveSupplierOrgId());
@@ -284,16 +281,13 @@ onMounted(async () => {
     destroy-on-close
     @closed="closeAddCategoryDialog"
   >
-    <el-form
+      <el-form
       ref="categoryFormRef"
       class="standard-dialog-form"
       :model="categoryForm"
       :rules="categoryFormRules"
       label-width="90px"
     >
-      <el-form-item label="类别编码" prop="categoryCode">
-        <el-input v-model="categoryForm.categoryCode" placeholder="请输入类别编码" />
-      </el-form-item>
       <el-form-item label="类别名称" prop="categoryName">
         <el-input v-model="categoryForm.categoryName" placeholder="请输入类别名称" />
       </el-form-item>

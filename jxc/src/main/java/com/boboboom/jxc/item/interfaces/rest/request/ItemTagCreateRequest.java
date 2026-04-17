@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record ItemTagCreateRequest(
-        @NotBlank(message = "标签编码不能为空")
         @Size(max = 64, message = "标签编码长度不能超过64")
         String tagCode,
 

@@ -8,7 +8,6 @@ public class StoreUpsertRequest {
     @NotNull
     private Long groupId;
 
-    @NotBlank
     private String storeCode;
 
     @NotBlank

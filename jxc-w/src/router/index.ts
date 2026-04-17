@@ -105,9 +105,9 @@ const routes: RouteRecordRaw[] = [
         name: 'ItemRuleCreate',
         component: () => import('@/views/system/warehouse-item-rule-create.vue'),
         meta: {
-          title: '仓库物品规则',
+          title: '仓库物品规则新增',
           activeMenu: '/archive/7/2',
-          breadcrumbs: ['档案管理', '仓库', '仓库物品规则', '新增规则'],
+          breadcrumbs: ['档案管理', '仓库', '仓库物品规则', '仓库物品规则新增'],
           openKeys: ['m8', 'm8-m7'],
         },
       },

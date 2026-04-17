@@ -55,7 +55,6 @@ export type RuleWarehouseDetail = {
 };
 
 export type RuleCreatePayload = {
-  ruleCode: string;
   ruleName: string;
   businessControl: boolean;
   controlOrder: boolean;

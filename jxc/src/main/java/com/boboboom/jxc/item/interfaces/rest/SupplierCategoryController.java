@@ -1,14 +1,10 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierCategoryDO;
 import com.boboboom.jxc.item.infrastructure.persistence.mapper.SupplierCategoryMapper;
@@ -36,23 +32,18 @@ import java.util.Objects;
 public class SupplierCategoryController {
 
     private static final String ROOT_CATEGORY = "供应商类别";
-    private static final String SCOPE_PLATFORM = "PLATFORM";
-    private static final String SCOPE_GROUP = "GROUP";
-    private static final String SCOPE_STORE = "STORE";
+    private static final String CATEGORY_CODE_PREFIX = "GYLB";
 
     private final SupplierCategoryMapper supplierCategoryMapper;
-    private final RoleMapper roleMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
-    private final StoreMapper storeMapper;
+    private final OrgScopeService orgScopeService;
+    private final BusinessCodeGenerator businessCodeGenerator;
 
     public SupplierCategoryController(SupplierCategoryMapper supplierCategoryMapper,
-                                      RoleMapper roleMapper,
-                                      UserRoleRelMapper userRoleRelMapper,
-                                      StoreMapper storeMapper) {
+                                      OrgScopeService orgScopeService,
+                                      BusinessCodeGenerator businessCodeGenerator) {
         this.supplierCategoryMapper = supplierCategoryMapper;
-        this.roleMapper = roleMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
-        this.storeMapper = storeMapper;
+        this.orgScopeService = orgScopeService;
+        this.businessCodeGenerator = businessCodeGenerator;
     }
 
     @GetMapping("/tree")
@@ -88,7 +79,7 @@ public class SupplierCategoryController {
     public CodeDataResponse<IdPayload> create(@RequestParam(required = false) String orgId,
                                               @Valid @RequestBody SupplierCategoryCreateRequest request) {
         CategoryScope scope = resolveScope(orgId);
-        String categoryCode = trim(request.categoryCode());
+        String categoryCode = generateCategoryCode(scope);
         String categoryName = trim(request.categoryName());
         String parentCategory = normalizeParent(trim(request.parentCategory()));
 
@@ -104,6 +95,16 @@ public class SupplierCategoryController {
         row.setParentCategory(parentCategory);
         supplierCategoryMapper.insert(row);
         return CodeDataResponse.ok(new IdPayload(row.getId()));
+    }
+
+    private String generateCategoryCode(CategoryScope scope) {
+        List<String> existingCodes = supplierCategoryMapper.selectList(
+                        scopeQuery(scope).select(SupplierCategoryDO::getCategoryCode))
+                .stream()
+                .map(SupplierCategoryDO::getCategoryCode)
+                .filter(StringUtils::hasText)
+                .toList();
+        return businessCodeGenerator.nextCode(CATEGORY_CODE_PREFIX, existingCodes);
     }
 
     private void ensureCodeUnique(CategoryScope scope, String code) {
@@ -165,99 +166,8 @@ public class SupplierCategoryController {
     }
 
     private CategoryScope resolveScope(String orgId) {
-        Long userId = currentUserId();
-        Scope requested = parseScope(orgId);
-        if (isPlatformAdmin(userId)) {
-            return new CategoryScope(requested.scopeType(), requested.scopeId());
-        }
-        if (SCOPE_PLATFORM.equals(requested.scopeType())) {
-            throw new BusinessException("请先选择有权限的机构");
-        }
-        if (SCOPE_GROUP.equals(requested.scopeType())) {
-            if (!hasScope(userId, SCOPE_GROUP, requested.scopeId())) {
-                throw new BusinessException("当前账号无该集团权限");
-            }
-            return new CategoryScope(SCOPE_GROUP, requested.scopeId());
-        }
-        if (SCOPE_STORE.equals(requested.scopeType())) {
-            if (hasScope(userId, SCOPE_STORE, requested.scopeId())) {
-                return new CategoryScope(SCOPE_STORE, requested.scopeId());
-            }
-            Long groupId = findGroupIdByStoreId(requested.scopeId());
-            if (groupId != null && hasScope(userId, SCOPE_GROUP, groupId)) {
-                return new CategoryScope(SCOPE_STORE, requested.scopeId());
-            }
-            throw new BusinessException("当前账号无该门店权限");
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Scope parseScope(String orgId) {
-        if (orgId == null || orgId.isBlank()) {
-            return new Scope(SCOPE_PLATFORM, 0L);
-        }
-        if (orgId.startsWith("group-")) {
-            return new Scope(SCOPE_GROUP, parseNumericId(orgId.substring("group-".length())));
-        }
-        if (orgId.startsWith("store-")) {
-            return new Scope(SCOPE_STORE, parseNumericId(orgId.substring("store-".length())));
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Long parseNumericId(String value) {
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("机构参数非法");
-        }
-    }
-
-    private Long currentUserId() {
-        if (AuthContextHolder.get() == null || AuthContextHolder.get().getUserId() == null) {
-            throw new BusinessException("登录已失效，请重新登录");
-        }
-        return AuthContextHolder.get().getUserId();
-    }
-
-    private boolean isPlatformAdmin(Long userId) {
-        RoleDO role = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getRoleCode, "PLATFORM_SUPER_ADMIN")
-                .last("limit 1"));
-        if (role == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getRoleId, role.getId())
-                .eq(UserRoleRelDO::getScopeType, SCOPE_PLATFORM)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private boolean hasScope(Long userId, String scopeType, Long scopeId) {
-        if (scopeId == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getScopeType, scopeType)
-                .eq(UserRoleRelDO::getScopeId, scopeId)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private Long findGroupIdByStoreId(Long storeId) {
-        if (storeId == null) {
-            return null;
-        }
-        StoreDO store = storeMapper.selectById(storeId);
-        if (store == null) {
-            return null;
-        }
-        return store.getGroupId();
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
+        return new CategoryScope(scope.scopeType(), scope.scopeId());
     }
 
     private String trim(String value) {
@@ -275,9 +185,6 @@ public class SupplierCategoryController {
     }
 
     public record IdPayload(Long id) {
-    }
-
-    private record Scope(String scopeType, Long scopeId) {
     }
 
     private record CategoryScope(String scopeType, Long scopeId) {

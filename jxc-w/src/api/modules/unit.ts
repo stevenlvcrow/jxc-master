@@ -20,7 +20,7 @@ export type UnitQuery = {
 };
 
 export type UnitUpsertPayload = {
-  code: string;
+  code?: string;
   name: string;
   type: UnitType;
   status?: UnitStatus;

@@ -9,7 +9,6 @@ import java.util.List;
 public record ItemCreateRequest(
         @NotBlank(message = "物品名称不能为空")
         String name,
-        @NotBlank(message = "物品编码不能为空")
         String code,
         @NotBlank(message = "物品类别不能为空")
         String category,

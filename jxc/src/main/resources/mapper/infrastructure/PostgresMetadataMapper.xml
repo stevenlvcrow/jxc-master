@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.infrastructure.persistence.mapper.PostgresMetadataMapper">
+
+    <update id="executeSql">
+        ${sql}
+    </update>
+
+    <select id="tableExists" resultType="java.lang.Boolean">
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE lower(table_schema) = lower(#{schemaName})
+              AND lower(table_name) = lower(#{tableName})
+              AND table_type = 'BASE TABLE'
+        )
+    </select>
+
+    <select id="currentSchema" resultType="java.lang.String">
+        select current_schema()
+    </select>
+</mapper>

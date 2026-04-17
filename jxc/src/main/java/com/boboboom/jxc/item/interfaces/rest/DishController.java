@@ -3,12 +3,7 @@ package com.boboboom.jxc.item.interfaces.rest;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.DishCategoryDO;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.DishProfileDO;
@@ -41,26 +36,17 @@ public class DishController {
     private static final String ROOT_CATEGORY = "菜品分类";
     private static final String ROOT_CATEGORY_ID = "all";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
-    private static final String SCOPE_PLATFORM = "PLATFORM";
-    private static final String SCOPE_GROUP = "GROUP";
-    private static final String SCOPE_STORE = "STORE";
 
     private final DishProfileMapper dishProfileMapper;
     private final DishCategoryMapper dishCategoryMapper;
-    private final RoleMapper roleMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
-    private final StoreMapper storeMapper;
+    private final OrgScopeService orgScopeService;
 
     public DishController(DishProfileMapper dishProfileMapper,
                           DishCategoryMapper dishCategoryMapper,
-                          RoleMapper roleMapper,
-                          UserRoleRelMapper userRoleRelMapper,
-                          StoreMapper storeMapper) {
+                          OrgScopeService orgScopeService) {
         this.dishProfileMapper = dishProfileMapper;
         this.dishCategoryMapper = dishCategoryMapper;
-        this.roleMapper = roleMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
-        this.storeMapper = storeMapper;
+        this.orgScopeService = orgScopeService;
     }
 
     @GetMapping
@@ -271,102 +257,8 @@ public class DishController {
     }
 
     private DishScope resolveDishScope(String orgId) {
-        Scope requested = parseScope(orgId);
-        Long userId = currentUserIdNullable();
-        if (userId == null) {
-            return new DishScope(requested.scopeType(), requested.scopeId());
-        }
-        if (isPlatformAdmin(userId)) {
-            return new DishScope(requested.scopeType(), requested.scopeId());
-        }
-        if (SCOPE_PLATFORM.equals(requested.scopeType())) {
-            throw new BusinessException("请先选择有权限的机构");
-        }
-        if (SCOPE_GROUP.equals(requested.scopeType())) {
-            if (!hasScope(userId, SCOPE_GROUP, requested.scopeId())) {
-                throw new BusinessException("当前账号无该集团权限");
-            }
-            return new DishScope(SCOPE_GROUP, requested.scopeId());
-        }
-        if (SCOPE_STORE.equals(requested.scopeType())) {
-            if (hasScope(userId, SCOPE_STORE, requested.scopeId())) {
-                return new DishScope(SCOPE_STORE, requested.scopeId());
-            }
-            Long groupId = findGroupIdByStoreId(requested.scopeId());
-            if (groupId != null && hasScope(userId, SCOPE_GROUP, groupId)) {
-                return new DishScope(SCOPE_STORE, requested.scopeId());
-            }
-            throw new BusinessException("当前账号无该门店权限");
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Scope parseScope(String orgId) {
-        if (orgId == null || orgId.isBlank()) {
-            return new Scope(SCOPE_PLATFORM, 0L);
-        }
-        if (orgId.startsWith("group-")) {
-            return new Scope(SCOPE_GROUP, parseNumericId(orgId.substring("group-".length())));
-        }
-        if (orgId.startsWith("store-")) {
-            return new Scope(SCOPE_STORE, parseNumericId(orgId.substring("store-".length())));
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Long parseNumericId(String value) {
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("机构参数非法");
-        }
-    }
-
-    private Long currentUserIdNullable() {
-        if (AuthContextHolder.get() == null || AuthContextHolder.get().getUserId() == null) {
-            return null;
-        }
-        return AuthContextHolder.get().getUserId();
-    }
-
-    private boolean isPlatformAdmin(Long userId) {
-        RoleDO role = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getRoleCode, "PLATFORM_SUPER_ADMIN")
-                .last("limit 1"));
-        if (role == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getRoleId, role.getId())
-                .eq(UserRoleRelDO::getScopeType, SCOPE_PLATFORM)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private boolean hasScope(Long userId, String scopeType, Long scopeId) {
-        if (scopeId == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getScopeType, scopeType)
-                .eq(UserRoleRelDO::getScopeId, scopeId)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private Long findGroupIdByStoreId(Long storeId) {
-        if (storeId == null) {
-            return null;
-        }
-        StoreDO store = storeMapper.selectById(storeId);
-        if (store == null) {
-            return null;
-        }
-        return store.getGroupId();
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScopeAllowAnonymous(AuthContextHolder.userIdOr(null), orgId);
+        return new DishScope(scope.scopeType(), scope.scopeId());
     }
 
     public record PageData<T>(List<T> list,
@@ -393,9 +285,6 @@ public class DishController {
     public record TreeNode(String id,
                            String label,
                            List<TreeNode> children) {
-    }
-
-    private record Scope(String scopeType, Long scopeId) {
     }
 
     private record DishScope(String scopeType, Long scopeId) {

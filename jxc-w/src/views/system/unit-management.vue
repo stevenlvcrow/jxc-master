@@ -45,11 +45,16 @@ const createForm = reactive({
   status: true,
 });
 
-const createRules = {
-  code: [{ required: true, message: '请输入单位编码', trigger: 'blur' }],
-  name: [{ required: true, message: '请输入单位名称', trigger: 'blur' }],
-  type: [{ required: true, message: '请选择单位类型', trigger: 'change' }],
-};
+const createRules = computed(() => {
+  const rules: Record<string, Array<{ required: boolean; message: string; trigger: string }>> = {
+    name: [{ required: true, message: '请输入单位名称', trigger: 'blur' }],
+    type: [{ required: true, message: '请选择单位类型', trigger: 'change' }],
+  };
+  if (dialogMode.value === 'edit') {
+    rules.code = [{ required: true, message: '请输入单位编码', trigger: 'blur' }];
+  }
+  return rules;
+});
 
 const createFormRef = ref();
 
@@ -136,7 +141,7 @@ const submitCreate = async () => {
   await createFormRef.value?.validate();
   saving.value = true;
   const payload = {
-    code: createForm.code.trim(),
+    code: dialogMode.value === 'edit' ? createForm.code.trim() : undefined,
     name: createForm.name.trim(),
     type: createForm.type,
     status: createForm.status ? 'ENABLED' : 'DISABLED',
@@ -256,7 +261,7 @@ onMounted(() => {
       label-width="90px"
       class="standard-dialog-form"
     >
-      <el-form-item label="单位编码" prop="code">
+      <el-form-item v-if="dialogMode === 'edit'" label="单位编码" prop="code">
         <el-input v-model="createForm.code" clearable />
       </el-form-item>
       <el-form-item label="单位名称" prop="name">

@@ -32,8 +32,9 @@ const pageSize = ref(10);
 
 const resolveGroupId = (): number | null => {
   const orgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!orgId.startsWith('group-')) return null;
-  const id = Number(orgId.slice('group-'.length));
+  if (!orgId) return null;
+  const raw = orgId.includes('-') ? orgId.slice(orgId.lastIndexOf('-') + 1) : orgId;
+  const id = Number(raw);
   return Number.isNaN(id) ? null : id;
 };
 

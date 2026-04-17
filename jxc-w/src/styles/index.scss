@@ -325,6 +325,31 @@ a {
   align-items: center;
   min-width: 0;
   user-select: none;
+  position: relative;
+  cursor: grab;
+}
+
+.workspace-tab-label.is-dragging {
+  opacity: 0.55;
+}
+
+.workspace-tab-label.is-drag-over-before::before,
+.workspace-tab-label.is-drag-over-after::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: #1f6feb;
+}
+
+.workspace-tab-label.is-drag-over-before::before {
+  left: -6px;
+}
+
+.workspace-tab-label.is-drag-over-after::after {
+  right: -6px;
 }
 
 .tab-context-menu {

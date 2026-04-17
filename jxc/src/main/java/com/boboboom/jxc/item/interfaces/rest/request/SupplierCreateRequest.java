@@ -11,7 +11,6 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record SupplierCreateRequest(
-        @NotBlank(message = "供货商编码不能为空")
         @Size(max = 64, message = "供货商编码长度不能超过64")
         String supplierCode,
 
@@ -168,4 +167,3 @@ public record SupplierCreateRequest(
     ) {
     }
 }
-

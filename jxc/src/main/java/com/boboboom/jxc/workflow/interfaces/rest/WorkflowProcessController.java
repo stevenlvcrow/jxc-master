@@ -3,14 +3,9 @@ package com.boboboom.jxc.workflow.interfaces.rest;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.GroupMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessStoreBindingDO;
@@ -53,29 +48,22 @@ import java.util.stream.Collectors;
 public class WorkflowProcessController {
     private static final Logger log = LoggerFactory.getLogger(WorkflowProcessController.class);
 
-    private static final String SCOPE_PLATFORM = "PLATFORM";
     private static final String SCOPE_GROUP = "GROUP";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
     private final WorkflowProcessRegistryMapper processRegistryMapper;
     private final WorkflowProcessStoreBindingMapper processStoreBindingMapper;
-    private final GroupMapper groupMapper;
     private final StoreMapper storeMapper;
-    private final RoleMapper roleMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
+    private final OrgScopeService orgScopeService;
 
     public WorkflowProcessController(WorkflowProcessRegistryMapper processRegistryMapper,
                                      WorkflowProcessStoreBindingMapper processStoreBindingMapper,
-                                     GroupMapper groupMapper,
                                      StoreMapper storeMapper,
-                                     RoleMapper roleMapper,
-                                     UserRoleRelMapper userRoleRelMapper) {
+                                     OrgScopeService orgScopeService) {
         this.processRegistryMapper = processRegistryMapper;
         this.processStoreBindingMapper = processStoreBindingMapper;
-        this.groupMapper = groupMapper;
         this.storeMapper = storeMapper;
-        this.roleMapper = roleMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
+        this.orgScopeService = orgScopeService;
     }
 
     @GetMapping
@@ -148,7 +136,7 @@ public class WorkflowProcessController {
     public CodeDataResponse<IdPayload> create(@RequestParam(required = false) String orgId,
                                               @Valid @RequestBody WorkflowProcessUpsertRequest request) {
         Long groupId = resolveGroupScope(orgId);
-        Long operatorId = currentUserId();
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         String processCode = normalizeCode(request.processCode(), "流程ID不能为空");
         String businessName = normalizeName(request.businessName(), "业务名称不能为空");
         ensureProcessCodeUnique(groupId, processCode, null);
@@ -171,7 +159,7 @@ public class WorkflowProcessController {
                                          @RequestParam(required = false) String orgId,
                                          @Valid @RequestBody WorkflowProcessUpsertRequest request) {
         Long groupId = resolveGroupScope(orgId);
-        Long operatorId = currentUserId();
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         WorkflowProcessRegistryDO row = requireProcess(id, groupId);
         String processCode = normalizeCode(request.processCode(), "流程ID不能为空");
         String businessName = normalizeName(request.businessName(), "业务名称不能为空");
@@ -191,7 +179,7 @@ public class WorkflowProcessController {
                                                @RequestParam(required = false) String orgId,
                                                @Valid @RequestBody WorkflowTemplateBindRequest request) {
         Long groupId = resolveGroupScope(orgId);
-        Long operatorId = currentUserId();
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         WorkflowProcessRegistryDO row = requireProcess(id, groupId);
         row.setTemplateId(normalizeCode(request.templateId(), "模板ID不能为空"));
         row.setUpdatedBy(operatorId);
@@ -205,7 +193,7 @@ public class WorkflowProcessController {
                                              @RequestParam(required = false) String orgId,
                                              @Valid @RequestBody WorkflowProcessStoreBindRequest request) {
         Long groupId = resolveGroupScope(orgId);
-        Long operatorId = currentUserId();
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         WorkflowProcessRegistryDO row = requireProcess(id, groupId);
         List<Long> storeIds = request.storeIds() == null ? List.of() : request.storeIds().stream()
                 .filter(item -> item != null && item > 0)
@@ -303,60 +291,7 @@ public class WorkflowProcessController {
     }
 
     private Long resolveGroupScope(String orgId) {
-        String value = requiredTrim(orgId, "请先选择集团机构");
-        if (!value.startsWith("group-")) {
-            throw new BusinessException("流程管理仅支持集团机构");
-        }
-        Long groupId = parseNumericId(value.substring("group-".length()));
-        GroupDO group = groupMapper.selectById(groupId);
-        if (group == null) {
-            throw new BusinessException("集团不存在");
-        }
-        Long userId = currentUserId();
-        if (isPlatformAdmin(userId) || hasScope(userId, SCOPE_GROUP, groupId)) {
-            return groupId;
-        }
-        throw new BusinessException("当前账号无该集团权限");
-    }
-
-    private Long currentUserId() {
-        if (AuthContextHolder.get() == null || AuthContextHolder.get().getUserId() == null) {
-            throw new BusinessException("登录已失效，请重新登录");
-        }
-        return AuthContextHolder.get().getUserId();
-    }
-
-    private boolean isPlatformAdmin(Long userId) {
-        RoleDO role = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getRoleCode, "PLATFORM_SUPER_ADMIN")
-                .last("limit 1"));
-        if (role == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getRoleId, role.getId())
-                .eq(UserRoleRelDO::getScopeType, SCOPE_PLATFORM)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private boolean hasScope(Long userId, String scopeType, Long scopeId) {
-        return userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getScopeType, scopeType)
-                .eq(UserRoleRelDO::getScopeId, scopeId)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1")) != null;
-    }
-
-    private Long parseNumericId(String value) {
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("机构参数非法");
-        }
+        return orgScopeService.resolveGroupWorkflowScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
     }
 
     private String normalizeCode(String value, String message) {

@@ -37,8 +37,41 @@ export const useAppStore = defineStore('app', () => {
     visitedTabs.value = visitedTabs.value.filter((item) => item.path === path || !item.closable);
   };
 
+  const removeRightVisitedTabs = (path: string) => {
+    const targetIndex = visitedTabs.value.findIndex((item) => item.path === path);
+    if (targetIndex < 0) {
+      return;
+    }
+    visitedTabs.value = visitedTabs.value.filter((item, index) => index <= targetIndex || !item.closable);
+  };
+
   const removeAllClosableTabs = () => {
     visitedTabs.value = visitedTabs.value.filter((item) => !item.closable);
+  };
+
+  const moveVisitedTab = (sourcePath: string, targetPath: string, position: 'before' | 'after') => {
+    if (!sourcePath || !targetPath || sourcePath === targetPath) {
+      return;
+    }
+
+    const sourceIndex = visitedTabs.value.findIndex((item) => item.path === sourcePath);
+    const targetIndex = visitedTabs.value.findIndex((item) => item.path === targetPath);
+    if (sourceIndex < 0 || targetIndex < 0) {
+      return;
+    }
+
+    const [sourceTab] = visitedTabs.value.splice(sourceIndex, 1);
+    if (!sourceTab) {
+      return;
+    }
+
+    let adjustedTargetIndex = targetIndex;
+    if (sourceIndex < targetIndex) {
+      adjustedTargetIndex -= 1;
+    }
+
+    const insertIndex = position === 'before' ? adjustedTargetIndex : adjustedTargetIndex + 1;
+    visitedTabs.value.splice(insertIndex, 0, sourceTab);
   };
 
   const resetVisitedTabs = () => {
@@ -57,7 +90,9 @@ export const useAppStore = defineStore('app', () => {
     addVisitedTab,
     removeVisitedTab,
     removeOtherVisitedTabs,
+    removeRightVisitedTabs,
     removeAllClosableTabs,
+    moveVisitedTab,
     resetVisitedTabs,
     useActiveMenu,
   };

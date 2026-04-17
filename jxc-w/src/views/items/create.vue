@@ -20,7 +20,7 @@ const sessionStore = useSessionStore();
 
 const form = reactive({
   name: '',
-  code: 'MDWP0711',
+  code: '',
   category: '',
   spec: '',
   status: '启用',
@@ -587,6 +587,7 @@ const goBack = () => {
 
 const buildCreatePayload = (): ItemCreatePayload => ({
   ...form,
+  code: undefined,
   unitSettingRows: unitSettingRows.value.map((row) => ({ ...row })),
   supplierRelationRows: supplierRelationRows.value.map((row) => ({ ...row })),
   defaultSupplierRowKey: defaultSupplierRowKey.value,
@@ -734,9 +735,6 @@ const loadDetailIfEditMode = async () => {
           <div class="item-form-grid">
             <el-form-item label="物品名称">
               <el-input v-model="form.name" placeholder="请输入物品名称" />
-            </el-form-item>
-            <el-form-item label="物品编码">
-              <el-input v-model="form.code" placeholder="请输入物品编码" />
             </el-form-item>
             <el-form-item label="物品类别">
               <el-select v-model="form.category" placeholder="请选择物品类别">

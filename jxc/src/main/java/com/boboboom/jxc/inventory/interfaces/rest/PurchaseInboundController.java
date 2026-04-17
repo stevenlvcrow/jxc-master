@@ -3,12 +3,7 @@ package com.boboboom.jxc.inventory.interfaces.rest;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryTransactionDO;
@@ -54,10 +49,6 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/inventory")
 public class PurchaseInboundController {
 
-    private static final String SCOPE_PLATFORM = "PLATFORM";
-    private static final String SCOPE_GROUP = "GROUP";
-    private static final String SCOPE_STORE = "STORE";
-
     private static final String STATUS_DRAFT = "草稿";
     private static final String STATUS_SUBMITTED = "已提交";
     private static final String STATUS_APPROVED = "已审核";
@@ -67,24 +58,18 @@ public class PurchaseInboundController {
     private final PurchaseInboundLineMapper purchaseInboundLineMapper;
     private final InventoryBalanceMapper inventoryBalanceMapper;
     private final InventoryTransactionMapper inventoryTransactionMapper;
-    private final RoleMapper roleMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
-    private final StoreMapper storeMapper;
+    private final OrgScopeService orgScopeService;
 
     public PurchaseInboundController(PurchaseInboundMapper purchaseInboundMapper,
                                      PurchaseInboundLineMapper purchaseInboundLineMapper,
                                      InventoryBalanceMapper inventoryBalanceMapper,
                                      InventoryTransactionMapper inventoryTransactionMapper,
-                                     RoleMapper roleMapper,
-                                     UserRoleRelMapper userRoleRelMapper,
-                                     StoreMapper storeMapper) {
+                                     OrgScopeService orgScopeService) {
         this.purchaseInboundMapper = purchaseInboundMapper;
         this.purchaseInboundLineMapper = purchaseInboundLineMapper;
         this.inventoryBalanceMapper = inventoryBalanceMapper;
         this.inventoryTransactionMapper = inventoryTransactionMapper;
-        this.roleMapper = roleMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
-        this.storeMapper = storeMapper;
+        this.orgScopeService = orgScopeService;
     }
 
     @GetMapping("/purchase-inbound")
@@ -146,8 +131,8 @@ public class PurchaseInboundController {
                 .stream()
                 .collect(Collectors.groupingBy(PurchaseInboundLineDO::getInboundId, LinkedHashMap::new, Collectors.toList()));
 
-        Long currentUserId = currentUserId();
-        String currentUserName = currentUserName();
+        Long currentUserId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        String currentUserName = AuthContextHolder.userNameOr("未知用户");
         DecimalFormat amountFormat = new DecimalFormat("#,##0.00");
 
         List<PurchaseInboundRow> filtered = headers.stream()
@@ -217,7 +202,7 @@ public class PurchaseInboundController {
     public CodeDataResponse<IdPayload> createPurchaseInbound(@RequestParam(required = false) String orgId,
                                                              @Valid @RequestBody PurchaseInboundCreateRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
-        Long operatorId = currentUserId();
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
 
         PurchaseInboundDO header = new PurchaseInboundDO();
         header.setScopeType(scope.scopeType());
@@ -250,7 +235,7 @@ public class PurchaseInboundController {
     public CodeDataResponse<Void> batchApprove(@RequestParam(required = false) String orgId,
                                                @Valid @RequestBody PurchaseInboundBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
-        Long operatorId = currentUserId();
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         List<PurchaseInboundDO> headers = requireHeaders(scope, request.ids());
         Map<Long, List<PurchaseInboundLineDO>> lineMap = loadLineMap(request.ids());
 
@@ -275,7 +260,7 @@ public class PurchaseInboundController {
     public CodeDataResponse<Void> batchUnapprove(@RequestParam(required = false) String orgId,
                                                  @Valid @RequestBody PurchaseInboundBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
-        Long operatorId = currentUserId();
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         List<PurchaseInboundDO> headers = requireHeaders(scope, request.ids());
         Map<Long, List<PurchaseInboundLineDO>> lineMap = loadLineMap(request.ids());
 
@@ -461,106 +446,8 @@ public class PurchaseInboundController {
     }
 
     private InventoryScope resolveInventoryScope(String orgId) {
-        Long userId = currentUserId();
-        Scope requested = parseScope(orgId);
-        if (isPlatformAdmin(userId)) {
-            return new InventoryScope(requested.scopeType(), requested.scopeId());
-        }
-        if (SCOPE_PLATFORM.equals(requested.scopeType())) {
-            throw new BusinessException("请先选择有权限的机构");
-        }
-        if (SCOPE_GROUP.equals(requested.scopeType())) {
-            if (!hasScope(userId, SCOPE_GROUP, requested.scopeId())) {
-                throw new BusinessException("当前账号无该集团权限");
-            }
-            return new InventoryScope(SCOPE_GROUP, requested.scopeId());
-        }
-        if (SCOPE_STORE.equals(requested.scopeType())) {
-            if (hasScope(userId, SCOPE_STORE, requested.scopeId())) {
-                return new InventoryScope(SCOPE_STORE, requested.scopeId());
-            }
-            Long groupId = findGroupIdByStoreId(requested.scopeId());
-            if (groupId != null && hasScope(userId, SCOPE_GROUP, groupId)) {
-                return new InventoryScope(SCOPE_STORE, requested.scopeId());
-            }
-            throw new BusinessException("当前账号无该门店权限");
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Scope parseScope(String orgId) {
-        if (!StringUtils.hasText(orgId)) {
-            return new Scope(SCOPE_PLATFORM, 0L);
-        }
-        if (orgId.startsWith("group-")) {
-            return new Scope(SCOPE_GROUP, parseNumericId(orgId.substring("group-".length())));
-        }
-        if (orgId.startsWith("store-")) {
-            return new Scope(SCOPE_STORE, parseNumericId(orgId.substring("store-".length())));
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Long parseNumericId(String value) {
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("机构参数非法");
-        }
-    }
-
-    private Long currentUserId() {
-        if (AuthContextHolder.get() == null || AuthContextHolder.get().getUserId() == null) {
-            throw new BusinessException("登录已失效，请重新登录");
-        }
-        return AuthContextHolder.get().getUserId();
-    }
-
-    private String currentUserName() {
-        if (AuthContextHolder.get() == null || !StringUtils.hasText(AuthContextHolder.get().getRealName())) {
-            return "未知用户";
-        }
-        return AuthContextHolder.get().getRealName();
-    }
-
-    private boolean isPlatformAdmin(Long userId) {
-        RoleDO role = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getRoleCode, "PLATFORM_SUPER_ADMIN")
-                .last("limit 1"));
-        if (role == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getRoleId, role.getId())
-                .eq(UserRoleRelDO::getScopeType, SCOPE_PLATFORM)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private boolean hasScope(Long userId, String scopeType, Long scopeId) {
-        if (scopeId == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getScopeType, scopeType)
-                .eq(UserRoleRelDO::getScopeId, scopeId)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private Long findGroupIdByStoreId(Long storeId) {
-        if (storeId == null) {
-            return null;
-        }
-        StoreDO store = storeMapper.selectById(storeId);
-        if (store == null) {
-            return null;
-        }
-        return store.getGroupId();
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
+        return new InventoryScope(scope.scopeType(), scope.scopeId());
     }
 
     private LocalDate parseRequiredDate(String value, String message) {
@@ -657,9 +544,6 @@ public class PurchaseInboundController {
     }
 
     public record PageData<T>(List<T> list, long total, int pageNo, int pageSize) {
-    }
-
-    private record Scope(String scopeType, Long scopeId) {
     }
 
     private record InventoryScope(String scopeType, Long scopeId) {

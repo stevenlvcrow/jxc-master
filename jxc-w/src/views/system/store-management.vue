@@ -28,7 +28,6 @@ const query = reactive({
 });
 
 const createForm = reactive({
-  storeCode: '',
   storeName: '',
   status: 'ENABLED' as 'ENABLED' | 'DISABLED',
   contactName: '',
@@ -55,7 +54,6 @@ const pagedStores = computed(() => {
 });
 
 const resetCreateForm = () => {
-  createForm.storeCode = '';
   createForm.storeName = '';
   createForm.status = 'ENABLED';
   createForm.contactName = '';
@@ -131,14 +129,14 @@ const handleCreateStore = async () => {
     ElMessage.warning('请先选择集团');
     return;
   }
-  if (!createForm.storeCode.trim() || !createForm.storeName.trim()) {
-    ElMessage.warning('请填写门店编码和门店名称');
+  if (!createForm.storeName.trim()) {
+    ElMessage.warning('请填写门店名称');
     return;
   }
   creating.value = true;
   try {
     await createGroupStoreApi(selectedGroupId.value, {
-      storeCode: createForm.storeCode.trim(),
+      storeCode: undefined,
       storeName: createForm.storeName.trim(),
       status: createForm.status,
       contactName: createForm.contactName.trim() || undefined,
@@ -226,9 +224,6 @@ onMounted(() => {
       @closed="resetCreateForm"
     >
       <el-form label-width="100px" class="standard-dialog-form">
-        <el-form-item label="门店编码" required>
-          <el-input v-model="createForm.storeCode" maxlength="64" />
-        </el-form-item>
         <el-form-item label="门店名称" required>
           <el-input v-model="createForm.storeName" maxlength="128" />
         </el-form-item>

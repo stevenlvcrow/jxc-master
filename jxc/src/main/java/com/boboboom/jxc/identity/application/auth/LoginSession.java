@@ -5,7 +5,10 @@ import java.time.LocalDateTime;
 
 public class LoginSession implements Serializable {
 
+    private static final long serialVersionUID = 1L;
+
     private String token;
+    private String refreshToken;
     private Long userId;
     private String phone;
     private String realName;
@@ -17,6 +20,14 @@ public class LoginSession implements Serializable {
 
     public void setToken(String token) {
         this.token = token;
+    }
+
+    public String getRefreshToken() {
+        return refreshToken;
+    }
+
+    public void setRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
     }
 
     public Long getUserId() {

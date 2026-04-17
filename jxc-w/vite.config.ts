@@ -10,11 +10,26 @@ export default defineConfig({
     },
   },
   build: {
+    chunkSizeWarningLimit: 900,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vue: ['vue', 'vue-router', 'pinia'],
-          element: ['element-plus', '@element-plus/icons-vue'],
+        manualChunks(id) {
+          const moduleId = id.replace(/\\/g, '/');
+          if (!moduleId.includes('node_modules')) {
+            return undefined;
+          }
+          if (
+            moduleId.includes('/vue/') ||
+            moduleId.includes('/@vue/') ||
+            moduleId.includes('/vue-router/') ||
+            moduleId.includes('/pinia/')
+          ) {
+            return 'vue-core';
+          }
+          if (moduleId.includes('/axios/')) {
+            return 'http-client';
+          }
+          return undefined;
         },
       },
     },

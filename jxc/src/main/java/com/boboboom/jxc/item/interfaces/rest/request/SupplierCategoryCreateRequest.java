@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record SupplierCategoryCreateRequest(
-        @NotBlank(message = "类别编码不能为空")
         @Size(max = 64, message = "类别编码长度不能超过64")
         String categoryCode,
 
@@ -17,4 +16,3 @@ public record SupplierCategoryCreateRequest(
         String parentCategory
 ) {
 }
-

@@ -133,14 +133,19 @@ const openEdit = (row: RoleAdminItem) => {
 };
 
 const handleSave = async () => {
-  if (!form.roleCode?.trim() || !form.roleName?.trim()) {
-    ElMessage.warning('请填写角色编码和角色名称');
+  if (!form.roleName?.trim()) {
+    ElMessage.warning('请填写角色名称');
+    return;
+  }
+  if (editingRoleId.value && !form.roleCode?.trim()) {
+    ElMessage.warning('请填写角色编码');
     return;
   }
   submitting.value = true;
   try {
+    const roleCode = editingRoleId.value ? form.roleCode?.trim() : undefined;
     const payload: RoleUpsertPayload = {
-      roleCode: form.roleCode.trim(),
+      roleCode,
       roleName: form.roleName.trim(),
       roleType: form.roleType ?? 'PLATFORM',
       dataScopeType: form.dataScopeType ?? 'ALL',
@@ -246,7 +251,7 @@ watch(
       @closed="resetForm"
     >
       <el-form label-width="100px" class="standard-dialog-form">
-        <el-form-item label="角色编码" required>
+        <el-form-item v-if="editingRoleId" label="角色编码" required>
           <el-input v-model="form.roleCode" :disabled="Boolean(editingRoleId)" />
         </el-form-item>
         <el-form-item label="角色名称" required>

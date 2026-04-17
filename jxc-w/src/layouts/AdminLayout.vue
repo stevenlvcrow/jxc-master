@@ -91,6 +91,9 @@ const tabContextMenuPosition = ref({
   y: 0,
 });
 const contextMenuTabPath = ref('');
+const draggingTabPath = ref('');
+const dragOverTabPath = ref('');
+const dragDropPosition = ref<'before' | 'after' | ''>('');
 
 const cityOptions = computed(() => Array.from(new Set(sessionStore.flatOrgs.map((item) => item.city))));
 const currentOrg = computed(() => sessionStore.currentOrg);
@@ -133,6 +136,17 @@ const canCloseOthers = computed(() => {
   const targetPath = contextMenuTabPath.value;
   return appStore.visitedTabs.some((item) => item.closable && item.path !== targetPath);
 });
+const canCloseRightTabs = computed(() => {
+  const targetPath = contextMenuTabPath.value;
+  if (!targetPath) {
+    return false;
+  }
+  const targetIndex = appStore.visitedTabs.findIndex((item) => item.path === targetPath);
+  if (targetIndex < 0) {
+    return false;
+  }
+  return appStore.visitedTabs.some((item, index) => index > targetIndex && item.closable);
+});
 
 const handleSelect = (path: string) => {
   const normalizedPath = String(path ?? '').trim().replace(/\/+$/, '');
@@ -150,6 +164,68 @@ const handleSelect = (path: string) => {
 const handleTabClick = (path: string | number) => {
   router.push(String(path));
 };
+
+const clearTabDragState = () => {
+  draggingTabPath.value = '';
+  dragOverTabPath.value = '';
+  dragDropPosition.value = '';
+};
+
+const resolveDropPosition = (event: DragEvent) => {
+  const currentTarget = event.currentTarget;
+  if (!(currentTarget instanceof HTMLElement)) {
+    return 'after' as const;
+  }
+  const rect = currentTarget.getBoundingClientRect();
+  return event.clientX < rect.left + rect.width / 2 ? 'before' as const : 'after' as const;
+};
+
+const handleTabDragStart = (event: DragEvent, path: string) => {
+  draggingTabPath.value = path;
+  dragOverTabPath.value = '';
+  dragDropPosition.value = '';
+  hideTabContextMenu();
+  event.dataTransfer?.setData('text/plain', path);
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+  }
+};
+
+const handleTabDragOver = (event: DragEvent, path: string) => {
+  if (!draggingTabPath.value || draggingTabPath.value === path) {
+    return;
+  }
+  event.preventDefault();
+  dragOverTabPath.value = path;
+  dragDropPosition.value = resolveDropPosition(event);
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move';
+  }
+};
+
+const handleTabDrop = (event: DragEvent, path: string) => {
+  event.preventDefault();
+  const sourcePath = draggingTabPath.value || event.dataTransfer?.getData('text/plain') || '';
+  if (!sourcePath || sourcePath === path) {
+    clearTabDragState();
+    return;
+  }
+  const position = dragOverTabPath.value === path && dragDropPosition.value
+    ? dragDropPosition.value
+    : resolveDropPosition(event);
+  appStore.moveVisitedTab(sourcePath, path, position);
+  clearTabDragState();
+};
+
+const handleTabDragEnd = () => {
+  clearTabDragState();
+};
+
+const getTabDragClass = (path: string) => ({
+  'is-dragging': draggingTabPath.value === path,
+  'is-drag-over-before': dragOverTabPath.value === path && dragDropPosition.value === 'before',
+  'is-drag-over-after': dragOverTabPath.value === path && dragDropPosition.value === 'after',
+});
 
 const hideTabContextMenu = () => {
   tabContextMenuVisible.value = false;
@@ -208,6 +284,24 @@ const closeAllTabs = () => {
   router.push(appStore.visitedTabs[0]?.path ?? fallbackHomePath.value);
 };
 
+const closeRightTabs = (path: string) => {
+  const tabs = appStore.visitedTabs;
+  const targetIndex = tabs.findIndex((item) => item.path === path);
+  if (targetIndex < 0) {
+    return;
+  }
+  const removedPaths = tabs
+    .filter((item, index) => index > targetIndex && item.closable)
+    .map((item) => item.path);
+  if (!removedPaths.length) {
+    return;
+  }
+  appStore.removeRightVisitedTabs(path);
+  if (removedPaths.includes(route.path)) {
+    router.push(path);
+  }
+};
+
 const handleTabContextMenu = (event: MouseEvent, path: string) => {
   contextMenuTabPath.value = path;
   tabContextMenuPosition.value = {
@@ -217,7 +311,7 @@ const handleTabContextMenu = (event: MouseEvent, path: string) => {
   tabContextMenuVisible.value = true;
 };
 
-const handleTabContextAction = async (action: 'close-current' | 'close-others' | 'close-all') => {
+const handleTabContextAction = async (action: 'close-current' | 'close-others' | 'close-right' | 'close-all') => {
   const targetPath = contextMenuTabPath.value;
   hideTabContextMenu();
   if (!targetPath) {
@@ -231,6 +325,11 @@ const handleTabContextAction = async (action: 'close-current' | 'close-others' |
 
   if (action === 'close-others') {
     closeOtherTabs(targetPath);
+    return;
+  }
+
+  if (action === 'close-right') {
+    closeRightTabs(targetPath);
     return;
   }
 
@@ -467,7 +566,16 @@ onBeforeUnmount(() => {
               :closable="tab.closable"
             >
               <template #label>
-                <div class="workspace-tab-label" @contextmenu.prevent="handleTabContextMenu($event, tab.path)">
+                <div
+                  class="workspace-tab-label"
+                  :class="getTabDragClass(tab.path)"
+                  draggable="true"
+                  @contextmenu.prevent="handleTabContextMenu($event, tab.path)"
+                  @dragstart="handleTabDragStart($event, tab.path)"
+                  @dragover="handleTabDragOver($event, tab.path)"
+                  @drop="handleTabDrop($event, tab.path)"
+                  @dragend="handleTabDragEnd"
+                >
                   {{ tab.title }}
                 </div>
               </template>
@@ -494,6 +602,13 @@ onBeforeUnmount(() => {
               @click.stop="handleTabContextAction('close-others')"
             >
               关闭其他
+            </button>
+            <button
+              class="tab-context-menu__item"
+              :disabled="!canCloseRightTabs"
+              @click.stop="handleTabContextAction('close-right')"
+            >
+              关闭右侧
             </button>
             <button
               class="tab-context-menu__item"

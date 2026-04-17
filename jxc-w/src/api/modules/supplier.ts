@@ -40,7 +40,7 @@ export type SupplierCategoryTreeNode = {
 };
 
 export type SupplierCategoryCreatePayload = {
-  categoryCode: string;
+  categoryCode?: string;
   categoryName: string;
   parentCategory: string;
 };
@@ -71,7 +71,7 @@ export type SupplierFinancePayload = {
 };
 
 export type CreateSupplierPayload = {
-  supplierCode: string;
+  supplierCode?: string;
   supplierName: string;
   supplierShortName?: string;
   supplierMnemonic?: string;

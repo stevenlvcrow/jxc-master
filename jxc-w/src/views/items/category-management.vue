@@ -38,7 +38,6 @@ type CategorySelectNode = {
   children?: CategorySelectNode[];
 };
 type BatchCreateRow = {
-  categoryCode: string;
   categoryName: string;
 };
 
@@ -72,11 +71,10 @@ const batchCreateForm = reactive({
   parentCategory: rootCategoryName,
 });
 const batchCreateRows = ref<BatchCreateRow[]>([
-  { categoryCode: '', categoryName: '' },
+  { categoryName: '' },
 ]);
 
 const createForm = reactive({
-  categoryCode: '',
   categoryName: '',
   parentCategory: rootCategoryName,
   status: '启用' as '启用' | '停用',
@@ -116,7 +114,6 @@ const categorySelectTree = computed<CategorySelectNode[]>(() => {
 });
 
 const createFormRules: FormRules = {
-  categoryCode: [{ required: true, message: '请输入类别编码', trigger: 'blur' }],
   categoryName: [{ required: true, message: '请输入物品类别', trigger: 'blur' }],
   parentCategory: [{ required: true, message: '请选择上级类别', trigger: 'change' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }],
@@ -183,7 +180,6 @@ const handlePageSizeChange = async (size: number) => {
 
 const resetCreateForm = () => {
   editingCategoryId.value = null;
-  createForm.categoryCode = '';
   createForm.categoryName = '';
   createForm.parentCategory = rootCategoryName;
   createForm.status = '启用';
@@ -197,7 +193,6 @@ const openCreateDialog = () => {
 
 const openEditDialog = (row: CategoryTableRow) => {
   editingCategoryId.value = row.id;
-  createForm.categoryCode = row.categoryCode;
   createForm.categoryName = row.categoryName;
   createForm.parentCategory = row.parentCategory;
   createForm.status = row.status;
@@ -212,7 +207,7 @@ const closeCreateDialog = () => {
 
 const resetBatchCreateForm = () => {
   batchCreateForm.parentCategory = rootCategoryName;
-  batchCreateRows.value = [{ categoryCode: '', categoryName: '' }];
+  batchCreateRows.value = [{ categoryName: '' }];
 };
 
 const openBatchCreateDialog = () => {
@@ -225,7 +220,7 @@ const closeBatchCreateDialog = () => {
 };
 
 const addBatchRow = (index: number) => {
-  batchCreateRows.value.splice(index + 1, 0, { categoryCode: '', categoryName: '' });
+  batchCreateRows.value.splice(index + 1, 0, { categoryName: '' });
 };
 
 const removeBatchRow = (index: number) => {
@@ -246,7 +241,6 @@ const handleCreateSubmit = async () => {
   }
 
   const payload = {
-    categoryCode: createForm.categoryCode.trim(),
     categoryName: createForm.categoryName.trim(),
     parentCategory: createForm.parentCategory,
     status: createForm.status,
@@ -267,25 +261,12 @@ const handleCreateSubmit = async () => {
 
 const handleBatchCreateSubmit = async () => {
   const rows = batchCreateRows.value.map((row) => ({
-    categoryCode: row.categoryCode.trim(),
     categoryName: row.categoryName.trim(),
   }));
-
-  const emptyCodeIndex = rows.findIndex((row) => !row.categoryCode);
-  if (emptyCodeIndex !== -1) {
-    ElMessage.warning(`第 ${emptyCodeIndex + 1} 行类别编码不能为空`);
-    return;
-  }
 
   const emptyNameIndex = rows.findIndex((row) => !row.categoryName);
   if (emptyNameIndex !== -1) {
     ElMessage.warning(`第 ${emptyNameIndex + 1} 行类别名称不能为空`);
-    return;
-  }
-
-  const duplicateCode = rows.find((row, index) => rows.findIndex((item) => item.categoryCode === row.categoryCode) !== index);
-  if (duplicateCode) {
-    ElMessage.warning(`批量新增中类别编码重复：${duplicateCode.categoryCode}`);
     return;
   }
 
@@ -299,7 +280,6 @@ const handleBatchCreateSubmit = async () => {
     parentCategory: batchCreateForm.parentCategory,
     status: '启用',
     items: rows.map((row) => ({
-      categoryCode: row.categoryCode,
       categoryName: row.categoryName,
     })),
   }, resolveItemOrgId());
@@ -455,12 +435,6 @@ onMounted(async () => {
       :rules="createFormRules"
       label-width="90px"
     >
-      <el-form-item label="类别编码" prop="categoryCode">
-        <el-input
-          v-model="createForm.categoryCode"
-          placeholder="请输入类别编码"
-        />
-      </el-form-item>
       <el-form-item label="物品类别" prop="categoryName">
         <el-input
           v-model="createForm.categoryName"
@@ -536,11 +510,6 @@ onMounted(async () => {
         <template #default="{ $index }">
           <el-button text type="primary" @click="addBatchRow($index)">+</el-button>
           <el-button text @click="removeBatchRow($index)">-</el-button>
-        </template>
-      </el-table-column>
-      <el-table-column label="类别编码" width="220">
-        <template #default="{ row }">
-          <el-input v-model="row.categoryCode" placeholder="请输入类别编码" />
         </template>
       </el-table-column>
       <el-table-column label="类别名称">

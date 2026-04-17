@@ -7,7 +7,6 @@ import java.util.List;
 
 public class RoleUpsertRequest {
 
-    @NotBlank
     private String roleCode;
 
     @NotBlank

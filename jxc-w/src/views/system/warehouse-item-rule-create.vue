@@ -4,10 +4,21 @@ import { reactive, ref, watch } from 'vue';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { useRouter } from 'vue-router';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonSelectorDialog, {
+  type SelectorColumn,
+  type SelectorTreeNode,
+} from '@/components/CommonSelectorDialog.vue';
 import { useSessionStore } from '@/stores/session';
 import { fetchWarehousesApi, type WarehouseRow as ApiWarehouseRow } from '@/api/modules/warehouse';
 import { createItemRuleApi, type RuleCreatePayload } from '@/api/modules/warehouse-item-rule';
-import { fetchItemsApi, type ItemVO } from '@/api/modules/item';
+import {
+  fetchItemCategoryTreeApi,
+  fetchItemCategoriesApi,
+  type ItemCategoryVO,
+  fetchItemsApi,
+  type ItemCategoryTreeNode,
+  type ItemVO,
+} from '@/api/modules/item';
 
 type SectionKey = 'basic' | 'items' | 'warehouse';
 type ItemTabKey = 'item' | 'category';
@@ -53,7 +64,6 @@ const businessScopeOptions = [
 ];
 
 const form = reactive({
-  ruleCode: '',
   ruleName: '',
   businessControl: false,
   businessScopes: [] as string[],
@@ -63,7 +73,6 @@ const form = reactive({
 });
 
 const formRules: FormRules = {
-  ruleCode: [{ required: true, message: '请输入规则编码', trigger: 'blur' }],
   ruleName: [{ required: true, message: '请输入规则名称', trigger: 'blur' }],
 };
 
@@ -77,6 +86,51 @@ const itemRows = ref<ItemRow[]>([]);
 const categoryRows = ref<CategoryRow[]>([]);
 const warehouseRows = ref<WarehouseRow[]>([]);
 const warehouseOptions = ref<ApiWarehouseRow[]>([]);
+const itemSelectorVisible = ref(false);
+const itemSelectorKeyword = ref('');
+const itemSelectorStatus = ref('');
+const activeItemTreeId = ref<string>('all');
+const itemSelectorCurrentPage = ref(1);
+const itemSelectorPageSize = ref(10);
+const itemSelectorLoading = ref(false);
+const itemSelectorTotal = ref(0);
+const selectingItemRowIndex = ref<number | null>(null);
+const selectedItemCandidates = ref<Array<Record<string, unknown>>>([]);
+const itemTreeData = ref<SelectorTreeNode[]>([]);
+const itemCandidateSource = ref<ItemCodeSuggestion[]>([]);
+const categorySelectorVisible = ref(false);
+const categorySelectorKeyword = ref('');
+const categorySelectorStatus = ref('');
+const activeCategoryTreeId = ref<string>('all');
+const categorySelectorCurrentPage = ref(1);
+const categorySelectorPageSize = ref(10);
+const categorySelectorLoading = ref(false);
+const categorySelectorTotal = ref(0);
+const selectingCategoryRowIndex = ref<number | null>(null);
+const selectedCategoryCandidates = ref<Array<Record<string, unknown>>>([]);
+const categoryTreeData = ref<SelectorTreeNode[]>([]);
+const categoryCandidateSource = ref<Array<{
+  id: string;
+  categoryCode: string;
+  categoryName: string;
+  parentCategory: string;
+  status: string;
+}>>([]);
+
+const itemTableColumns: SelectorColumn[] = [
+  { prop: 'code', label: '物品编码', minWidth: 130 },
+  { prop: 'name', label: '物品名称', minWidth: 130 },
+  { prop: 'spec', label: '规格型号', minWidth: 130 },
+  { prop: 'category', label: '物品类别', minWidth: 130 },
+  { prop: 'type', label: '物品类型', minWidth: 120 },
+];
+
+const categoryTableColumns: SelectorColumn[] = [
+  { prop: 'categoryCode', label: '分类编码', minWidth: 130 },
+  { prop: 'categoryName', label: '分类名称', minWidth: 130 },
+  { prop: 'parentCategory', label: '上级分类', minWidth: 130 },
+  { prop: 'status', label: '状态', minWidth: 90 },
+];
 
 let seed = 0;
 const nextId = () => `row-${++seed}`;
@@ -84,22 +138,9 @@ const nextId = () => `row-${++seed}`;
 const resolveGroupId = (): number | null => {
   const orgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
   if (!orgId) return null;
-
-  if (orgId.startsWith('group-')) {
-    const id = Number(orgId.slice('group-'.length));
-    return Number.isNaN(id) ? null : id;
-  }
-
-  // 当前机构为门店时，回溯其所属集团作为仓库数据作用域
-  for (const group of sessionStore.rootGroups) {
-    if (!group.id.startsWith('group-')) continue;
-    if (group.children?.some((child) => child.id === orgId)) {
-      const id = Number(group.id.slice('group-'.length));
-      return Number.isNaN(id) ? null : id;
-    }
-  }
-
-  return null;
+  const raw = orgId.includes('-') ? orgId.slice(orgId.lastIndexOf('-') + 1) : orgId;
+  const id = Number(raw);
+  return Number.isNaN(id) ? null : id;
 };
 
 const nowTime = () => {
@@ -185,14 +226,6 @@ const removeWarehouseRow = (index: number) => {
   warehouseRows.value.splice(index, 1);
 };
 
-const handleImport = () => {
-  ElMessage.info('导入功能待接入');
-};
-
-const handleCategoryImport = () => {
-  ElMessage.info('分类导入功能待接入');
-};
-
 const handleSaveDraft = () => {
   ElMessage.success('草稿已保存');
 };
@@ -211,38 +244,73 @@ const loadWarehouses = async () => {
 };
 
 type ItemCodeSuggestion = {
-  value: string;
-  raw: ItemVO;
+  id: string;
+  code: string;
+  name: string;
+  spec: string;
+  category: string;
+  type: string;
 };
 
-const querySearchItemCode = async (
-  queryString: string,
-  cb: (data: ItemCodeSuggestion[]) => void,
-) => {
-  const keyword = queryString.trim();
-  if (!keyword) {
-    cb([]);
+const normalizeItemTreeNodes = (nodes: ItemCategoryTreeNode[]): SelectorTreeNode[] => nodes.map((node) => ({
+  id: String(node.label ?? ''),
+  label: String(node.label ?? ''),
+  children: Array.isArray(node.children) ? normalizeItemTreeNodes(node.children) : undefined,
+}));
+
+const loadItemTree = async () => {
+  const orgId = sessionStore.currentOrgId || undefined;
+  const tree = await fetchItemCategoryTreeApi(orgId);
+  if (!Array.isArray(tree) || !tree.length) {
+    itemTreeData.value = [{ id: 'all', label: '全部' }];
     return;
   }
+  itemTreeData.value = [{ id: 'all', label: '全部', children: normalizeItemTreeNodes(tree) }];
+};
+
+const loadItemCandidates = async () => {
+  itemSelectorLoading.value = true;
   try {
     const orgId = sessionStore.currentOrgId || undefined;
     const page = await fetchItemsApi(
       {
-        pageNo: 1,
-        pageSize: 20,
-        keyword,
+        pageNo: itemSelectorCurrentPage.value,
+        pageSize: itemSelectorPageSize.value,
+        keyword: itemSelectorKeyword.value.trim() || undefined,
+        category: activeItemTreeId.value === 'all' ? undefined : activeItemTreeId.value,
+        status: itemSelectorStatus.value || undefined,
       },
       orgId,
     );
-    const suggestions = (page.list ?? []).map((item) => ({
-      value: item.code,
-      raw: item,
-    }));
-    cb(suggestions);
-  } catch {
-    cb([]);
+    itemCandidateSource.value = (page.list ?? []).map(mapItemSuggestion);
+    itemSelectorTotal.value = Number(page.total ?? 0);
+  } finally {
+    itemSelectorLoading.value = false;
   }
 };
+
+const mapItemSuggestion = (item: ItemVO): ItemCodeSuggestion => ({
+  id: item.id,
+  code: item.code,
+  name: item.name,
+  spec: item.spec,
+  category: item.category,
+  type: item.type,
+});
+
+const mapCategoryCandidate = (item: ItemCategoryVO): {
+  id: string;
+  categoryCode: string;
+  categoryName: string;
+  parentCategory: string;
+  status: string;
+} => ({
+  id: String(item.id),
+  categoryCode: item.categoryCode,
+  categoryName: item.categoryName,
+  parentCategory: item.parentCategory,
+  status: item.status,
+});
 
 const applySelectedItem = (row: ItemRow, item: ItemVO) => {
   row.itemCode = item.code || '';
@@ -251,8 +319,142 @@ const applySelectedItem = (row: ItemRow, item: ItemVO) => {
   row.itemCategory = item.category || item.type || '';
 };
 
-const handleSelectItemCode = (row: ItemRow, suggestion: ItemCodeSuggestion) => {
-  applySelectedItem(row, suggestion.raw);
+const openItemSelector = async (index: number) => {
+  selectingItemRowIndex.value = index;
+  selectedItemCandidates.value = [];
+  if (!itemTreeData.value.length) {
+    await loadItemTree();
+  }
+  await loadItemCandidates();
+  itemSelectorVisible.value = true;
+};
+
+const handleItemSelectorSearch = (payload: { keyword: string; status: string }) => {
+  itemSelectorKeyword.value = payload.keyword;
+  itemSelectorStatus.value = payload.status;
+  itemSelectorCurrentPage.value = 1;
+  loadItemCandidates();
+};
+
+const handleItemNodeChange = (node: SelectorTreeNode | null) => {
+  activeItemTreeId.value = String(node?.id ?? 'all');
+  itemSelectorCurrentPage.value = 1;
+  loadItemCandidates();
+};
+
+const handleItemSelectionChange = (rows: Array<Record<string, unknown>>) => {
+  selectedItemCandidates.value = rows;
+};
+
+const handleItemClear = () => {
+  selectedItemCandidates.value = [];
+};
+
+const handleItemSelectorConfirm = (rows: Array<Record<string, unknown>>) => {
+  const picked = rows as ItemCodeSuggestion[];
+  if (!picked.length) {
+    ElMessage.warning('请至少选择一个物品');
+    return;
+  }
+  const targetIndex = selectingItemRowIndex.value ?? 0;
+  const targetRow = itemRows.value[targetIndex];
+  if (!targetRow) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  targetRow.itemCode = picked[0].code || '';
+  targetRow.itemName = picked[0].name || '';
+  targetRow.specModel = picked[0].spec || '';
+  targetRow.itemCategory = picked[0].category || picked[0].type || '';
+  itemSelectorVisible.value = false;
+};
+
+const loadCategoryTree = async () => {
+  const orgId = sessionStore.currentOrgId || undefined;
+  const tree = await fetchItemCategoryTreeApi(orgId);
+  if (!Array.isArray(tree) || !tree.length) {
+    categoryTreeData.value = [{ id: 'all', label: '全部' }];
+    return;
+  }
+  categoryTreeData.value = [{ id: 'all', label: '全部', children: normalizeItemTreeNodes(tree) }];
+};
+
+const loadCategoryCandidates = async () => {
+  categorySelectorLoading.value = true;
+  try {
+    const orgId = sessionStore.currentOrgId || undefined;
+    const page = await fetchItemCategoriesApi(
+      {
+        pageNo: categorySelectorCurrentPage.value,
+        pageSize: categorySelectorPageSize.value,
+        categoryInfo: categorySelectorKeyword.value.trim() || undefined,
+        status: (categorySelectorStatus.value || undefined) as '启用' | '停用' | undefined,
+        treeNode: activeCategoryTreeId.value === 'all' ? undefined : activeCategoryTreeId.value,
+      },
+      orgId,
+    );
+    categoryCandidateSource.value = (page.list ?? []).map(mapCategoryCandidate);
+    categorySelectorTotal.value = Number(page.total ?? 0);
+  } finally {
+    categorySelectorLoading.value = false;
+  }
+};
+
+const openCategorySelector = async (index: number) => {
+  selectingCategoryRowIndex.value = index;
+  selectedCategoryCandidates.value = [];
+  if (!categoryTreeData.value.length) {
+    await loadCategoryTree();
+  }
+  await loadCategoryCandidates();
+  categorySelectorVisible.value = true;
+};
+
+const handleCategorySelectorSearch = (payload: { keyword: string; status: string }) => {
+  categorySelectorKeyword.value = payload.keyword;
+  categorySelectorStatus.value = payload.status;
+  categorySelectorCurrentPage.value = 1;
+  loadCategoryCandidates();
+};
+
+const handleCategoryNodeChange = (node: SelectorTreeNode | null) => {
+  activeCategoryTreeId.value = String(node?.id ?? 'all');
+  categorySelectorCurrentPage.value = 1;
+  loadCategoryCandidates();
+};
+
+const handleCategorySelectionChange = (rows: Array<Record<string, unknown>>) => {
+  selectedCategoryCandidates.value = rows;
+};
+
+const handleCategoryClear = () => {
+  selectedCategoryCandidates.value = [];
+};
+
+const handleCategorySelectorConfirm = (rows: Array<Record<string, unknown>>) => {
+  const picked = rows as Array<{
+    id: string;
+    categoryCode: string;
+    categoryName: string;
+    parentCategory: string;
+    status: string;
+  }>;
+  if (!picked.length) {
+    ElMessage.warning('请至少选择一个分类');
+    return;
+  }
+  const targetIndex = selectingCategoryRowIndex.value ?? 0;
+  const targetRow = categoryRows.value[targetIndex];
+  if (!targetRow) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  const selected = picked[0];
+  targetRow.categoryCode = selected.categoryCode || '';
+  targetRow.categoryName = selected.categoryName || '';
+  targetRow.parentCategory = selected.parentCategory || '';
+  targetRow.childCategory = selected.categoryName || '';
+  categorySelectorVisible.value = false;
 };
 
 const buildCreatePayload = (): RuleCreatePayload => {
@@ -261,7 +463,6 @@ const buildCreatePayload = (): RuleCreatePayload => {
   const controlTransferInbound = form.businessScopes.includes('管控适用机构调拨入库');
 
   return {
-    ruleCode: form.ruleCode.trim(),
     ruleName: form.ruleName.trim(),
     businessControl: form.businessControl,
     controlOrder: form.businessControl ? controlOrder : false,
@@ -319,7 +520,7 @@ const handleSave = async () => {
     await createItemRuleApi(groupId, payload);
     form.updatedAt = nowTime();
     ElMessage.success('仓库物品规则创建成功');
-    router.back();
+    router.push({ path: '/archive/7/2', query: { _t: String(Date.now()) } });
   } finally {
     saving.value = false;
   }
@@ -333,6 +534,14 @@ loadWarehouses();
 
 watch(() => sessionStore.currentOrgId, () => {
   loadWarehouses();
+  itemTreeData.value = [];
+  itemCandidateSource.value = [];
+  itemSelectorTotal.value = 0;
+  activeItemTreeId.value = 'all';
+  categoryTreeData.value = [];
+  categoryCandidateSource.value = [];
+  categorySelectorTotal.value = 0;
+  activeCategoryTreeId.value = 'all';
 });
 </script>
 
@@ -352,9 +561,6 @@ watch(() => sessionStore.currentOrgId, () => {
         <div class="form-section-block" :ref="registerSectionRef('basic')">
           <div class="form-section-title">基础信息</div>
           <div class="item-form-grid basic-grid">
-            <el-form-item label="规则编码" prop="ruleCode">
-              <el-input v-model="form.ruleCode" placeholder="请输入规则编码" />
-            </el-form-item>
             <el-form-item label="规则名称" prop="ruleName">
               <el-input v-model="form.ruleName" placeholder="请输入规则名称" />
             </el-form-item>
@@ -386,10 +592,6 @@ watch(() => sessionStore.currentOrgId, () => {
           <div class="form-section-title">适用物品</div>
           <el-tabs v-model="itemTab" class="rule-item-tabs">
             <el-tab-pane label="物品" name="item">
-              <div class="table-toolbar">
-                <el-button @click="addItemRow()">添加物品</el-button>
-                <el-button @click="handleImport">导入</el-button>
-              </div>
               <el-table :data="itemRows" border stripe class="erp-table" :fit="false">
                 <el-table-column type="index" label="序号" width="56" fixed="left" />
                 <el-table-column label="操作" width="80" fixed="left">
@@ -399,14 +601,10 @@ watch(() => sessionStore.currentOrgId, () => {
                   </template>
                 </el-table-column>
                 <el-table-column label="物品编码" min-width="130">
-                  <template #default="{ row }">
-                    <el-autocomplete
-                      v-model="row.itemCode"
-                      :fetch-suggestions="querySearchItemCode"
-                      value-key="value"
-                      placeholder="请输入编码搜索物品"
-                      @select="handleSelectItemCode(row, $event)"
-                    />
+                  <template #default="{ row, $index }">
+                    <div @click="openItemSelector($index)">
+                      {{ row.itemCode || '点击选择物品' }}
+                    </div>
                   </template>
                 </el-table-column>
                 <el-table-column label="物品名称" min-width="130">
@@ -422,10 +620,6 @@ watch(() => sessionStore.currentOrgId, () => {
             </el-tab-pane>
 
             <el-tab-pane label="分类" name="category">
-              <div class="table-toolbar">
-                <el-button @click="addCategoryRow()">添加分类</el-button>
-                <el-button @click="handleCategoryImport">导入</el-button>
-              </div>
               <el-table :data="categoryRows" border stripe class="erp-table" :fit="false">
                 <el-table-column type="index" label="序号" width="56" fixed="left" />
                 <el-table-column label="操作" width="80" fixed="left">
@@ -435,7 +629,11 @@ watch(() => sessionStore.currentOrgId, () => {
                   </template>
                 </el-table-column>
                 <el-table-column label="分类编码" min-width="130">
-                  <template #default="{ row }"><el-input v-model="row.categoryCode" /></template>
+                  <template #default="{ row, $index }">
+                    <div @click="openCategorySelector($index)">
+                      {{ row.categoryCode || '点击选择分类' }}
+                    </div>
+                  </template>
                 </el-table-column>
                 <el-table-column label="分类名称" min-width="130">
                   <template #default="{ row }"><el-input v-model="row.categoryName" /></template>
@@ -477,6 +675,70 @@ watch(() => sessionStore.currentOrgId, () => {
         </div>
       </el-form>
     </section>
+
+    <CommonSelectorDialog
+      v-model="itemSelectorVisible"
+      title="选择物品"
+      :tree-data="itemTreeData"
+      :table-data="itemCandidateSource"
+      :loading="itemSelectorLoading"
+      :columns="itemTableColumns"
+      row-key="id"
+      selected-label-key="name"
+      :selected-rows="selectedItemCandidates"
+      :keyword-value="itemSelectorKeyword"
+      :status-value="itemSelectorStatus"
+      keyword-label="物品"
+      keyword-placeholder="支持按物品编码和名称查询..."
+      status-label="启用状态"
+      :status-options="[
+        { label: '全部', value: '' },
+        { label: '启用', value: '启用' },
+        { label: '停用', value: '停用' },
+      ]"
+      :total="itemSelectorTotal"
+      :current-page="itemSelectorCurrentPage"
+      :page-size="itemSelectorPageSize"
+      @search="handleItemSelectorSearch"
+      @node-change="handleItemNodeChange"
+      @selection-change="handleItemSelectionChange"
+      @clear-selection="handleItemClear"
+      @page-change="(p) => { itemSelectorCurrentPage = p; loadItemCandidates(); }"
+      @page-size-change="(s) => { itemSelectorPageSize = s; itemSelectorCurrentPage = 1; loadItemCandidates(); }"
+      @confirm="handleItemSelectorConfirm"
+    />
+
+    <CommonSelectorDialog
+      v-model="categorySelectorVisible"
+      title="选择分类"
+      :tree-data="categoryTreeData"
+      :table-data="categoryCandidateSource"
+      :loading="categorySelectorLoading"
+      :columns="categoryTableColumns"
+      row-key="id"
+      selected-label-key="categoryName"
+      :selected-rows="selectedCategoryCandidates"
+      :keyword-value="categorySelectorKeyword"
+      :status-value="categorySelectorStatus"
+      keyword-label="分类"
+      keyword-placeholder="支持按分类编码和名称查询..."
+      status-label="启用状态"
+      :status-options="[
+        { label: '全部', value: '' },
+        { label: '启用', value: '启用' },
+        { label: '停用', value: '停用' },
+      ]"
+      :total="categorySelectorTotal"
+      :current-page="categorySelectorCurrentPage"
+      :page-size="categorySelectorPageSize"
+      @search="handleCategorySelectorSearch"
+      @node-change="handleCategoryNodeChange"
+      @selection-change="handleCategorySelectionChange"
+      @clear-selection="handleCategoryClear"
+      @page-change="(p) => { categorySelectorCurrentPage = p; loadCategoryCandidates(); }"
+      @page-size-change="(s) => { categorySelectorPageSize = s; categorySelectorCurrentPage = 1; loadCategoryCandidates(); }"
+      @confirm="handleCategorySelectorConfirm"
+    />
   </div>
 </template>
 

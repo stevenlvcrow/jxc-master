@@ -2,21 +2,18 @@ package com.boboboom.jxc.item.interfaces.rest;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemStatisticsTypeDO;
 import com.boboboom.jxc.item.infrastructure.persistence.mapper.ItemStatisticsTypeMapper;
 import com.boboboom.jxc.item.interfaces.rest.request.StatisticsTypeBatchExportRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.StatisticsTypeCreateRequest;
 import jakarta.validation.Valid;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,23 +38,17 @@ public class ItemStatisticsTypeController {
     private static final String CREATE_TYPE_SYSTEM_BUILTIN = "SYSTEM_BUILTIN";
     private static final String CREATE_TYPE_CUSTOM = "CUSTOM";
     private static final String CODE_PREFIX = "TJLX";
-    private static final String SCOPE_PLATFORM = "PLATFORM";
-    private static final String SCOPE_GROUP = "GROUP";
-    private static final String SCOPE_STORE = "STORE";
 
     private final ItemStatisticsTypeMapper itemStatisticsTypeMapper;
-    private final RoleMapper roleMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
-    private final StoreMapper storeMapper;
+    private final OrgScopeService orgScopeService;
+    private final BusinessCodeGenerator businessCodeGenerator;
 
     public ItemStatisticsTypeController(ItemStatisticsTypeMapper itemStatisticsTypeMapper,
-                                        RoleMapper roleMapper,
-                                        UserRoleRelMapper userRoleRelMapper,
-                                        StoreMapper storeMapper) {
+                                        OrgScopeService orgScopeService,
+                                        BusinessCodeGenerator businessCodeGenerator) {
         this.itemStatisticsTypeMapper = itemStatisticsTypeMapper;
-        this.roleMapper = roleMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
-        this.storeMapper = storeMapper;
+        this.orgScopeService = orgScopeService;
+        this.businessCodeGenerator = businessCodeGenerator;
     }
 
     @GetMapping
@@ -228,23 +219,13 @@ public class ItemStatisticsTypeController {
     }
 
     private String nextCode(ItemScope scope) {
-        ItemStatisticsTypeDO latest = itemStatisticsTypeMapper.selectOne(
-                scopeQuery(scope)
-                        .likeRight(ItemStatisticsTypeDO::getCode, CODE_PREFIX)
-                        .orderByDesc(ItemStatisticsTypeDO::getCode)
-                        .last("limit 1")
-        );
-        if (latest == null || trimNullable(latest.getCode()) == null) {
-            return CODE_PREFIX + "0001";
-        }
-        String rawCode = latest.getCode().trim();
-        String suffix = rawCode.length() > CODE_PREFIX.length() ? rawCode.substring(CODE_PREFIX.length()) : "";
-        try {
-            int number = Integer.parseInt(suffix);
-            return CODE_PREFIX + String.format(Locale.ROOT, "%04d", number + 1);
-        } catch (NumberFormatException ex) {
-            return CODE_PREFIX + "0001";
-        }
+        List<String> existingCodes = itemStatisticsTypeMapper.selectList(
+                        scopeQuery(scope).select(ItemStatisticsTypeDO::getCode))
+                .stream()
+                .map(ItemStatisticsTypeDO::getCode)
+                .filter(StringUtils::hasText)
+                .toList();
+        return businessCodeGenerator.nextCode(CODE_PREFIX, existingCodes);
     }
 
     private String trim(String value) {
@@ -274,99 +255,8 @@ public class ItemStatisticsTypeController {
     }
 
     private ItemScope resolveItemScope(String orgId) {
-        Long userId = currentUserId();
-        Scope requested = parseScope(orgId);
-        if (isPlatformAdmin(userId)) {
-            return new ItemScope(requested.scopeType(), requested.scopeId());
-        }
-        if (SCOPE_PLATFORM.equals(requested.scopeType())) {
-            throw new BusinessException("请先选择有权限的机构");
-        }
-        if (SCOPE_GROUP.equals(requested.scopeType())) {
-            if (!hasScope(userId, SCOPE_GROUP, requested.scopeId())) {
-                throw new BusinessException("当前账号无该集团权限");
-            }
-            return new ItemScope(SCOPE_GROUP, requested.scopeId());
-        }
-        if (SCOPE_STORE.equals(requested.scopeType())) {
-            if (hasScope(userId, SCOPE_STORE, requested.scopeId())) {
-                return new ItemScope(SCOPE_STORE, requested.scopeId());
-            }
-            Long groupId = findGroupIdByStoreId(requested.scopeId());
-            if (groupId != null && hasScope(userId, SCOPE_GROUP, groupId)) {
-                return new ItemScope(SCOPE_STORE, requested.scopeId());
-            }
-            throw new BusinessException("当前账号无该门店权限");
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Scope parseScope(String orgId) {
-        if (orgId == null || orgId.isBlank()) {
-            return new Scope(SCOPE_PLATFORM, 0L);
-        }
-        if (orgId.startsWith("group-")) {
-            return new Scope(SCOPE_GROUP, parseNumericId(orgId.substring("group-".length())));
-        }
-        if (orgId.startsWith("store-")) {
-            return new Scope(SCOPE_STORE, parseNumericId(orgId.substring("store-".length())));
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Long parseNumericId(String value) {
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("机构参数非法");
-        }
-    }
-
-    private Long currentUserId() {
-        if (AuthContextHolder.get() == null || AuthContextHolder.get().getUserId() == null) {
-            throw new BusinessException("登录已失效，请重新登录");
-        }
-        return AuthContextHolder.get().getUserId();
-    }
-
-    private boolean isPlatformAdmin(Long userId) {
-        RoleDO role = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getRoleCode, "PLATFORM_SUPER_ADMIN")
-                .last("limit 1"));
-        if (role == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getRoleId, role.getId())
-                .eq(UserRoleRelDO::getScopeType, SCOPE_PLATFORM)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private boolean hasScope(Long userId, String scopeType, Long scopeId) {
-        if (scopeId == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getScopeType, scopeType)
-                .eq(UserRoleRelDO::getScopeId, scopeId)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private Long findGroupIdByStoreId(Long storeId) {
-        if (storeId == null) {
-            return null;
-        }
-        StoreDO store = storeMapper.selectById(storeId);
-        if (store == null) {
-            return null;
-        }
-        return store.getGroupId();
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
+        return new ItemScope(scope.scopeType(), scope.scopeId());
     }
 
     public record PageResult<T>(List<T> list, long total, long pageNo, long pageSize) {
@@ -403,9 +293,6 @@ public class ItemStatisticsTypeController {
     }
 
     public record BatchExportResult(String fileName, List<StatisticsTypeExportItem> rows) {
-    }
-
-    private record Scope(String scopeType, Long scopeId) {
     }
 
     private record ItemScope(String scopeType, Long scopeId) {

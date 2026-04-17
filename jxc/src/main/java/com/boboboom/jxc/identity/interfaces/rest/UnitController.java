@@ -1,16 +1,10 @@
 package com.boboboom.jxc.identity.interfaces.rest;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.UnitAdministrationService;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UnitMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
 import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.UnitUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
@@ -35,27 +29,13 @@ import java.util.List;
 @RequestMapping("/api/identity/admin/units")
 public class UnitController {
 
-    private static final String STATUS_ENABLED = "ENABLED";
-    private static final String STATUS_DISABLED = "DISABLED";
-    private static final String TYPE_STANDARD = "STANDARD";
-    private static final String TYPE_AUXILIARY = "AUXILIARY";
-    private static final String SCOPE_PLATFORM = "PLATFORM";
-    private static final String SCOPE_GROUP = "GROUP";
-    private static final String SCOPE_STORE = "STORE";
+    private final UnitAdministrationService unitAdministrationService;
+    private final OrgScopeService orgScopeService;
 
-    private final UnitMapper unitMapper;
-    private final RoleMapper roleMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
-    private final StoreMapper storeMapper;
-
-    public UnitController(UnitMapper unitMapper,
-                          RoleMapper roleMapper,
-                          UserRoleRelMapper userRoleRelMapper,
-                          StoreMapper storeMapper) {
-        this.unitMapper = unitMapper;
-        this.roleMapper = roleMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
-        this.storeMapper = storeMapper;
+    public UnitController(UnitAdministrationService unitAdministrationService,
+                          OrgScopeService orgScopeService) {
+        this.unitAdministrationService = unitAdministrationService;
+        this.orgScopeService = orgScopeService;
     }
 
     @GetMapping
@@ -64,28 +44,14 @@ public class UnitController {
                                                       @RequestParam(required = false) String unitType,
                                                       @RequestParam(required = false) String orgId) {
         UnitScope scope = resolveUnitScope(orgId);
-        String normalizedKeyword = trimNullable(keyword);
-        String normalizedStatus = normalizeStatusNullable(status);
-        String normalizedType = normalizeUnitTypeNullable(unitType);
-
-        LambdaQueryWrapper<UnitDO> queryWrapper = new LambdaQueryWrapper<UnitDO>()
-                .eq(UnitDO::getScopeType, scope.scopeType())
-                .eq(UnitDO::getScopeId, scope.scopeId())
-                .orderByDesc(UnitDO::getCreatedAt)
-                .orderByDesc(UnitDO::getId);
-        if (normalizedKeyword != null) {
-            queryWrapper.and(wrapper -> wrapper.like(UnitDO::getUnitCode, normalizedKeyword)
-                    .or()
-                    .like(UnitDO::getUnitName, normalizedKeyword));
-        }
-        if (normalizedStatus != null) {
-            queryWrapper.eq(UnitDO::getStatus, normalizedStatus);
-        }
-        if (normalizedType != null) {
-            queryWrapper.eq(UnitDO::getUnitType, normalizedType);
-        }
-
-        List<UnitView> data = unitMapper.selectList(queryWrapper).stream()
+        List<UnitView> data = unitAdministrationService.listUnits(
+                        scope.scopeType(),
+                        scope.scopeId(),
+                        keyword,
+                        status,
+                        unitType
+                )
+                .stream()
                 .map(this::toView)
                 .toList();
         return CodeDataResponse.ok(data);
@@ -96,20 +62,17 @@ public class UnitController {
     public CodeDataResponse<IdPayload> createUnit(@RequestParam(required = false) String orgId,
                                                   @Valid @RequestBody UnitUpsertRequest request) {
         UnitScope scope = resolveUnitScope(orgId);
-        String unitCode = trim(request.getCode());
+        String unitCode = trimNullable(request.getCode());
         String unitName = trim(request.getName());
-        ensureCodeUnique(unitCode, null, scope);
-        ensureNameUnique(unitName, null, scope);
-
-        UnitDO entity = new UnitDO();
-        entity.setScopeType(scope.scopeType());
-        entity.setScopeId(scope.scopeId());
-        entity.setUnitCode(unitCode);
-        entity.setUnitName(unitName);
-        entity.setUnitType(normalizeUnitType(request.getType()));
-        entity.setStatus(normalizeStatus(request.getStatus()));
-        entity.setRemark(trimNullable(request.getRemark()));
-        unitMapper.insert(entity);
+        UnitDO entity = unitAdministrationService.createUnit(
+                scope.scopeType(),
+                scope.scopeId(),
+                unitCode,
+                unitName,
+                normalizeUnitType(request.getType()),
+                normalizeStatus(request.getStatus()),
+                trimNullable(request.getRemark())
+        );
         return CodeDataResponse.ok(new IdPayload(entity.getId()));
     }
 
@@ -119,18 +82,18 @@ public class UnitController {
                                              @RequestParam(required = false) String orgId,
                                              @Valid @RequestBody UnitUpsertRequest request) {
         UnitScope scope = resolveUnitScope(orgId);
-        UnitDO entity = requireUnit(id, scope);
         String unitCode = trim(request.getCode());
         String unitName = trim(request.getName());
-        ensureCodeUnique(unitCode, id, scope);
-        ensureNameUnique(unitName, id, scope);
-
-        entity.setUnitCode(unitCode);
-        entity.setUnitName(unitName);
-        entity.setUnitType(normalizeUnitType(request.getType()));
-        entity.setStatus(normalizeStatus(request.getStatus()));
-        entity.setRemark(trimNullable(request.getRemark()));
-        unitMapper.updateById(entity);
+        unitAdministrationService.updateUnit(
+                id,
+                scope.scopeType(),
+                scope.scopeId(),
+                unitCode,
+                unitName,
+                normalizeUnitType(request.getType()),
+                normalizeStatus(request.getStatus()),
+                trimNullable(request.getRemark())
+        );
         return CodeDataResponse.ok();
     }
 
@@ -140,9 +103,7 @@ public class UnitController {
                                                    @RequestParam(required = false) String orgId,
                                                    @Valid @RequestBody StatusUpdateRequest request) {
         UnitScope scope = resolveUnitScope(orgId);
-        UnitDO entity = requireUnit(id, scope);
-        entity.setStatus(normalizeStatus(request.getStatus()));
-        unitMapper.updateById(entity);
+        unitAdministrationService.updateUnitStatus(id, scope.scopeType(), scope.scopeId(), normalizeStatus(request.getStatus()));
         return CodeDataResponse.ok();
     }
 
@@ -151,54 +112,8 @@ public class UnitController {
     public CodeDataResponse<Void> deleteUnit(@PathVariable Long id,
                                              @RequestParam(required = false) String orgId) {
         UnitScope scope = resolveUnitScope(orgId);
-        requireUnit(id, scope);
-        unitMapper.delete(new LambdaQueryWrapper<UnitDO>()
-                .eq(UnitDO::getId, id)
-                .eq(UnitDO::getScopeType, scope.scopeType())
-                .eq(UnitDO::getScopeId, scope.scopeId()));
+        unitAdministrationService.deleteUnit(id, scope.scopeType(), scope.scopeId());
         return CodeDataResponse.ok();
-    }
-
-    private UnitDO requireUnit(Long id, UnitScope scope) {
-        UnitDO entity = unitMapper.selectOne(new LambdaQueryWrapper<UnitDO>()
-                .eq(UnitDO::getId, id)
-                .eq(UnitDO::getScopeType, scope.scopeType())
-                .eq(UnitDO::getScopeId, scope.scopeId())
-                .last("limit 1"));
-        if (entity == null) {
-            throw new BusinessException("单位不存在");
-        }
-        return entity;
-    }
-
-    private void ensureCodeUnique(String unitCode, Long excludedId, UnitScope scope) {
-        LambdaQueryWrapper<UnitDO> queryWrapper = new LambdaQueryWrapper<UnitDO>()
-                .eq(UnitDO::getScopeType, scope.scopeType())
-                .eq(UnitDO::getScopeId, scope.scopeId())
-                .eq(UnitDO::getUnitCode, unitCode)
-                .last("limit 1");
-        if (excludedId != null) {
-            queryWrapper.ne(UnitDO::getId, excludedId);
-        }
-        UnitDO exists = unitMapper.selectOne(queryWrapper);
-        if (exists != null) {
-            throw new BusinessException("单位编码已存在");
-        }
-    }
-
-    private void ensureNameUnique(String unitName, Long excludedId, UnitScope scope) {
-        LambdaQueryWrapper<UnitDO> queryWrapper = new LambdaQueryWrapper<UnitDO>()
-                .eq(UnitDO::getScopeType, scope.scopeType())
-                .eq(UnitDO::getScopeId, scope.scopeId())
-                .eq(UnitDO::getUnitName, unitName)
-                .last("limit 1");
-        if (excludedId != null) {
-            queryWrapper.ne(UnitDO::getId, excludedId);
-        }
-        UnitDO exists = unitMapper.selectOne(queryWrapper);
-        if (exists != null) {
-            throw new BusinessException("单位名称已存在");
-        }
     }
 
     private UnitView toView(UnitDO entity) {
@@ -224,13 +139,13 @@ public class UnitController {
     private String normalizeStatus(String value) {
         String status = trimNullable(value);
         if (status == null || status.isEmpty()) {
-            return STATUS_ENABLED;
+            return "ENABLED";
         }
-        if (STATUS_ENABLED.equalsIgnoreCase(status)) {
-            return STATUS_ENABLED;
+        if ("ENABLED".equalsIgnoreCase(status)) {
+            return "ENABLED";
         }
-        if (STATUS_DISABLED.equalsIgnoreCase(status)) {
-            return STATUS_DISABLED;
+        if ("DISABLED".equalsIgnoreCase(status)) {
+            return "DISABLED";
         }
         throw new BusinessException("状态参数非法");
     }
@@ -246,13 +161,13 @@ public class UnitController {
     private String normalizeUnitType(String value) {
         String unitType = trimNullable(value);
         if (unitType == null || unitType.isEmpty()) {
-            return TYPE_STANDARD;
+            return "STANDARD";
         }
-        if (TYPE_STANDARD.equalsIgnoreCase(unitType)) {
-            return TYPE_STANDARD;
+        if ("STANDARD".equalsIgnoreCase(unitType)) {
+            return "STANDARD";
         }
-        if (TYPE_AUXILIARY.equalsIgnoreCase(unitType)) {
-            return TYPE_AUXILIARY;
+        if ("AUXILIARY".equalsIgnoreCase(unitType)) {
+            return "AUXILIARY";
         }
         throw new BusinessException("单位类型参数非法");
     }
@@ -274,101 +189,8 @@ public class UnitController {
     }
 
     private UnitScope resolveUnitScope(String orgId) {
-        Long userId = currentUserId();
-        Scope requested = parseScope(orgId);
-        if (isPlatformAdmin(userId)) {
-            return new UnitScope(requested.scopeType(), requested.scopeId());
-        }
-
-        if (SCOPE_PLATFORM.equals(requested.scopeType())) {
-            throw new BusinessException("请先选择有权限的机构");
-        }
-        if (SCOPE_GROUP.equals(requested.scopeType())) {
-            if (!hasScope(userId, SCOPE_GROUP, requested.scopeId())) {
-                throw new BusinessException("当前账号无该集团权限");
-            }
-            return new UnitScope(SCOPE_GROUP, requested.scopeId());
-        }
-        if (SCOPE_STORE.equals(requested.scopeType())) {
-            if (hasScope(userId, SCOPE_STORE, requested.scopeId())) {
-                return new UnitScope(SCOPE_STORE, requested.scopeId());
-            }
-            Long groupId = findGroupIdByStoreId(requested.scopeId());
-            if (groupId != null && hasScope(userId, SCOPE_GROUP, groupId)) {
-                return new UnitScope(SCOPE_STORE, requested.scopeId());
-            }
-            throw new BusinessException("当前账号无该门店权限");
-        }
-
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Scope parseScope(String orgId) {
-        if (orgId == null || orgId.isBlank()) {
-            return new Scope(SCOPE_PLATFORM, 0L);
-        }
-        if (orgId.startsWith("group-")) {
-            return new Scope(SCOPE_GROUP, parseNumericId(orgId.substring("group-".length())));
-        }
-        if (orgId.startsWith("store-")) {
-            return new Scope(SCOPE_STORE, parseNumericId(orgId.substring("store-".length())));
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Long parseNumericId(String value) {
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("机构参数非法");
-        }
-    }
-
-    private Long currentUserId() {
-        if (AuthContextHolder.get() == null || AuthContextHolder.get().getUserId() == null) {
-            throw new BusinessException("登录已失效，请重新登录");
-        }
-        return AuthContextHolder.get().getUserId();
-    }
-
-    private boolean isPlatformAdmin(Long userId) {
-        RoleDO role = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getRoleCode, "PLATFORM_SUPER_ADMIN")
-                .last("limit 1"));
-        if (role == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getRoleId, role.getId())
-                .eq(UserRoleRelDO::getScopeType, SCOPE_PLATFORM)
-                .eq(UserRoleRelDO::getStatus, STATUS_ENABLED)
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private boolean hasScope(Long userId, String scopeType, Long scopeId) {
-        if (scopeId == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getScopeType, scopeType)
-                .eq(UserRoleRelDO::getScopeId, scopeId)
-                .eq(UserRoleRelDO::getStatus, STATUS_ENABLED)
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private Long findGroupIdByStoreId(Long storeId) {
-        if (storeId == null) {
-            return null;
-        }
-        StoreDO store = storeMapper.selectById(storeId);
-        if (store == null) {
-            return null;
-        }
-        return store.getGroupId();
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
+        return new UnitScope(scope.scopeType(), scope.scopeId());
     }
 
     public record IdPayload(Long id) {
@@ -381,9 +203,6 @@ public class UnitController {
                            String status,
                            String remark,
                            LocalDateTime createdAt) {
-    }
-
-    private record Scope(String scopeType, Long scopeId) {
     }
 
     private record UnitScope(String scopeType, Long scopeId) {

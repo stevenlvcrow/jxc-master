@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 
 public class GroupStoreCreateRequest {
 
-    @NotBlank
     private String storeCode;
 
     @NotBlank

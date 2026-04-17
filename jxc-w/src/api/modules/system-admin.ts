@@ -77,7 +77,7 @@ export type MenuAdminItem = {
 };
 
 export type RoleUpsertPayload = {
-  roleCode: string;
+  roleCode?: string;
   roleName: string;
   roleType: string;
   dataScopeType: string;
@@ -90,14 +90,14 @@ export const fetchAdminUsersApi = () => apiClient.get<UserAdminItem[]>('/api/ide
 export const fetchAdminGroupsApi = () => apiClient.get<GroupAdminItem[]>('/api/identity/admin/groups');
 
 export const createAdminGroupApi = (payload: {
-  groupCode: string;
+  groupCode?: string;
   groupName: string;
   status?: 'ENABLED' | 'DISABLED';
   remark?: string;
 }) => apiClient.post<{ id: number }>('/api/identity/admin/groups', payload);
 
 export const updateAdminGroupApi = (id: number, payload: {
-  groupCode: string;
+  groupCode?: string;
   groupName: string;
   status?: 'ENABLED' | 'DISABLED';
   remark?: string;
@@ -119,7 +119,7 @@ export const fetchGroupAdminCandidatesApi = (groupId: number) =>
   apiClient.get<GroupAdminCandidateItem[]>(`/api/identity/admin/groups/${groupId}/admin-candidates`);
 
 export const createGroupStoreApi = (groupId: number, payload: {
-  storeCode: string;
+  storeCode?: string;
   storeName: string;
   status?: 'ENABLED' | 'DISABLED';
   contactName?: string;

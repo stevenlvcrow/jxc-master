@@ -1,0 +1,148 @@
+package com.boboboom.jxc.identity.interfaces.rest;
+
+import com.boboboom.jxc.identity.application.service.IdentityAccessControlService;
+import com.boboboom.jxc.identity.application.service.RoleAdministrationService;
+import com.boboboom.jxc.identity.application.service.RoleMenuAdministrationService;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
+import com.boboboom.jxc.identity.interfaces.rest.request.RoleMenuAssignRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.RoleUpsertRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import jakarta.validation.Valid;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+
+@Validated
+@RestController
+@RequestMapping("/api/identity/admin")
+public class IdentityRoleAdminController {
+
+    private final RoleAdministrationService roleAdministrationService;
+    private final RoleMenuAdministrationService roleMenuAdministrationService;
+    private final IdentityAccessControlService identityAccessControlService;
+    private final IdentityAdminSupport identityAdminSupport;
+
+    public IdentityRoleAdminController(RoleAdministrationService roleAdministrationService,
+                                       RoleMenuAdministrationService roleMenuAdministrationService,
+                                       IdentityAccessControlService identityAccessControlService,
+                                       IdentityAdminSupport identityAdminSupport) {
+        this.roleAdministrationService = roleAdministrationService;
+        this.roleMenuAdministrationService = roleMenuAdministrationService;
+        this.identityAccessControlService = identityAccessControlService;
+        this.identityAdminSupport = identityAdminSupport;
+    }
+
+    @GetMapping("/roles")
+    public CodeDataResponse<List<RoleAdminView>> listRoles() {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
+        List<RoleAdminView> result = roleAdministrationService.listRoles(operatorId, platformAdmin).stream()
+                .map(role -> new RoleAdminView(
+                        role.id(),
+                        role.roleCode(),
+                        role.roleName(),
+                        role.roleType(),
+                        role.dataScopeType(),
+                        role.description(),
+                        role.status(),
+                        role.menuIds(),
+                        role.builtin(),
+                        role.editable()
+                ))
+                .toList();
+        return CodeDataResponse.ok(result);
+    }
+
+    @PostMapping("/roles")
+    @Transactional
+    public CodeDataResponse<IdPayload> createRole(@Valid @RequestBody RoleUpsertRequest request) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        RoleDO role = roleAdministrationService.createRole(
+                request,
+                operatorId,
+                identityAdminSupport.isPlatformAdmin(operatorId)
+        );
+        return CodeDataResponse.ok(new IdPayload(role.getId()));
+    }
+
+    @PutMapping("/roles/{id}")
+    @Transactional
+    public CodeDataResponse<Void> updateRole(@PathVariable Long id,
+                                             @Valid @RequestBody RoleUpsertRequest request) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        RoleDO role = roleAdministrationService.requireRole(id);
+        roleAdministrationService.updateRole(role, request, operatorId, identityAdminSupport.isPlatformAdmin(operatorId));
+        return CodeDataResponse.ok();
+    }
+
+    @PutMapping("/roles/{id}/status")
+    @Transactional
+    public CodeDataResponse<Void> updateRoleStatus(@PathVariable Long id,
+                                                   @Valid @RequestBody StatusUpdateRequest request) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        RoleDO role = roleAdministrationService.requireRole(id);
+        roleAdministrationService.updateRoleStatus(role, request.getStatus(), operatorId);
+        return CodeDataResponse.ok();
+    }
+
+    @PutMapping("/roles/{id}/menus")
+    @Transactional
+    public CodeDataResponse<Void> assignRoleMenus(@PathVariable Long id,
+                                                  @Valid @RequestBody RoleMenuAssignRequest request) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        RoleDO role = roleAdministrationService.requireRole(id);
+        identityAccessControlService.ensureCanManageRole(operatorId, role);
+        identityAccessControlService.ensureRoleMenuAssignable(operatorId, role);
+        roleMenuAdministrationService.saveRoleMenus(role, request.getMenuIds());
+        return CodeDataResponse.ok();
+    }
+
+    @GetMapping("/menus")
+    public CodeDataResponse<List<MenuAdminView>> listMenus() {
+        roleMenuAdministrationService.ensureGroupMgmtMenusForGroupAdmin();
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
+        List<Long> managedGroups = platformAdmin ? Collections.emptyList() : identityAccessControlService.listManagedGroupIds(operatorId);
+        List<Long> managedStoreIds = platformAdmin || managedGroups.isEmpty()
+                ? Collections.emptyList()
+                : identityAccessControlService.listManagedStoreIds(new LinkedHashSet<>(managedGroups));
+        List<MenuAdminView> result = roleMenuAdministrationService.listAssignableMenus(
+                        operatorId,
+                        platformAdmin,
+                        managedGroups,
+                        managedStoreIds
+                ).stream()
+                .map(menu -> new MenuAdminView(
+                        menu.id(),
+                        menu.menuCode(),
+                        menu.menuName(),
+                        menu.parentId(),
+                        menu.menuType(),
+                        menu.routePath(),
+                        menu.permissionCode(),
+                        menu.status(),
+                        menu.sortNo()
+                ))
+                .toList();
+        return CodeDataResponse.ok(result);
+    }
+
+    @GetMapping("/roles/{id}/menu-ids")
+    public CodeDataResponse<List<Long>> listRoleMenuIds(@PathVariable Long id) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        RoleDO role = roleAdministrationService.requireRole(id);
+        identityAccessControlService.ensureCanManageRole(operatorId, role);
+        return CodeDataResponse.ok(roleMenuAdministrationService.listRoleMenuIds(id));
+    }
+}

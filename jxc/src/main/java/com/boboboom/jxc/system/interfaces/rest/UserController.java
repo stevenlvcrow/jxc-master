@@ -3,10 +3,7 @@ package com.boboboom.jxc.system.interfaces.rest;
 import com.boboboom.jxc.common.ApiResponse;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.system.application.command.CreateUserCommand;
 import com.boboboom.jxc.system.application.dto.UserDTO;
 import com.boboboom.jxc.system.application.service.UserApplicationService;
@@ -29,15 +26,12 @@ import java.util.Map;
 public class UserController {
 
     private final UserApplicationService userApplicationService;
-    private final RoleMapper roleMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
+    private final OrgScopeService orgScopeService;
 
     public UserController(UserApplicationService userApplicationService,
-                          RoleMapper roleMapper,
-                          UserRoleRelMapper userRoleRelMapper) {
+                          OrgScopeService orgScopeService) {
         this.userApplicationService = userApplicationService;
-        this.roleMapper = roleMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
+        this.orgScopeService = orgScopeService;
     }
 
     @PostMapping
@@ -67,25 +61,9 @@ public class UserController {
     }
 
     private void requirePlatformAdmin() {
-        if (AuthContextHolder.get() == null || AuthContextHolder.get().getUserId() == null) {
-            throw new BusinessException("仅平台管理员可执行此操作");
-        }
-        Long userId = AuthContextHolder.get().getUserId();
-        RoleDO role = roleMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getRoleCode, "PLATFORM_SUPER_ADMIN")
-                .last("limit 1"));
-        if (role == null) {
-            throw new BusinessException("仅平台管理员可执行此操作");
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getRoleId, role.getId())
-                .eq(UserRoleRelDO::getScopeType, "PLATFORM")
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        if (rel == null) {
+        Long userId = AuthContextHolder.requireUserId("仅平台管理员可执行此操作");
+        if (!orgScopeService.isPlatformAdmin(userId)) {
             throw new BusinessException("仅平台管理员可执行此操作");
         }
     }
 }
-

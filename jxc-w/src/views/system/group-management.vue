@@ -123,14 +123,18 @@ const openEditDialog = (group: GroupAdminItem) => {
 };
 
 const handleSave = async () => {
-  if (!form.groupCode.trim() || !form.groupName.trim()) {
-    ElMessage.warning('请填写集团编码和集团名称');
+  if (!form.groupName.trim()) {
+    ElMessage.warning('请填写集团名称');
+    return;
+  }
+  if (editingGroupId.value && !form.groupCode.trim()) {
+    ElMessage.warning('请填写集团编码');
     return;
   }
   submitting.value = true;
   try {
     const payload = {
-      groupCode: form.groupCode.trim(),
+      groupCode: editingGroupId.value ? form.groupCode.trim() : undefined,
       groupName: form.groupName.trim(),
       status: form.status,
       remark: form.remark.trim() || undefined,
@@ -309,7 +313,7 @@ watch(
       @closed="resetForm"
     >
       <el-form label-width="100px" class="standard-dialog-form">
-        <el-form-item label="集团编码" required>
+        <el-form-item v-if="editingGroupId" label="集团编码" required>
           <el-input v-model="form.groupCode" maxlength="64" />
         </el-form-item>
         <el-form-item label="集团名称" required>

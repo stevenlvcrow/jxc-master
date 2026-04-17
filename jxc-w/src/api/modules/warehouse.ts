@@ -20,7 +20,7 @@ export type WarehouseRow = {
 };
 
 export type WarehouseCreatePayload = {
-  warehouseCode: string;
+  warehouseCode?: string;
   warehouseName: string;
   department?: string;
   status?: 'ENABLED' | 'DISABLED';

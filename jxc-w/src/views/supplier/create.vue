@@ -464,7 +464,7 @@ const loadSupplierDetail = async (id: number) => {
 };
 
 const buildPayload = (): CreateSupplierPayload => ({
-  supplierCode: form.supplierCode.trim(),
+  supplierCode: isEditMode.value ? form.supplierCode.trim() : undefined,
   supplierName: form.supplierName.trim(),
   supplierShortName: form.supplierShortName.trim() || undefined,
   supplierMnemonic: form.supplierMnemonic.trim() || undefined,
@@ -561,7 +561,7 @@ const saveSupplier = async () => {
         <div class="form-section-block" :ref="registerSectionRef('basic')">
           <div class="form-section-title">基础信息</div>
           <div class="item-form-grid">
-            <el-form-item label="供货商编码" data-field="supplierCode">
+            <el-form-item v-if="isEditMode" label="供货商编码" data-field="supplierCode">
               <el-input v-model="form.supplierCode" placeholder="请输入供货商编码" />
             </el-form-item>
             <el-form-item label="供货商名称" data-field="supplierName">

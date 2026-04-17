@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 
 public class GroupUpsertRequest {
 
-    @NotBlank
     private String groupCode;
 
     @NotBlank

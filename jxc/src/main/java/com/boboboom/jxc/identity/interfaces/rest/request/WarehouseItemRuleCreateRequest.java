@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 
 public record WarehouseItemRuleCreateRequest(
-    @NotBlank String ruleCode,
     @NotBlank String ruleName,
     Boolean businessControl,
     Boolean controlOrder,

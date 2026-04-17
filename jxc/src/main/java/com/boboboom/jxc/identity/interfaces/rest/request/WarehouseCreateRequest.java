@@ -4,7 +4,6 @@ import jakarta.validation.constraints.NotBlank;
 
 public class WarehouseCreateRequest {
 
-    @NotBlank
     private String warehouseCode;
 
     @NotBlank

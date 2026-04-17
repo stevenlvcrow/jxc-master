@@ -78,7 +78,6 @@ const form = reactive<WarehouseForm>({
 });
 const formRules: FormRules<WarehouseForm> = {
   warehouseType: [{ required: true, message: '请选择仓库类型', trigger: 'change' }],
-  warehouseCode: [{ required: true, message: '请输入仓库编码', trigger: 'blur' }],
   warehouseName: [{ required: true, message: '请输入仓库名称', trigger: 'blur' }],
   contactName: [{ required: true, message: '请输入联系人', trigger: 'blur' }],
   contactPhone: [{ required: true, message: '请输入联系电话', trigger: 'blur' }],
@@ -200,7 +199,6 @@ const toApiStatus = (enabled: boolean): 'ENABLED' | 'DISABLED' => enabled ? 'ENA
 
 /** Build payload from form */
 const buildPayload = (): WarehouseCreatePayload => ({
-  warehouseCode: form.warehouseCode.trim(),
   warehouseName: form.warehouseName.trim(),
   department: form.department.trim() || undefined,
   status: toApiStatus(form.enabled),
@@ -516,9 +514,6 @@ const handlePageSizeChange = (size: number) => {
             :value="option"
           />
         </el-select>
-      </el-form-item>
-      <el-form-item label="仓库编码" prop="warehouseCode">
-        <el-input v-model="form.warehouseCode" placeholder="请输入仓库编码" :disabled="isEdit" />
       </el-form-item>
       <el-form-item label="仓库名称" prop="warehouseName">
         <el-input v-model="form.warehouseName" placeholder="请输入仓库名称" />

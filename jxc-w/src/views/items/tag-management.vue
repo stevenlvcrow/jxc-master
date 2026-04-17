@@ -18,7 +18,6 @@ type TagDialogForm = {
 };
 
 type BatchImportRow = {
-  tagCode: string;
   tagName: string;
   itemName: string;
 };
@@ -50,11 +49,10 @@ const form = reactive<TagDialogForm>({
 });
 
 const batchRows = ref<BatchImportRow[]>([
-  { tagCode: '', tagName: '', itemName: '' },
+  { tagName: '', itemName: '' },
 ]);
 
 const formRules: FormRules<TagDialogForm> = {
-  tagCode: [{ required: true, message: '请输入标签编码', trigger: 'blur' }],
   tagName: [{ required: true, message: '请输入标签名称', trigger: 'blur' }],
 };
 
@@ -147,7 +145,7 @@ const handleSubmit = async () => {
   }
 
   const payload = {
-    tagCode: form.tagCode.trim(),
+    tagCode: editingTagId.value !== null ? form.tagCode.trim() : undefined,
     tagName: form.tagName.trim(),
     itemName: form.itemName.trim() || undefined,
   };
@@ -179,7 +177,7 @@ const handleDelete = async (row: ItemTagRow) => {
 };
 
 const resetBatchRows = () => {
-  batchRows.value = [{ tagCode: '', tagName: '', itemName: '' }];
+  batchRows.value = [{ tagName: '', itemName: '' }];
 };
 
 const openBatchDialog = () => {
@@ -192,7 +190,7 @@ const closeBatchDialog = () => {
 };
 
 const addBatchRow = (index: number) => {
-  batchRows.value.splice(index + 1, 0, { tagCode: '', tagName: '', itemName: '' });
+  batchRows.value.splice(index + 1, 0, { tagName: '', itemName: '' });
 };
 
 const removeBatchRow = (index: number) => {
@@ -205,31 +203,18 @@ const removeBatchRow = (index: number) => {
 
 const handleBatchImportSubmit = async () => {
   const rows = batchRows.value.map((row) => ({
-    tagCode: row.tagCode.trim(),
     tagName: row.tagName.trim(),
     itemName: row.itemName.trim(),
   }));
 
-  const emptyCode = rows.findIndex((row) => !row.tagCode);
-  if (emptyCode !== -1) {
-    ElMessage.warning(`第 ${emptyCode + 1} 行标签编码不能为空`);
-    return;
-  }
   const emptyName = rows.findIndex((row) => !row.tagName);
   if (emptyName !== -1) {
     ElMessage.warning(`第 ${emptyName + 1} 行标签名称不能为空`);
     return;
   }
 
-  const duplicateCode = rows.find((row, index) => rows.findIndex((x) => x.tagCode === row.tagCode) !== index);
-  if (duplicateCode) {
-    ElMessage.warning(`导入数据中标签编码重复：${duplicateCode.tagCode}`);
-    return;
-  }
-
   await batchImportItemTagsApi({
     items: rows.map((row) => ({
-      tagCode: row.tagCode,
       tagName: row.tagName,
       itemName: row.itemName || undefined,
     })),
@@ -350,7 +335,7 @@ onMounted(async () => {
     @closed="closeCreateDialog"
   >
     <el-form ref="formRef" :model="form" :rules="formRules" label-width="90px" class="standard-dialog-form">
-      <el-form-item label="标签编码" prop="tagCode">
+      <el-form-item v-if="editingTagId !== null" label="标签编码" prop="tagCode">
         <el-input v-model="form.tagCode" placeholder="请输入标签编码" />
       </el-form-item>
       <el-form-item label="标签名称" prop="tagName">
@@ -385,11 +370,6 @@ onMounted(async () => {
         <template #default="{ $index }">
           <el-button text type="primary" @click="addBatchRow($index)">+</el-button>
           <el-button text @click="removeBatchRow($index)">-</el-button>
-        </template>
-      </el-table-column>
-      <el-table-column label="标签编码" width="180">
-        <template #default="{ row }">
-          <el-input v-model="row.tagCode" placeholder="请输入标签编码" />
         </template>
       </el-table-column>
       <el-table-column label="标签名称" width="180">

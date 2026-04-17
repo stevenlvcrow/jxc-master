@@ -68,7 +68,7 @@ export const batchDeleteItemsApi = async (ids: string[], orgId?: string) => {
 
 export type ItemCreatePayload = {
   name: string;
-  code: string;
+  code?: string;
   category: string;
   spec?: string;
   status: string;
@@ -209,7 +209,6 @@ export type ItemCategoryListParams = {
 };
 
 export type ItemCategoryUpsertPayload = {
-  categoryCode: string;
   categoryName: string;
   parentCategory: string;
   status: ItemCategoryStatus;
@@ -220,7 +219,6 @@ export type ItemCategoryBatchCreatePayload = {
   parentCategory: string;
   status: ItemCategoryStatus;
   items: Array<{
-    categoryCode: string;
     categoryName: string;
     remark?: string;
   }>;
@@ -355,14 +353,14 @@ export type ItemTagListParams = {
 };
 
 export type ItemTagUpsertPayload = {
-  tagCode: string;
+  tagCode?: string;
   tagName: string;
   itemName?: string;
 };
 
 export type ItemTagBatchImportPayload = {
   items: Array<{
-    tagCode: string;
+    tagCode?: string;
     tagName: string;
     itemName?: string;
   }>;

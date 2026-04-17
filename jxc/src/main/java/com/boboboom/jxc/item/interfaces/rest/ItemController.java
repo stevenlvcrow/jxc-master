@@ -4,13 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemProfileDO;
 import com.boboboom.jxc.item.infrastructure.persistence.mapper.ItemProfileMapper;
@@ -59,26 +55,21 @@ public class ItemController {
     private static final String ITEM_TYPE_DEFAULT = "普通物品";
     private static final String SOURCE_SELF_BUILT = "自建";
     private static final String PLACEHOLDER = "-";
-    private static final String SCOPE_PLATFORM = "PLATFORM";
-    private static final String SCOPE_GROUP = "GROUP";
-    private static final String SCOPE_STORE = "STORE";
+    private static final String ITEM_CODE_PREFIX = "WPBM";
 
     private final ItemProfileMapper itemProfileMapper;
     private final ObjectMapper objectMapper;
-    private final RoleMapper roleMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
-    private final StoreMapper storeMapper;
+    private final BusinessCodeGenerator businessCodeGenerator;
+    private final OrgScopeService orgScopeService;
 
     public ItemController(ItemProfileMapper itemProfileMapper,
                           ObjectMapper objectMapper,
-                          RoleMapper roleMapper,
-                          UserRoleRelMapper userRoleRelMapper,
-                          StoreMapper storeMapper) {
+                          BusinessCodeGenerator businessCodeGenerator,
+                          OrgScopeService orgScopeService) {
         this.itemProfileMapper = itemProfileMapper;
         this.objectMapper = objectMapper;
-        this.roleMapper = roleMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
-        this.storeMapper = storeMapper;
+        this.businessCodeGenerator = businessCodeGenerator;
+        this.orgScopeService = orgScopeService;
     }
 
     @PostMapping
@@ -86,16 +77,15 @@ public class ItemController {
     public CodeDataResponse<IdPayload> create(@RequestParam(required = false) String orgId,
                                               @Valid @RequestBody ItemCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
-        String itemCode = requiredTrim(request.code(), "物品编码不能为空");
+        String itemCode = generateItemCode(scope);
         validateRequest(request);
-        ensureCodeUnique(scope, itemCode, null, false);
 
         ItemProfileDO entity = new ItemProfileDO();
         entity.setScopeType(scope.scopeType());
         entity.setScopeId(scope.scopeId());
         entity.setItemId(generateId("itm"));
         entity.setItemCode(itemCode);
-        entity.setDetailJson(writeRequestJson(request));
+        entity.setDetailJson(writeRequestJson(copyWithCode(request, itemCode)));
         entity.setDraft(Boolean.FALSE);
         itemProfileMapper.insert(entity);
         return CodeDataResponse.ok(new IdPayload(entity.getItemId()));
@@ -106,17 +96,14 @@ public class ItemController {
     public CodeDataResponse<IdPayload> saveDraft(@RequestParam(required = false) String orgId,
                                                  @RequestBody ItemCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
-        String itemCode = trimNullable(request.code());
-        if (itemCode != null) {
-            ensureCodeUnique(scope, itemCode, null, true);
-        }
+        String itemCode = generateItemCode(scope);
 
         ItemProfileDO entity = new ItemProfileDO();
         entity.setScopeType(scope.scopeType());
         entity.setScopeId(scope.scopeId());
         entity.setItemId(generateId("draft"));
-        entity.setItemCode(itemCode == null ? entity.getItemId() : itemCode);
-        entity.setDetailJson(writeRequestJson(request));
+        entity.setItemCode(itemCode);
+        entity.setDetailJson(writeRequestJson(copyWithCode(request, itemCode)));
         entity.setDraft(Boolean.TRUE);
         itemProfileMapper.insert(entity);
         return CodeDataResponse.ok(new IdPayload(entity.getItemId()));
@@ -137,12 +124,13 @@ public class ItemController {
                                          @Valid @RequestBody ItemCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         ItemProfileDO entity = requireItem(id, scope, true);
-        String itemCode = requiredTrim(request.code(), "物品编码不能为空");
         validateRequest(request);
-        ensureCodeUnique(scope, itemCode, id, Boolean.TRUE.equals(entity.getDraft()));
-
-        entity.setItemCode(itemCode);
-        entity.setDetailJson(writeRequestJson(request));
+        String itemCode = trimNullable(entity.getItemCode());
+        if (itemCode == null) {
+            itemCode = generateItemCode(scope);
+            entity.setItemCode(itemCode);
+        }
+        entity.setDetailJson(writeRequestJson(copyWithCode(request, itemCode)));
         itemProfileMapper.updateById(entity);
         return CodeDataResponse.ok();
     }
@@ -267,7 +255,6 @@ public class ItemController {
 
     private void validateRequest(ItemCreateRequest request) {
         requiredTrim(request.name(), "物品名称不能为空");
-        requiredTrim(request.code(), "物品编码不能为空");
         requiredTrim(request.category(), "物品类别不能为空");
         normalizeStatus(request.status());
         normalizeStorageMode(request.storageMode());
@@ -285,6 +272,10 @@ public class ItemController {
 
     private ItemListRow toListProjection(ItemProfileDO profile) {
         ItemCreateRequest request = parseRequestJson(profile.getDetailJson());
+        String itemCode = trimNullable(profile.getItemCode());
+        if (itemCode == null) {
+            itemCode = trimNullable(request.code());
+        }
         String baseUnit = resolveBaseUnit(request);
         String purchaseUnit = resolveUnit(request.defaultPurchaseUnit(), baseUnit);
         String orderUnit = resolveUnit(request.defaultOrderUnit(), baseUnit);
@@ -293,7 +284,7 @@ public class ItemController {
         return new ItemListRow(
                 profile.getItemId(),
                 0,
-                requiredTrim(request.code(), "物品编码不能为空"),
+                defaultIfBlank(itemCode, PLACEHOLDER),
                 requiredTrim(request.name(), "物品名称不能为空"),
                 defaultIfBlank(trimNullable(request.spec()), PLACEHOLDER),
                 ITEM_TYPE_DEFAULT,
@@ -328,6 +319,18 @@ public class ItemController {
             JsonNode root = objectMapper.valueToTree(request);
             if (root instanceof ObjectNode objectNode) {
                 objectNode.put("status", status);
+            }
+            return objectMapper.treeToValue(root, ItemCreateRequest.class);
+        } catch (JsonProcessingException ex) {
+            throw new BusinessException("物品详情序列化失败");
+        }
+    }
+
+    private ItemCreateRequest copyWithCode(ItemCreateRequest request, String code) {
+        try {
+            JsonNode root = objectMapper.valueToTree(request);
+            if (root instanceof ObjectNode objectNode) {
+                objectNode.put("code", code);
             }
             return objectMapper.treeToValue(root, ItemCreateRequest.class);
         } catch (JsonProcessingException ex) {
@@ -540,6 +543,17 @@ public class ItemController {
         return prefix + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
 
+    private String generateItemCode(ItemScope scope) {
+        List<ItemProfileDO> exists = itemProfileMapper.selectList(
+                scopeQuery(scope).select(ItemProfileDO::getItemCode)
+        );
+        List<String> codes = exists.stream()
+                .map(ItemProfileDO::getItemCode)
+                .filter(StringUtils::hasText)
+                .toList();
+        return businessCodeGenerator.nextCode(ITEM_CODE_PREFIX, codes);
+    }
+
     private LambdaQueryWrapper<ItemProfileDO> scopeQuery(ItemScope scope) {
         return new LambdaQueryWrapper<ItemProfileDO>()
                 .eq(ItemProfileDO::getScopeType, scope.scopeType())
@@ -547,99 +561,8 @@ public class ItemController {
     }
 
     private ItemScope resolveItemScope(String orgId) {
-        Long userId = currentUserId();
-        Scope requested = parseScope(orgId);
-        if (isPlatformAdmin(userId)) {
-            return new ItemScope(requested.scopeType(), requested.scopeId());
-        }
-        if (SCOPE_PLATFORM.equals(requested.scopeType())) {
-            throw new BusinessException("请先选择有权限的机构");
-        }
-        if (SCOPE_GROUP.equals(requested.scopeType())) {
-            if (!hasScope(userId, SCOPE_GROUP, requested.scopeId())) {
-                throw new BusinessException("当前账号无该集团权限");
-            }
-            return new ItemScope(SCOPE_GROUP, requested.scopeId());
-        }
-        if (SCOPE_STORE.equals(requested.scopeType())) {
-            if (hasScope(userId, SCOPE_STORE, requested.scopeId())) {
-                return new ItemScope(SCOPE_STORE, requested.scopeId());
-            }
-            Long groupId = findGroupIdByStoreId(requested.scopeId());
-            if (groupId != null && hasScope(userId, SCOPE_GROUP, groupId)) {
-                return new ItemScope(SCOPE_STORE, requested.scopeId());
-            }
-            throw new BusinessException("当前账号无该门店权限");
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Scope parseScope(String orgId) {
-        if (orgId == null || orgId.isBlank()) {
-            return new Scope(SCOPE_PLATFORM, 0L);
-        }
-        if (orgId.startsWith("group-")) {
-            return new Scope(SCOPE_GROUP, parseNumericId(orgId.substring("group-".length())));
-        }
-        if (orgId.startsWith("store-")) {
-            return new Scope(SCOPE_STORE, parseNumericId(orgId.substring("store-".length())));
-        }
-        throw new BusinessException("机构参数非法");
-    }
-
-    private Long parseNumericId(String value) {
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("机构参数非法");
-        }
-    }
-
-    private Long currentUserId() {
-        if (AuthContextHolder.get() == null || AuthContextHolder.get().getUserId() == null) {
-            throw new BusinessException("登录已失效，请重新登录");
-        }
-        return AuthContextHolder.get().getUserId();
-    }
-
-    private boolean isPlatformAdmin(Long userId) {
-        RoleDO role = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getRoleCode, "PLATFORM_SUPER_ADMIN")
-                .last("limit 1"));
-        if (role == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getRoleId, role.getId())
-                .eq(UserRoleRelDO::getScopeType, SCOPE_PLATFORM)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private boolean hasScope(Long userId, String scopeType, Long scopeId) {
-        if (scopeId == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getScopeType, scopeType)
-                .eq(UserRoleRelDO::getScopeId, scopeId)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
-    }
-
-    private Long findGroupIdByStoreId(Long storeId) {
-        if (storeId == null) {
-            return null;
-        }
-        StoreDO store = storeMapper.selectById(storeId);
-        if (store == null) {
-            return null;
-        }
-        return store.getGroupId();
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
+        return new ItemScope(scope.scopeType(), scope.scopeId());
     }
 
     public record ItemListRow(String id,
@@ -677,9 +600,6 @@ public class ItemController {
     }
 
     public record IdPayload(String id) {
-    }
-
-    private record Scope(String scopeType, Long scopeId) {
     }
 
     private record ItemScope(String scopeType, Long scopeId) {
