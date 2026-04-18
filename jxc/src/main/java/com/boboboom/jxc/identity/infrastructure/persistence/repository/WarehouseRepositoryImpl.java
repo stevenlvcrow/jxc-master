@@ -26,9 +26,11 @@ public class WarehouseRepositoryImpl implements WarehouseRepository {
 
     @Override
     public Optional<WarehouseDO> findByWarehouseCode(String warehouseCode) {
-        return Optional.ofNullable(warehouseMapper.selectOne(new LambdaQueryWrapper<WarehouseDO>()
+        return warehouseMapper.selectList(new LambdaQueryWrapper<WarehouseDO>()
                 .eq(WarehouseDO::getWarehouseCode, warehouseCode)
-                .last("limit 1")));
+                .orderByDesc(WarehouseDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

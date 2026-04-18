@@ -27,9 +27,11 @@ public class GroupRepositoryImpl implements GroupRepository {
 
     @Override
     public Optional<GroupDO> findByGroupCode(String groupCode) {
-        return Optional.ofNullable(groupMapper.selectOne(new LambdaQueryWrapper<GroupDO>()
+        return groupMapper.selectList(new LambdaQueryWrapper<GroupDO>()
                 .eq(GroupDO::getGroupCode, groupCode)
-                .last("limit 1")));
+                .orderByDesc(GroupDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

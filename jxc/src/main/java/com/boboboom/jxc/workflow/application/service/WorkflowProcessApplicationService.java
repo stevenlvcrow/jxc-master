@@ -45,21 +45,26 @@ public class WorkflowProcessApplicationService {
     private final WorkflowDefinitionConfigRepository configRepository;
     private final StoreRepository storeRepository;
     private final OrgScopeService orgScopeService;
+    private final InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService;
 
     public WorkflowProcessApplicationService(WorkflowProcessRegistryRepository processRegistryRepository,
                                              WorkflowProcessStoreBindingRepository processStoreBindingRepository,
                                              WorkflowDefinitionConfigRepository configRepository,
                                              StoreRepository storeRepository,
-                                             OrgScopeService orgScopeService) {
+                                             OrgScopeService orgScopeService,
+                                             InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService) {
         this.processRegistryRepository = processRegistryRepository;
         this.processStoreBindingRepository = processStoreBindingRepository;
         this.configRepository = configRepository;
         this.storeRepository = storeRepository;
         this.orgScopeService = orgScopeService;
+        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapService;
     }
 
     public List<WorkflowProcessView> list(String orgId) {
         Long groupId = resolveGroupScope(orgId);
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        inventoryWorkflowBootstrapService.ensureDefaults(groupId, operatorId);
         List<WorkflowProcessRegistryDO> processes = processRegistryRepository.findByScopeOrdered(SCOPE_GROUP, groupId);
         if (processes.isEmpty()) {
             return List.of();

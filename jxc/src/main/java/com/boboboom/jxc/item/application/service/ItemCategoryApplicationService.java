@@ -447,25 +447,25 @@ public class ItemCategoryApplicationService {
         if (Objects.equals(finalSortBy, "parentCategory")) {
             return filtered.stream()
                     .sorted((a, b) -> {
-                        int c1 = compareNullable(a.getParentCategory(), b.getParentCategory());
+                        int c1 = compareNullableString(a.getParentCategory(), b.getParentCategory());
                         if (c1 != 0) {
                             return c1;
                         }
-                        int c2 = compareNullable(a.getCategoryName(), b.getCategoryName());
+                        int c2 = compareNullableString(a.getCategoryName(), b.getCategoryName());
                         if (c2 != 0) {
                             return c2;
                         }
-                        return compareNullableDesc(a.getId(), b.getId());
+                        return compareNullableLongDesc(a.getId(), b.getId());
                     })
                     .toList();
         }
         return filtered.stream()
                 .sorted((a, b) -> {
-                    int c1 = compareNullableDesc(a.getCreatedAt(), b.getCreatedAt());
+                    int c1 = compareNullableDateTimeDesc(a.getCreatedAt(), b.getCreatedAt());
                     if (c1 != 0) {
                         return c1;
                     }
-                    return compareNullableDesc(a.getId(), b.getId());
+                    return compareNullableLongDesc(a.getId(), b.getId());
                 })
                 .toList();
     }
@@ -500,7 +500,7 @@ public class ItemCategoryApplicationService {
         return result;
     }
 
-    private int compareNullable(Comparable left, Comparable right) {
+    private int compareNullableString(String left, String right) {
         if (left == null && right == null) {
             return 0;
         }
@@ -513,8 +513,38 @@ public class ItemCategoryApplicationService {
         return left.compareTo(right);
     }
 
-    private int compareNullableDesc(Comparable left, Comparable right) {
-        return -compareNullable(left, right);
+    private int compareNullableLongDesc(Long left, Long right) {
+        return -compareNullableLong(left, right);
+    }
+
+    private int compareNullableDateTimeDesc(LocalDateTime left, LocalDateTime right) {
+        return -compareNullableDateTime(left, right);
+    }
+
+    private int compareNullableLong(Long left, Long right) {
+        if (left == null && right == null) {
+            return 0;
+        }
+        if (left == null) {
+            return -1;
+        }
+        if (right == null) {
+            return 1;
+        }
+        return left.compareTo(right);
+    }
+
+    private int compareNullableDateTime(LocalDateTime left, LocalDateTime right) {
+        if (left == null && right == null) {
+            return 0;
+        }
+        if (left == null) {
+            return -1;
+        }
+        if (right == null) {
+            return 1;
+        }
+        return left.compareTo(right);
     }
 
     private ItemScope resolveItemScope(String orgId) {

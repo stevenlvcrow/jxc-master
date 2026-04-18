@@ -3,10 +3,10 @@ package com.boboboom.jxc.identity.interfaces.rest;
 import com.boboboom.jxc.identity.application.service.WarehouseItemRuleAdministrationService;
 import com.boboboom.jxc.identity.application.service.IdentityAccessControlService;
 import com.boboboom.jxc.identity.application.service.IdentityAdminLookupService;
-import com.boboboom.jxc.identity.domain.repository.WarehouseItemRuleRepository;
 import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleCreateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -57,9 +58,13 @@ public class IdentityWarehouseRuleAdminController {
      * 查询分组下的仓库物料规则列表。
      *
      * @param groupId 分组主键
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @return 规则列表响应
      */
-    public CodeDataResponse<List<RuleListView>> listItemRules(@PathVariable Long groupId) {
+    public CodeDataResponse<PageData<RuleListView>> listItemRules(@PathVariable Long groupId,
+                                                                  @RequestParam(defaultValue = "1") Integer pageNum,
+                                                                  @RequestParam(defaultValue = "10") Integer pageSize) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
         List<RuleListView> result = warehouseItemRuleAdministrationService.listRules(groupId).stream()
                 .map(rule -> new RuleListView(
@@ -74,7 +79,7 @@ public class IdentityWarehouseRuleAdminController {
                         rule.updatedAt()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @GetMapping("/item-rules/{id}")
@@ -85,8 +90,8 @@ public class IdentityWarehouseRuleAdminController {
      * @return 规则详情响应
      */
     public CodeDataResponse<RuleDetailView> getRuleDetail(@PathVariable Long id) {
-        WarehouseItemRuleRepository.RuleDetailData detail = warehouseItemRuleAdministrationService.getRuleDetail(id);
-        WarehouseItemRuleRepository.RuleRecord rule = detail.rule();
+        WarehouseItemRuleAdministrationService.RuleDetailData detail = warehouseItemRuleAdministrationService.getRuleDetail(id);
+        WarehouseItemRuleAdministrationService.RuleRecordData rule = detail.rule();
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), rule.groupId());
         return CodeDataResponse.ok(new RuleDetailView(
                 rule.id(),
@@ -139,15 +144,9 @@ public class IdentityWarehouseRuleAdminController {
                         request.controlPurchaseInbound() != null && request.controlPurchaseInbound(),
                         request.controlTransferInbound() != null && request.controlTransferInbound(),
                         identityAdminSupport.currentOperatorUsername(),
-                        request.items() == null ? null : request.items().stream()
-                                .map(i -> new WarehouseItemRuleRepository.RuleItemData(null, i.itemCode(), i.itemName(), i.specModel(), i.itemCategory()))
-                                .toList(),
-                        request.categories() == null ? null : request.categories().stream()
-                                .map(c -> new WarehouseItemRuleRepository.RuleCategoryData(null, c.categoryCode(), c.categoryName(), c.parentCategory(), c.childCategory()))
-                                .toList(),
-                        request.warehouses() == null ? null : request.warehouses().stream()
-                                .map(w -> new WarehouseItemRuleRepository.RuleWarehouseData(null, w.warehouseId(), null))
-                                .toList()
+                        toCreateRuleItems(request.items()),
+                        toCreateRuleCategories(request.categories()),
+                        toCreateRuleWarehouses(request.warehouses())
                 )
         );
         return CodeDataResponse.ok(new IdPayload(ruleId));
@@ -164,7 +163,7 @@ public class IdentityWarehouseRuleAdminController {
      */
     public CodeDataResponse<Void> updateItemRule(@PathVariable Long id,
                                                  @Valid @RequestBody WarehouseItemRuleUpdateRequest request) {
-        WarehouseItemRuleRepository.RuleRecord rule = warehouseItemRuleAdministrationService.requireRule(id);
+        WarehouseItemRuleAdministrationService.RuleRecordData rule = warehouseItemRuleAdministrationService.requireRule(id);
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), rule.groupId());
         warehouseItemRuleAdministrationService.updateRule(
                 new WarehouseItemRuleAdministrationService.UpdateRuleCommand(
@@ -175,15 +174,9 @@ public class IdentityWarehouseRuleAdminController {
                         request.controlPurchaseInbound(),
                         request.controlTransferInbound(),
                         identityAdminSupport.currentOperatorUsername(),
-                        request.items() == null ? null : request.items().stream()
-                                .map(i -> new WarehouseItemRuleRepository.RuleItemData(null, i.itemCode(), i.itemName(), i.specModel(), i.itemCategory()))
-                                .toList(),
-                        request.categories() == null ? null : request.categories().stream()
-                                .map(c -> new WarehouseItemRuleRepository.RuleCategoryData(null, c.categoryCode(), c.categoryName(), c.parentCategory(), c.childCategory()))
-                                .toList(),
-                        request.warehouses() == null ? null : request.warehouses().stream()
-                                .map(w -> new WarehouseItemRuleRepository.RuleWarehouseData(null, w.warehouseId(), null))
-                                .toList()
+                        toUpdateRuleItems(request.items()),
+                        toUpdateRuleCategories(request.categories()),
+                        toUpdateRuleWarehouses(request.warehouses())
                 )
         );
         return CodeDataResponse.ok(null);
@@ -198,9 +191,91 @@ public class IdentityWarehouseRuleAdminController {
      * @return 空响应
      */
     public CodeDataResponse<Void> deleteItemRule(@PathVariable Long id) {
-        WarehouseItemRuleRepository.RuleRecord rule = warehouseItemRuleAdministrationService.requireRule(id);
+        WarehouseItemRuleAdministrationService.RuleRecordData rule = warehouseItemRuleAdministrationService.requireRule(id);
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), rule.groupId());
         warehouseItemRuleAdministrationService.deleteRule(id);
         return CodeDataResponse.ok(null);
+    }
+
+    private List<WarehouseItemRuleAdministrationService.RuleItemData> toCreateRuleItems(List<WarehouseItemRuleCreateRequest.ItemRow> items) {
+        if (items == null) {
+            return null;
+        }
+        return items.stream()
+                .map(item -> new WarehouseItemRuleAdministrationService.RuleItemData(
+                        null,
+                        item.itemCode(),
+                        item.itemName(),
+                        item.specModel(),
+                        item.itemCategory()))
+                .toList();
+    }
+
+    private List<WarehouseItemRuleAdministrationService.RuleItemData> toUpdateRuleItems(List<WarehouseItemRuleUpdateRequest.ItemRow> items) {
+        if (items == null) {
+            return null;
+        }
+        return items.stream()
+                .map(item -> new WarehouseItemRuleAdministrationService.RuleItemData(
+                        null,
+                        item.itemCode(),
+                        item.itemName(),
+                        item.specModel(),
+                        item.itemCategory()))
+                .toList();
+    }
+
+    private List<WarehouseItemRuleAdministrationService.RuleCategoryData> toCreateRuleCategories(List<WarehouseItemRuleCreateRequest.CategoryRow> categories) {
+        if (categories == null) {
+            return null;
+        }
+        return categories.stream()
+                .map(category -> new WarehouseItemRuleAdministrationService.RuleCategoryData(
+                        null,
+                        category.categoryCode(),
+                        category.categoryName(),
+                        category.parentCategory(),
+                        category.childCategory()))
+                .toList();
+    }
+
+    private List<WarehouseItemRuleAdministrationService.RuleCategoryData> toUpdateRuleCategories(List<WarehouseItemRuleUpdateRequest.CategoryRow> categories) {
+        if (categories == null) {
+            return null;
+        }
+        return categories.stream()
+                .map(category -> new WarehouseItemRuleAdministrationService.RuleCategoryData(
+                        null,
+                        category.categoryCode(),
+                        category.categoryName(),
+                        category.parentCategory(),
+                        category.childCategory()))
+                .toList();
+    }
+
+    private List<WarehouseItemRuleAdministrationService.RuleWarehouseData> toCreateRuleWarehouses(List<WarehouseItemRuleCreateRequest.WarehouseRow> warehouses) {
+        if (warehouses == null) {
+            return null;
+        }
+        return warehouses.stream()
+                .map(warehouse -> new WarehouseItemRuleAdministrationService.RuleWarehouseData(null, warehouse.warehouseId(), null))
+                .toList();
+    }
+
+    private List<WarehouseItemRuleAdministrationService.RuleWarehouseData> toUpdateRuleWarehouses(List<WarehouseItemRuleUpdateRequest.WarehouseRow> warehouses) {
+        if (warehouses == null) {
+            return null;
+        }
+        return warehouses.stream()
+                .map(warehouse -> new WarehouseItemRuleAdministrationService.RuleWarehouseData(null, warehouse.warehouseId(), null))
+                .toList();
+    }
+
+    private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
+        int toIndex = Math.min(fromIndex + safePageSize, rows.size());
+        return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);
     }
 }

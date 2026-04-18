@@ -23,9 +23,11 @@ public class UserAccountPersistenceRepository extends AbstractMpRepository<UserA
     }
 
     public Optional<UserAccountDO> findByPhone(String phone) {
-        return Optional.ofNullable(mapper.selectOne(new LambdaQueryWrapper<UserAccountDO>()
+        return mapper.selectList(new LambdaQueryWrapper<UserAccountDO>()
                 .eq(UserAccountDO::getPhone, phone)
-                .last("limit 1")));
+                .orderByDesc(UserAccountDO::getId))
+                .stream()
+                .findFirst();
     }
 }
 

@@ -51,16 +51,20 @@ public class UnitController {
     /**
      * 查询单位列表。
      *
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @param keyword 关键字
      * @param status 状态
      * @param unitType 单位类型
      * @param orgId 机构标识
      * @return 单位列表响应
      */
-    public CodeDataResponse<List<UnitView>> listUnits(@RequestParam(required = false) String keyword,
-                                                      @RequestParam(required = false) String status,
-                                                      @RequestParam(required = false) String unitType,
-                                                      @RequestParam(required = false) String orgId) {
+    public CodeDataResponse<PageData<UnitView>> listUnits(@RequestParam(defaultValue = "1") Integer pageNum,
+                                                          @RequestParam(defaultValue = "10") Integer pageSize,
+                                                          @RequestParam(required = false) String keyword,
+                                                          @RequestParam(required = false) String status,
+                                                          @RequestParam(required = false) String unitType,
+                                                          @RequestParam(required = false) String orgId) {
         UnitScope scope = resolveUnitScope(orgId);
         List<UnitView> data = unitAdministrationService.listUnits(
                         scope.scopeType(),
@@ -72,7 +76,7 @@ public class UnitController {
                 .stream()
                 .map(this::toView)
                 .toList();
-        return CodeDataResponse.ok(data);
+        return CodeDataResponse.ok(paginate(data, pageNum, pageSize));
     }
 
     @PostMapping
@@ -291,6 +295,14 @@ public class UnitController {
         return new UnitScope(scope.scopeType(), scope.scopeId());
     }
 
+    private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
+        int toIndex = Math.min(fromIndex + safePageSize, rows.size());
+        return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);
+    }
+
     /**
      * 单位主键返回结果。
      *
@@ -317,6 +329,18 @@ public class UnitController {
                            String status,
                            String remark,
                            LocalDateTime createdAt) {
+    }
+
+    /**
+     * 通用分页响应。
+     *
+     * @param <T> 数据类型
+     * @param list 当前页数据
+     * @param total 总条数
+     * @param pageNum 当前页码
+     * @param pageSize 当前页大小
+     */
+    public record PageData<T>(List<T> list, long total, int pageNum, int pageSize) {
     }
 
     /**

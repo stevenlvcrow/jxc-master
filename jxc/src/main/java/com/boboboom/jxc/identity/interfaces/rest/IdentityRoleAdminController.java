@@ -8,6 +8,7 @@ import com.boboboom.jxc.identity.interfaces.rest.request.RoleMenuAssignRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.RoleUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -58,9 +59,13 @@ public class IdentityRoleAdminController {
      * 查询角色列表。
      *
      * @param orgId 机构标识
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @return 角色列表响应
      */
-    public CodeDataResponse<List<RoleAdminView>> listRoles(@RequestParam(required = false) String orgId) {
+    public CodeDataResponse<PageData<RoleAdminView>> listRoles(@RequestParam(required = false) String orgId,
+                                                               @RequestParam(defaultValue = "1") Integer pageNum,
+                                                               @RequestParam(defaultValue = "10") Integer pageSize) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
         List<RoleAdminView> result = roleAdministrationService.listRoles(operatorId, platformAdmin, orgId).stream()
@@ -79,7 +84,7 @@ public class IdentityRoleAdminController {
                         role.editable()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @PostMapping("/roles")
@@ -163,9 +168,13 @@ public class IdentityRoleAdminController {
      * 查询当前可分配的菜单列表。
      *
      * @param orgId 机构标识
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @return 菜单列表响应
      */
-    public CodeDataResponse<List<MenuAdminView>> listMenus(@RequestParam(required = false) String orgId) {
+    public CodeDataResponse<PageData<MenuAdminView>> listMenus(@RequestParam(required = false) String orgId,
+                                                               @RequestParam(defaultValue = "1") Integer pageNum,
+                                                               @RequestParam(defaultValue = "10") Integer pageSize) {
         roleMenuAdministrationService.ensureGroupMgmtMenusForGroupAdmin();
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
@@ -186,7 +195,7 @@ public class IdentityRoleAdminController {
                         menu.sortNo()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @GetMapping("/roles/{id}/menu-ids")
@@ -194,12 +203,24 @@ public class IdentityRoleAdminController {
      * 查询角色已绑定的菜单主键列表。
      *
      * @param id 角色主键
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @return 菜单主键列表响应
      */
-    public CodeDataResponse<List<Long>> listRoleMenuIds(@PathVariable Long id) {
+    public CodeDataResponse<PageData<Long>> listRoleMenuIds(@PathVariable Long id,
+                                                            @RequestParam(defaultValue = "1") Integer pageNum,
+                                                            @RequestParam(defaultValue = "10") Integer pageSize) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         RoleDO role = roleAdministrationService.requireRole(id);
         identityAccessControlService.ensureCanManageRole(operatorId, role);
-        return CodeDataResponse.ok(roleMenuAdministrationService.listRoleMenuIds(id));
+        return CodeDataResponse.ok(paginate(roleMenuAdministrationService.listRoleMenuIds(id), pageNum, pageSize));
+    }
+
+    private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
+        int toIndex = Math.min(fromIndex + safePageSize, rows.size());
+        return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);
     }
 }

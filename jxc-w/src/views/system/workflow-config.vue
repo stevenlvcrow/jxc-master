@@ -12,6 +12,7 @@ import {
 } from '@/api/modules/workflow';
 import { fetchAdminRolesApi, fetchAdminUsersApi, type RoleAdminItem, type UserAdminItem } from '@/api/modules/system-admin';
 import { useSessionStore } from '@/stores/session';
+import { workflowBusinessOptions } from '@/views/inventory/document-meta';
 
 type EditableNode = WorkflowNode & {
   x: number;
@@ -35,8 +36,6 @@ const approverLoading = ref(false);
 const workflowBusinesses = ref<WorkflowProcessItem[]>([]);
 const roleOptions = ref<RoleAdminItem[]>([]);
 const userOptions = ref<UserAdminItem[]>([]);
-const TARGET_BUSINESS_CODE = 'PURCHASE_INBOUND';
-const TARGET_BUSINESS_NAME = '采购入库流程';
 const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
 const copySourceWorkflowCode = ref('');
 const viewWorkflowCode = ref('');
@@ -127,7 +126,7 @@ const isScopedContext = computed(
 const businessOptions = computed(() => workflowBusinesses.value.map((item) => ({
   label: item.businessName,
   value: item.processId,
-})).filter((item) => item.value === TARGET_BUSINESS_CODE));
+})));
 
 const currentBusiness = computed(
   () => workflowBusinesses.value.find((item) => item.processId === currentBusinessCode.value) ?? null,
@@ -164,7 +163,8 @@ const editDraft = reactive({
 });
 
 const applyBusinessSelection = (businessCode: string) => {
-  if (businessCode !== TARGET_BUSINESS_CODE) {
+  const selected = workflowBusinesses.value.find((item) => item.processId === businessCode) ?? null;
+  if (!selected) {
     currentBusinessCode.value = '';
     form.businessCode = '';
     form.workflowName = '';
@@ -173,7 +173,6 @@ const applyBusinessSelection = (businessCode: string) => {
     return;
   }
   currentBusinessCode.value = businessCode;
-  const selected = workflowBusinesses.value.find((item) => item.processId === businessCode) ?? null;
   form.businessCode = selected?.processId ?? '';
   form.workflowName = selected?.businessName ?? '';
   form.workflowCode = selected?.templateId?.trim() ?? '';
@@ -1184,10 +1183,17 @@ const loadBusinesses = async () => {
   }
   businessLoading.value = true;
   try {
+    const businessLabelMap = new Map(workflowBusinessOptions.map((item) => [item.processCode, item.businessName]));
+    const optionOrderMap = new Map(workflowBusinessOptions.map((item, index) => [item.processCode, index]));
     workflowBusinesses.value = (await fetchWorkflowProcessesApi(sessionStore.currentOrgId))
-      .filter((item) => item.processId === TARGET_BUSINESS_CODE);
+      .filter((item) => businessLabelMap.has(item.processId))
+      .map((item) => ({
+        ...item,
+        businessName: businessLabelMap.get(item.processId) ?? item.businessName,
+      }))
+      .sort((left, right) => (optionOrderMap.get(left.processId) ?? 999) - (optionOrderMap.get(right.processId) ?? 999));
     if (!workflowBusinesses.value.length) {
-      ElMessage.warning(`请先在业务管理中新增“${TARGET_BUSINESS_NAME}（${TARGET_BUSINESS_CODE}）”`);
+      ElMessage.warning('请先在业务管理中新增库存审核业务流程');
       currentBusinessCode.value = '';
       copySourceWorkflowCode.value = '';
       viewWorkflowCode.value = '';
@@ -1197,7 +1203,10 @@ const loadBusinesses = async () => {
       return;
     }
     const exists = workflowBusinesses.value.some((item) => item.processId === currentBusinessCode.value);
-    const targetBusinessCode = exists ? currentBusinessCode.value : workflowBusinesses.value[0].processId;
+    const routeBusinessCode = String(route.query.businessCode ?? '').trim();
+    const targetBusinessCode = exists
+      ? currentBusinessCode.value
+      : (workflowBusinesses.value.find((item) => item.processId === routeBusinessCode)?.processId ?? workflowBusinesses.value[0].processId);
     applyBusinessSelection(targetBusinessCode);
     if (copySourceWorkflowCode.value) {
       form.workflowCode = '';
@@ -1214,9 +1223,6 @@ const applyRouteSelection = () => {
   const routeViewWorkflowCode = String(route.query.viewWorkflowCode ?? '').trim();
   copySourceWorkflowCode.value = routeCopyFromWorkflowCode;
   viewWorkflowCode.value = routeViewWorkflowCode;
-  if (routeBusinessCode !== TARGET_BUSINESS_CODE) {
-    return;
-  }
   const matched = workflowBusinesses.value.find((item) => item.processId === routeBusinessCode);
   if (!matched) {
     return;

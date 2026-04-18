@@ -11,6 +11,8 @@ public interface InventoryBalanceRepository {
 
     Optional<InventoryBalanceDO> findByScopeWarehouseAndItem(String scopeType, Long scopeId, String warehouseName, String itemCode);
 
+    Optional<InventoryBalanceDO> lockByScopeWarehouseAndItem(String scopeType, Long scopeId, String warehouseName, String itemCode);
+
     void save(InventoryBalanceDO balance);
 
     void update(InventoryBalanceDO balance);

@@ -65,6 +65,27 @@ export type WorkflowProcessStoreOption = {
   storeName: string;
 };
 
+export type WorkflowApprovalNotificationItem = {
+  id: number;
+  approvalNo: string;
+  workflowName: string;
+  approverName: string;
+  approverRole: string;
+  auditedAt: string;
+  result: '待审核' | '通过' | '拒绝';
+  remark: string;
+  routePath?: string;
+  businessCode: string;
+  businessId: number;
+};
+
+export type WorkflowApprovalNotificationPage = {
+  list: WorkflowApprovalNotificationItem[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
+};
+
 type OrgParams = {
   orgId?: string;
   businessCode: string;
@@ -188,3 +209,19 @@ export const bindWorkflowProcessStoresApi = (id: number, storeIds: number[], org
     { storeIds },
     { params: { orgId } },
   );
+
+export const fetchWorkflowApprovalNotificationsApi = (params: { orgId?: string; pageNum?: number; pageSize?: number }) =>
+  apiClient.get<WorkflowApprovalNotificationPage>('/api/workflow/notifications', {
+    params: {
+      orgId: params.orgId,
+      pageNum: params.pageNum,
+      pageSize: params.pageSize,
+    },
+  });
+
+export const fetchWorkflowPendingNotificationCountApi = (params: { orgId?: string }) =>
+  apiClient.get<number>('/api/workflow/notifications/pending-count', {
+    params: {
+      orgId: params.orgId,
+    },
+  });

@@ -10,7 +10,7 @@ export const defaultItemQuery: ItemQuery = {
 };
 
 export const statusOptions = ['全部', '启用', '停用'];
-export const itemTypeOptions = ['全部', '普通物品'];
+export const itemTypeOptions = ['全部', '普通物品', '套餐'];
 export const statTypeOptions = [
   '全部',
   '原料类 (成本类)',
@@ -20,7 +20,7 @@ export const statTypeOptions = [
   '低值易耗品类 (费用类)',
   '固定资产类 (费用类)',
 ];
-export const storageModeOptions = ['冷藏', '冷冻', '常温'];
+export const storageModeOptions = ['冷藏', '冰冻', '常温'];
 
 export const itemToolbarButtons = [
   '新增物品',

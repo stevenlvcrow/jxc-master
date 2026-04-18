@@ -17,6 +17,7 @@ import {
   type WorkflowPublishHistoryManageItem,
 } from '@/api/modules/workflow';
 import { useSessionStore } from '@/stores/session';
+import { workflowBusinessOptions } from '@/views/inventory/document-meta';
 
 const sessionStore = useSessionStore();
 const router = useRouter();
@@ -29,9 +30,6 @@ const query = reactive({
 const processDialogVisible = ref(false);
 const processSubmitting = ref(false);
 const editingBusinessId = ref<number | null>(null);
-const workflowBusinessOptions = [
-  { processCode: 'PURCHASE_INBOUND', businessName: '采购入库流程' },
-];
 const processForm = reactive({
   processCode: '',
   businessName: '',

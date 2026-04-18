@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ArrowDown, Delete, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
+import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import { useSessionStore } from '@/stores/session';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
@@ -39,6 +40,7 @@ const documentStatusOptions: DocumentStatus[] = ['草稿', '已提交', '已审�
 const printStatusOptions: PrintStatus[] = ['全部', '未打印', '已打印'];
 const diffStatusOptions: DiffStatus[] = ['全部', '盘盈', '盘亏', '无差异'];
 const checkTypeOptions: CheckType[] = ['常规盘点', '抽盘', '循环盘点'];
+const router = useRouter();
 const sessionStore = useSessionStore();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 const itemTree: TreeNode[] = [
@@ -200,6 +202,10 @@ const handleReset = () => {
 };
 
 const handleToolbarAction = (action: string) => {
+  if (action === '新增') {
+    router.push({ name: 'InventoryCheckCreate' });
+    return;
+  }
   ElMessage.info(`${action}功能待接入`);
 };
 
@@ -212,11 +218,11 @@ const handleSelectionChange = (rows: InventoryCheckRow[]) => {
 };
 
 const handleView = (row: InventoryCheckRow) => {
-  ElMessage.info(`查看：${row.documentCode}`);
+  router.push({ name: 'InventoryCheckView', params: { id: row.id } });
 };
 
 const handleEdit = (row: InventoryCheckRow) => {
-  ElMessage.info(`编辑：${row.documentCode}`);
+  router.push({ name: 'InventoryCheckEdit', params: { id: row.id } });
 };
 
 const handlePageChange = (page: number) => {

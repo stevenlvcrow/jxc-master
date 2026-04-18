@@ -29,12 +29,19 @@ public class InventoryBalanceRepositoryImpl implements InventoryBalanceRepositor
 
     @Override
     public Optional<InventoryBalanceDO> findByScopeWarehouseAndItem(String scopeType, Long scopeId, String warehouseName, String itemCode) {
-        return Optional.ofNullable(inventoryBalanceMapper.selectOne(new LambdaQueryWrapper<InventoryBalanceDO>()
+        return inventoryBalanceMapper.selectList(new LambdaQueryWrapper<InventoryBalanceDO>()
                 .eq(InventoryBalanceDO::getScopeType, scopeType)
                 .eq(InventoryBalanceDO::getScopeId, scopeId)
                 .eq(InventoryBalanceDO::getWarehouseName, warehouseName)
                 .eq(InventoryBalanceDO::getItemCode, itemCode)
-                .last("limit 1")));
+                .orderByDesc(InventoryBalanceDO::getId))
+                .stream()
+                .findFirst();
+    }
+
+    @Override
+    public Optional<InventoryBalanceDO> lockByScopeWarehouseAndItem(String scopeType, Long scopeId, String warehouseName, String itemCode) {
+        return Optional.ofNullable(inventoryBalanceMapper.selectForUpdate(scopeType, scopeId, warehouseName, itemCode));
     }
 
     @Override

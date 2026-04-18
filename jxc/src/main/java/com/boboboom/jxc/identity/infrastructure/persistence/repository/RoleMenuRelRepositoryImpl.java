@@ -34,10 +34,12 @@ public class RoleMenuRelRepositoryImpl implements RoleMenuRelRepository {
 
     @Override
     public Optional<RoleMenuRelDO> findByRoleIdAndMenuId(Long roleId, Long menuId) {
-        return Optional.ofNullable(roleMenuRelMapper.selectOne(new LambdaQueryWrapper<RoleMenuRelDO>()
+        return roleMenuRelMapper.selectList(new LambdaQueryWrapper<RoleMenuRelDO>()
                 .eq(RoleMenuRelDO::getRoleId, roleId)
                 .eq(RoleMenuRelDO::getMenuId, menuId)
-                .last("limit 1")));
+                .orderByDesc(RoleMenuRelDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

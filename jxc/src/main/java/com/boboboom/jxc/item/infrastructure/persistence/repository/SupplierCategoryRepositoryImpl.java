@@ -29,20 +29,24 @@ public class SupplierCategoryRepositoryImpl implements SupplierCategoryRepositor
 
     @Override
     public Optional<SupplierCategoryDO> findByScopeAndName(String scopeType, Long scopeId, String categoryName) {
-        return Optional.ofNullable(supplierCategoryMapper.selectOne(new LambdaQueryWrapper<SupplierCategoryDO>()
+        return supplierCategoryMapper.selectList(new LambdaQueryWrapper<SupplierCategoryDO>()
                 .eq(SupplierCategoryDO::getScopeType, scopeType)
                 .eq(SupplierCategoryDO::getScopeId, scopeId)
                 .eq(SupplierCategoryDO::getCategoryName, categoryName)
-                .last("limit 1")));
+                .orderByDesc(SupplierCategoryDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override
     public Optional<SupplierCategoryDO> findByScopeAndCode(String scopeType, Long scopeId, String categoryCode) {
-        return Optional.ofNullable(supplierCategoryMapper.selectOne(new LambdaQueryWrapper<SupplierCategoryDO>()
+        return supplierCategoryMapper.selectList(new LambdaQueryWrapper<SupplierCategoryDO>()
                 .eq(SupplierCategoryDO::getScopeType, scopeType)
                 .eq(SupplierCategoryDO::getScopeId, scopeId)
                 .eq(SupplierCategoryDO::getCategoryCode, categoryCode)
-                .last("limit 1")));
+                .orderByDesc(SupplierCategoryDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

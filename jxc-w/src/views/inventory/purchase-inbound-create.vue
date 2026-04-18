@@ -139,6 +139,14 @@ const itemTreeData = ref<SelectorTreeNode[]>([]);
 const itemCandidateSource = ref<ItemCandidate[]>([]);
 const formLoading = ref(false);
 
+const resolvePurchaseInboundOrgId = () => {
+  const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
+  if (!currentOrgId || !currentOrgId.startsWith('store-')) {
+    return undefined;
+  }
+  return currentOrgId;
+};
+
 const itemTableColumns: SelectorColumn[] = [
   { prop: 'code', label: '物品编码', minWidth: 130 },
   { prop: 'name', label: '物品名称', minWidth: 130 },
@@ -155,6 +163,7 @@ const form = reactive({
   salesmanUserId: undefined as number | undefined,
   salesmanName: '',
   remark: '',
+  rejectionReason: '',
 });
 
 const rowSeed = ref(2);
@@ -201,6 +210,7 @@ const resetForm = () => {
   form.salesmanUserId = undefined;
   form.salesmanName = '';
   form.remark = '';
+  form.rejectionReason = '';
   rowSeed.value = 2;
   rows.value = [createEmptyRow(1)];
 };
@@ -209,6 +219,7 @@ const applyDetail = (detail: PurchaseInboundDetail) => {
   detailStatus.value = detail.status ?? '';
   form.inboundDate = detail.inboundDate ?? '';
   form.remark = detail.remark ?? '';
+  form.rejectionReason = detail.rejectionReason ?? '';
   form.salesmanUserId = detail.salesmanUserId ?? undefined;
   form.salesmanName = detail.salesmanName ?? '';
   form.supplierName = detail.supplier ?? '';
@@ -237,14 +248,7 @@ const applyDetail = (detail: PurchaseInboundDetail) => {
 };
 
 const resolveOrgId = () => {
-  const orgId = (sessionStore.currentOrgId ?? '').trim();
-  if (!orgId) {
-    return undefined;
-  }
-  if (orgId.startsWith('group-') || orgId.startsWith('store-')) {
-    return orgId;
-  }
-  return undefined;
+  return resolvePurchaseInboundOrgId();
 };
 
 const resolveWarehouseStoreId = () => {
@@ -274,10 +278,15 @@ const resolveWarehouseStoreId = () => {
 };
 
 const loadSupplierOptions = async () => {
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    supplierOptions.value = [];
+    return;
+  }
   const result = await fetchSuppliersApi({
     pageNo: 1,
     pageSize: 200,
-  }, resolveOrgId());
+  }, orgId);
   supplierOptions.value = (result.list ?? [])
     .map((item: SupplierListRow) => ({
       id: item.id,
@@ -312,7 +321,12 @@ const normalizeItemTreeNodes = (nodes: ItemCategoryTreeNode[]): SelectorTreeNode
 }));
 
 const loadItemTree = async () => {
-  const tree = await fetchItemCategoryTreeApi(resolveOrgId());
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    itemTreeData.value = [{ id: 'all', label: '全部' }];
+    return;
+  }
+  const tree = await fetchItemCategoryTreeApi(orgId);
   if (!Array.isArray(tree) || !tree.length) {
     itemTreeData.value = [{ id: 'all', label: '全部' }];
     return;
@@ -331,6 +345,12 @@ const mapItemCandidate = (row: ItemVO): ItemCandidate => ({
 });
 
 const loadItemCandidates = async () => {
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    itemCandidateSource.value = [];
+    itemSelectorTotal.value = 0;
+    return;
+  }
   itemSelectorLoading.value = true;
   try {
     const page = await fetchItemsApi({
@@ -339,7 +359,7 @@ const loadItemCandidates = async () => {
       keyword: itemSelectorKeyword.value.trim() || undefined,
       category: activeItemTreeId.value === 'all' ? undefined : activeItemTreeId.value,
       status: itemSelectorStatus.value || undefined,
-    }, resolveOrgId());
+    }, orgId);
     itemCandidateSource.value = page.list.map(mapItemCandidate);
     itemSelectorTotal.value = Number(page.total ?? 0);
   } finally {
@@ -383,8 +403,14 @@ const loadSalesmanOptions = async () => {
 };
 
 const loadPermission = async () => {
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    canCreate.value = false;
+    canUpdate.value = false;
+    return;
+  }
   try {
-    const result = await fetchPurchaseInboundPermissionApi(resolveOrgId());
+    const result = await fetchPurchaseInboundPermissionApi(orgId);
     canCreate.value = Boolean(result.canCreate);
     canUpdate.value = Boolean(result.canUpdate);
   } catch {
@@ -398,9 +424,14 @@ const loadDetail = async () => {
     resetForm();
     return;
   }
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    resetForm();
+    return;
+  }
   formLoading.value = true;
   try {
-    const detail = await fetchPurchaseInboundDetailApi(inboundId.value, resolveOrgId());
+    const detail = await fetchPurchaseInboundDetailApi(inboundId.value, orgId);
     applyDetail(detail);
   } finally {
     formLoading.value = false;
@@ -566,10 +597,15 @@ const handleToolbarAction = async (action: string) => {
     return;
   }
   if (action === '通过模板新建') {
+    const orgId = resolveOrgId();
+    if (!orgId) {
+      ElMessage.warning('请选择门店后再操作');
+      return;
+    }
     const page = await fetchItemsApi({
       pageNo: 1,
       pageSize: 2,
-    }, resolveOrgId());
+    }, orgId);
     const templateItems = page.list.map(mapItemCandidate);
     rows.value = [
       {
@@ -610,10 +646,15 @@ const handleToolbarAction = async (action: string) => {
     return;
   }
   if (action === '批量导入物品') {
+    const orgId = resolveOrgId();
+    if (!orgId) {
+      ElMessage.warning('请选择门店后再操作');
+      return;
+    }
     const page = await fetchItemsApi({
       pageNo: 1,
       pageSize: 2,
-    }, resolveOrgId());
+    }, orgId);
     const imported = page.list.map((item) => ({
       id: rowSeed.value++,
       itemCode: item.code,
@@ -698,6 +739,11 @@ const handleSave = async () => {
   if (!validateForm()) {
     return;
   }
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    ElMessage.warning('请选择门店后再保存');
+    return;
+  }
   const singleWarehouse = resolveSingleWarehouse();
   if (!singleWarehouse) {
     ElMessage.warning('请选择仓库');
@@ -719,10 +765,10 @@ const handleSave = async () => {
     })),
   };
   if (isEditMode.value && inboundId.value != null) {
-    await updatePurchaseInboundApi(inboundId.value, payload, resolveOrgId());
+    await updatePurchaseInboundApi(inboundId.value, payload, orgId);
     ElMessage.success('保存成功');
   } else {
-    const created = await createPurchaseInboundApi(payload, resolveOrgId());
+    const created = await createPurchaseInboundApi(payload, orgId);
     ElMessage.success(`保存成功：${created.documentCode}`);
   }
   router.push('/inventory/1/2');
@@ -803,6 +849,9 @@ watch(
             </el-form-item>
             <el-form-item label="备注" class="purchase-inbound-remark-item">
               <el-input v-model="form.remark" placeholder="请输入备注" :disabled="isReadonlyMode" />
+            </el-form-item>
+            <el-form-item v-if="form.rejectionReason" label="拒审原因" class="purchase-inbound-remark-item">
+              <el-input v-model="form.rejectionReason" readonly />
             </el-form-item>
           </div>
         </el-form>

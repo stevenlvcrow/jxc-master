@@ -27,9 +27,11 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
 
     @Override
     public Optional<UserAccountDO> findByPhone(String phone) {
-        return Optional.ofNullable(userAccountMapper.selectOne(new LambdaQueryWrapper<UserAccountDO>()
+        return userAccountMapper.selectList(new LambdaQueryWrapper<UserAccountDO>()
                 .eq(UserAccountDO::getPhone, phone)
-                .last("limit 1")));
+                .orderByDesc(UserAccountDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

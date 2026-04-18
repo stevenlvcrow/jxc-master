@@ -28,6 +28,7 @@ public class PurchaseInboundDO extends BaseAuditDO {
     private String workflowStatus;
     private String pendingOperation;
     private String remark;
+    private String rejectionReason;
     private Long createdBy;
     private Long approvedBy;
     private LocalDateTime approvedAt;
@@ -182,6 +183,14 @@ public class PurchaseInboundDO extends BaseAuditDO {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
     }
 
     public Long getCreatedBy() {

@@ -355,14 +355,7 @@ const focusFieldByPath = async (fieldPath: string) => {
 };
 
 const resolveSupplierOrgId = () => {
-  const orgId = (sessionStore.currentOrgId ?? '').trim();
-  if (!orgId) {
-    return undefined;
-  }
-  if (orgId.startsWith('group-') || orgId.startsWith('store-')) {
-    return orgId;
-  }
-  return undefined;
+  return String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
 };
 
 const categoryExists = (nodes: SupplierCategoryTreeNode[], value: string): boolean => {

@@ -10,6 +10,7 @@ import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseCreateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -61,15 +62,19 @@ public class IdentityWarehouseAdminController {
      * 查询分组下的仓库列表。
      *
      * @param groupId 分组主键
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @param keyword 关键字
      * @param status 状态
      * @param warehouseType 仓库类型
      * @return 仓库列表响应
      */
-    public CodeDataResponse<List<WarehouseAdminView>> listGroupWarehouses(@PathVariable Long groupId,
-                                                                          @RequestParam(required = false) String keyword,
-                                                                          @RequestParam(required = false) String status,
-                                                                          @RequestParam(required = false) String warehouseType) {
+    public CodeDataResponse<PageData<WarehouseAdminView>> listGroupWarehouses(@PathVariable Long groupId,
+                                                                              @RequestParam(defaultValue = "1") Integer pageNum,
+                                                                              @RequestParam(defaultValue = "10") Integer pageSize,
+                                                                              @RequestParam(required = false) String keyword,
+                                                                              @RequestParam(required = false) String status,
+                                                                              @RequestParam(required = false) String warehouseType) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
         List<WarehouseAdminView> result = warehouseAdministrationService
                 .listGroupWarehouses(groupId, keyword, status, warehouseType)
@@ -91,7 +96,7 @@ public class IdentityWarehouseAdminController {
                         snapshot.updatedAt()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @GetMapping("/stores/{storeId}/warehouses")
@@ -99,17 +104,21 @@ public class IdentityWarehouseAdminController {
      * 查询门店下的仓库列表。
      *
      * @param storeId 门店主键
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @param keyword 关键字
      * @param status 状态
      * @param warehouseType 仓库类型
      * @return 仓库列表响应
      */
-    public CodeDataResponse<List<WarehouseAdminView>> listStoreWarehouses(@PathVariable Long storeId,
-                                                                          @RequestParam(required = false) String keyword,
-                                                                          @RequestParam(required = false) String status,
-                                                                          @RequestParam(required = false) String warehouseType) {
+    public CodeDataResponse<PageData<WarehouseAdminView>> listStoreWarehouses(@PathVariable Long storeId,
+                                                                              @RequestParam(defaultValue = "1") Integer pageNum,
+                                                                              @RequestParam(defaultValue = "10") Integer pageSize,
+                                                                              @RequestParam(required = false) String keyword,
+                                                                              @RequestParam(required = false) String status,
+                                                                              @RequestParam(required = false) String warehouseType) {
         StoreDO store = identityAdminLookupService.requireStore(storeId);
-        identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), store.getGroupId());
+        identityAccessControlService.ensureCanAccessStore(identityAdminSupport.currentOperatorId(), store.getId());
         List<WarehouseAdminView> result = warehouseAdministrationService
                 .listStoreWarehouses(storeId, keyword, status, warehouseType)
                 .stream()
@@ -130,7 +139,7 @@ public class IdentityWarehouseAdminController {
                         snapshot.updatedAt()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @PostMapping("/groups/{groupId}/warehouses")
@@ -243,5 +252,13 @@ public class IdentityWarehouseAdminController {
         }
         // 分组仓库直接按分组权限校验。
         identityAccessControlService.ensureCanManageGroup(operatorId, warehouse.getGroupId());
+    }
+
+    private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
+        int toIndex = Math.min(fromIndex + safePageSize, rows.size());
+        return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);
     }
 }

@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -64,9 +65,12 @@ public class IdentityGroupAdminController {
     /**
      * 查询当前管理员可见的组织分组列表。
      *
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @return 分组列表响应
      */
-    public CodeDataResponse<List<GroupAdminView>> listGroups() {
+    public CodeDataResponse<PageData<GroupAdminView>> listGroups(@RequestParam(defaultValue = "1") Integer pageNum,
+                                                                 @RequestParam(defaultValue = "10") Integer pageSize) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
         List<GroupAdminView> result = groupAdministrationService.listGroups(operatorId, platformAdmin).stream()
@@ -79,7 +83,7 @@ public class IdentityGroupAdminController {
                         group.getCreatedAt()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @PostMapping
@@ -185,9 +189,13 @@ public class IdentityGroupAdminController {
      * 查询分组下的门店列表。
      *
      * @param groupId 分组主键
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @return 门店列表响应
      */
-    public CodeDataResponse<List<StoreAdminView>> listGroupStores(@PathVariable Long groupId) {
+    public CodeDataResponse<PageData<StoreAdminView>> listGroupStores(@PathVariable Long groupId,
+                                                                      @RequestParam(defaultValue = "1") Integer pageNum,
+                                                                      @RequestParam(defaultValue = "10") Integer pageSize) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
         List<StoreAdminView> result = groupAdministrationService.listGroupStores(groupId).stream()
                 .map(store -> new StoreAdminView(
@@ -203,7 +211,7 @@ public class IdentityGroupAdminController {
                         store.getCreatedAt()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @GetMapping("/{groupId}/admin-candidates")
@@ -211,9 +219,14 @@ public class IdentityGroupAdminController {
      * 查询可绑定为分组管理员的候选人列表。
      *
      * @param groupId 分组主键
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @return 候选人列表响应
      */
-    public CodeDataResponse<List<GroupAdminCandidateView>> listGroupAdminCandidates(@PathVariable Long groupId) {
+    public CodeDataResponse<PageData<GroupAdminCandidateView>> listGroupAdminCandidates(
+            @PathVariable Long groupId,
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "10") Integer pageSize) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
         List<GroupAdminCandidateView> result = groupAdministrationService.listGroupAdminCandidates(groupId).stream()
                 .map(candidate -> new GroupAdminCandidateView(
@@ -225,7 +238,7 @@ public class IdentityGroupAdminController {
                         candidate.storeName()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @PostMapping("/{groupId}/stores")
@@ -277,5 +290,25 @@ public class IdentityGroupAdminController {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
         groupAdministrationService.deleteGroupStore(groupId, storeId);
         return CodeDataResponse.ok();
+    }
+
+    private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
+        int toIndex = Math.min(fromIndex + safePageSize, rows.size());
+        return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);
+    }
+
+    /**
+     * 通用分页响应。
+     *
+     * @param <T> 数据类型
+     * @param list 当前页数据
+     * @param total 总条数
+     * @param pageNum 当前页码
+     * @param pageSize 当前页大小
+     */
+    public record PageData<T>(List<T> list, long total, int pageNum, int pageSize) {
     }
 }

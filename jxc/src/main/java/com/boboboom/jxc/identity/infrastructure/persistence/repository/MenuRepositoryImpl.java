@@ -22,9 +22,12 @@ public class MenuRepositoryImpl implements MenuRepository {
 
     @Override
     public Optional<MenuDO> findByMenuCode(String menuCode) {
-        return Optional.ofNullable(menuMapper.selectOne(new LambdaQueryWrapper<MenuDO>()
-                .eq(MenuDO::getMenuCode, menuCode)
-                .last("limit 1")));
+        List<MenuDO> menus = menuMapper.selectList(new LambdaQueryWrapper<MenuDO>()
+                .eq(MenuDO::getMenuCode, menuCode));
+        if (menus == null || menus.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(menus.get(0));
     }
 
     @Override
@@ -39,7 +42,7 @@ public class MenuRepositoryImpl implements MenuRepository {
         if (ids == null || ids.isEmpty()) {
             return Collections.emptyList();
         }
-        return menuMapper.selectBatchIds(ids);
+        return menuMapper.selectByIds(ids);
     }
 
     @Override

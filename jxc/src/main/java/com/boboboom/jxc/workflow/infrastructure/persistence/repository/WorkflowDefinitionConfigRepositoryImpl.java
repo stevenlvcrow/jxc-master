@@ -29,12 +29,15 @@ public class WorkflowDefinitionConfigRepositoryImpl implements WorkflowDefinitio
                                                                                 Long scopeId,
                                                                                 String businessCode,
                                                                                 String workflowCode) {
-        return Optional.ofNullable(configMapper.selectOne(new LambdaQueryWrapper<WorkflowDefinitionConfigDO>()
+        return configMapper.selectList(new LambdaQueryWrapper<WorkflowDefinitionConfigDO>()
                 .eq(WorkflowDefinitionConfigDO::getScopeType, scopeType)
                 .eq(WorkflowDefinitionConfigDO::getScopeId, scopeId)
                 .eq(WorkflowDefinitionConfigDO::getBusinessCode, businessCode)
                 .eq(WorkflowDefinitionConfigDO::getWorkflowCode, workflowCode)
-                .last("limit 1")));
+                .orderByDesc(WorkflowDefinitionConfigDO::getUpdatedAt)
+                .orderByDesc(WorkflowDefinitionConfigDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override
@@ -56,11 +59,15 @@ public class WorkflowDefinitionConfigRepositoryImpl implements WorkflowDefinitio
         if (limit < 1) {
             return Collections.emptyList();
         }
-        return configMapper.selectList(new LambdaQueryWrapper<WorkflowDefinitionConfigDO>()
+        List<WorkflowDefinitionConfigDO> rows = configMapper.selectList(new LambdaQueryWrapper<WorkflowDefinitionConfigDO>()
                 .eq(WorkflowDefinitionConfigDO::getScopeType, scopeType)
                 .eq(WorkflowDefinitionConfigDO::getScopeId, scopeId)
                 .orderByDesc(WorkflowDefinitionConfigDO::getUpdatedAt)
-                .last("limit " + limit));
+                .orderByDesc(WorkflowDefinitionConfigDO::getId));
+        if (rows.size() <= limit) {
+            return rows;
+        }
+        return rows.subList(0, limit);
     }
 
     @Override

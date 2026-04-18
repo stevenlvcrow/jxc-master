@@ -1612,6 +1612,10 @@ a {
   --el-switch-width: 30px;
 }
 
+.el-dialog:not(.is-fullscreen) {
+  margin-top: 8vh !important;
+}
+
 @media (max-width: 960px) {
   .page-grid,
   .stats-grid {

@@ -19,8 +19,13 @@ import {
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue';
-import { logoutApi } from '@/api/modules/auth';
+import { fetchCurrentUserRolesApi, logoutApi, type CurrentUserRole } from '@/api/modules/auth';
 import { fetchOrgTreeApi } from '@/api/modules/org';
+import {
+  fetchWorkflowApprovalNotificationsApi,
+  fetchWorkflowPendingNotificationCountApi,
+  type WorkflowApprovalNotificationItem,
+} from '@/api/modules/workflow';
 import { useAppStore } from '@/stores/app';
 import { useMenuStore } from '@/stores/menu';
 import { useSessionStore, type OrgNode } from '@/stores/session';
@@ -83,6 +88,7 @@ const activeMenu = computed(() => String(route.meta.activeMenu ?? route.path));
 const openMenus = computed(() => (route.meta.openKeys as string[] | undefined) ?? []);
 const activeTab = computed(() => route.path);
 const orgDialogVisible = ref(false);
+const workflowNoticeDialogVisible = ref(false);
 const orgKeyword = ref('');
 const orgCity = ref('');
 const activeGroupId = ref('');
@@ -95,10 +101,44 @@ const contextMenuTabPath = ref('');
 const draggingTabPath = ref('');
 const dragOverTabPath = ref('');
 const dragDropPosition = ref<'before' | 'after' | ''>('');
+const workflowNoticeLoading = ref(false);
+const workflowNoticePageNum = ref(1);
+const workflowNoticePageSize = ref(8);
+const workflowNoticeTotal = ref(0);
+const workflowNoticeBadgeCount = ref(0);
+const workflowNoticeRows = ref<WorkflowApprovalNotificationItem[]>([]);
+const currentUserRoles = ref<CurrentUserRole[]>([]);
 
 const cityOptions = computed(() => Array.from(new Set(sessionStore.flatOrgs.map((item) => item.city))));
 const currentOrg = computed(() => sessionStore.currentOrg);
+const currentOrgLabel = computed(() => {
+  const org = currentOrg.value;
+  if (!org) {
+    return sessionStore.requiresOrgSelection ? '请选择机构' : '平台模式';
+  }
+  const orgLabel = org.type === 'group' ? '集团名' : '门店名';
+  const merchantLabel = org.type === 'group' ? '集团号' : '商户号';
+  return `${orgLabel}：${org.name}（${merchantLabel}：${org.merchantNo || '-'}）`;
+});
+const currentRoleText = computed(() => {
+  if (sessionStore.platformAdminMode) {
+    return '平台管理员';
+  }
+  if (!currentUserRoles.value.length) {
+    return '暂无角色';
+  }
+  return currentUserRoles.value.map((item) => item.roleName).join(' / ');
+});
 const rootGroups = computed(() => sessionStore.rootGroups);
+const workflowNoticeOrgId = computed(() => {
+  if (!sessionStore.isLoggedIn) {
+    return undefined;
+  }
+  if (sessionStore.platformAdminMode) {
+    return 'platform';
+  }
+  return sessionStore.currentOrgId || undefined;
+});
 
 const activeGroup = computed(() => {
   const list = rootGroups.value;
@@ -344,6 +384,91 @@ const openOrgDialog = () => {
   orgDialogVisible.value = true;
 };
 
+const openWorkflowNoticeDialog = async () => {
+  workflowNoticeDialogVisible.value = true;
+  workflowNoticePageNum.value = 1;
+};
+
+const loadWorkflowNotifications = async (pageNum = workflowNoticePageNum.value) => {
+  const orgId = workflowNoticeOrgId.value;
+  if (!orgId) {
+    workflowNoticeRows.value = [];
+    workflowNoticeTotal.value = 0;
+    return;
+  }
+  workflowNoticeLoading.value = true;
+  try {
+    const result = await fetchWorkflowApprovalNotificationsApi({
+      orgId,
+      pageNum,
+      pageSize: workflowNoticePageSize.value,
+    });
+    workflowNoticeRows.value = result.list ?? [];
+    workflowNoticeTotal.value = Number(result.total ?? 0);
+    workflowNoticePageNum.value = result.pageNum ?? pageNum;
+    workflowNoticePageSize.value = result.pageSize ?? workflowNoticePageSize.value;
+  } finally {
+    workflowNoticeLoading.value = false;
+  }
+};
+
+const loadWorkflowNoticeBadgeCount = async () => {
+  const orgId = workflowNoticeOrgId.value;
+  if (!orgId) {
+    workflowNoticeBadgeCount.value = 0;
+    return;
+  }
+  try {
+    workflowNoticeBadgeCount.value = Number(
+      await fetchWorkflowPendingNotificationCountApi({ orgId }),
+    );
+  } catch {
+    workflowNoticeBadgeCount.value = 0;
+  }
+};
+
+const resolveWorkflowNoticeRoute = (row: WorkflowApprovalNotificationItem) => {
+  if (row.routePath) {
+    return row.routePath;
+  }
+  if (row.businessCode === 'PURCHASE_INBOUND') {
+    return `/inventory/1/2/view/${row.businessId}`;
+  }
+  return '';
+};
+
+const handleWorkflowNoticeRowClick = (row: WorkflowApprovalNotificationItem) => {
+  const targetPath = resolveWorkflowNoticeRoute(row);
+  if (!targetPath) {
+    ElMessage.info('当前消息未配置跳转页面');
+    return;
+  }
+  workflowNoticeDialogVisible.value = false;
+  router.push(targetPath);
+};
+
+const handleWorkflowNoticePageChange = async (page: number) => {
+  await loadWorkflowNotifications(page);
+};
+
+const handleWorkflowNoticePageSizeChange = async (size: number) => {
+  workflowNoticePageSize.value = size;
+  workflowNoticePageNum.value = 1;
+  await loadWorkflowNotifications(1);
+};
+
+const loadCurrentUserRoles = async () => {
+  if (!sessionStore.isLoggedIn || sessionStore.platformAdminMode) {
+    currentUserRoles.value = [];
+    return;
+  }
+  try {
+    currentUserRoles.value = await fetchCurrentUserRolesApi(sessionStore.currentOrgId || undefined);
+  } catch {
+    currentUserRoles.value = [];
+  }
+};
+
 const switchOrg = async (orgId: string) => {
   sessionStore.selectOrg(orgId);
   appStore.resetVisitedTabs();
@@ -444,6 +569,33 @@ watch(
 );
 
 watch(
+  () => [sessionStore.currentOrgId, sessionStore.platformAdminMode, sessionStore.isLoggedIn] as const,
+  async ([orgId, isPlatformAdminMode, isLoggedIn]) => {
+    if (!isLoggedIn) {
+      workflowNoticeBadgeCount.value = 0;
+      return;
+    }
+    const targetOrgId = isPlatformAdminMode ? 'platform' : orgId;
+    if (!targetOrgId && sessionStore.requiresOrgSelection) {
+      workflowNoticeBadgeCount.value = 0;
+      return;
+    }
+    await loadWorkflowNoticeBadgeCount();
+  },
+  { immediate: true },
+);
+
+watch(
+  () => workflowNoticeDialogVisible.value,
+  (visible) => {
+    if (visible) {
+      void loadWorkflowNoticeBadgeCount();
+      void loadWorkflowNotifications(1);
+    }
+  },
+);
+
+watch(
   () => sessionStore.isLoggedIn,
   (isLoggedIn) => {
     if (!isLoggedIn) {
@@ -464,6 +616,14 @@ watch(
     if (!activeGroupId.value || !groups.some((item) => item.id === activeGroupId.value)) {
       activeGroupId.value = groups[0].id;
     }
+  },
+  { immediate: true },
+);
+
+watch(
+  () => [sessionStore.isLoggedIn, sessionStore.currentOrgId, sessionStore.platformAdminMode] as const,
+  () => {
+    void loadCurrentUserRoles();
   },
   { immediate: true },
 );
@@ -523,21 +683,20 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="topbar-right">
-          <button v-if="sessionStore.requiresOrgSelection" class="org-switch-trigger" @click="openOrgDialog">
-            <div class="org-switch-line">
-              <div class="org-switch-sub">商户号: {{ currentOrg?.merchantNo ?? '-' }}</div>
-              <div class="org-switch-title">
-                <span>{{ currentOrg?.name ?? '请选择机构' }}</span>
-                <el-icon>
-                  <ArrowDown />
-                </el-icon>
-              </div>
-            </div>
+          <button v-if="sessionStore.requiresOrgSelection" class="topbar-item org-switch-trigger" @click="openOrgDialog">
+            <span class="org-switch-text">{{ currentOrgLabel }}</span>
+            <el-icon class="org-switch-arrow">
+              <ArrowDown />
+            </el-icon>
           </button>
 
-          <el-dropdown trigger="click" @command="handleUserCommand">
+          <div class="topbar-item user-role-text" :title="currentRoleText">
+            {{ currentRoleText }}
+          </div>
+
+          <el-dropdown trigger="click" class="topbar-item user-dropdown" @command="handleUserCommand">
             <button class="user-trigger">
-              <span>{{ sessionStore.userName }}</span>
+              <span class="user-trigger__name">{{ sessionStore.userName }}</span>
               <el-icon>
                 <ArrowDown />
               </el-icon>
@@ -549,6 +708,14 @@ onBeforeUnmount(() => {
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+
+          <el-badge :value="workflowNoticeBadgeCount" :hidden="workflowNoticeBadgeCount === 0" :max="99" class="workflow-notice-badge topbar-item">
+            <button class="workflow-notice-trigger" @click="openWorkflowNoticeDialog" aria-label="审批提醒">
+              <el-icon>
+                <Bell />
+              </el-icon>
+            </button>
+          </el-badge>
         </div>
       </el-header>
 
@@ -671,7 +838,7 @@ onBeforeUnmount(() => {
         <el-table-column prop="name" label="机构名称" min-width="220" />
         <el-table-column label="机构类型" width="120">
           <template #default="{ row }">
-            <span>{{ row.type === 'group' ? '集团' : row.type === 'trial' ? '试店' : '门店' }}</span>
+            <span>{{ row.type === 'group' ? '集团' : '门店' }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="code" label="机构编码" width="140" />
@@ -687,4 +854,236 @@ onBeforeUnmount(() => {
       </el-table>
     </div>
   </el-dialog>
+
+  <el-dialog
+    v-model="workflowNoticeDialogVisible"
+    title="审批提醒"
+    width="1120px"
+    class="workflow-notice-dialog"
+    append-to-body
+  >
+    <div class="workflow-notice-content">
+      <el-table
+        :data="workflowNoticeRows"
+        border
+        stripe
+        height="420"
+        v-loading="workflowNoticeLoading"
+        empty-text="暂无审批消息"
+        class="workflow-notice-table"
+        :row-class-name="() => 'workflow-notice-row'"
+        @row-click="handleWorkflowNoticeRowClick"
+      >
+        <el-table-column prop="approvalNo" label="审批编号" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="workflowName" label="流程名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="approverName" label="审批人" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="approverRole" label="审批角色" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="auditedAt" label="审核时间" min-width="170" show-overflow-tooltip />
+        <el-table-column prop="result" label="结果（通过/拒绝）" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-tag
+            :type="row.result === '拒绝' ? 'danger' : row.result === '待审核' ? 'warning' : 'success'"
+            effect="light"
+          >
+            {{ row.result }}
+          </el-tag>
+        </template>
+      </el-table-column>
+        <el-table-column prop="remark" label="备注（拒绝原因）" min-width="220" show-overflow-tooltip />
+      </el-table>
+      <div class="workflow-notice-footer">
+        <el-pagination
+          layout="total, prev, pager, next, sizes"
+          :total="workflowNoticeTotal"
+          :current-page="workflowNoticePageNum"
+          :page-size="workflowNoticePageSize"
+          :page-sizes="[8, 10, 20]"
+          @current-change="handleWorkflowNoticePageChange"
+          @size-change="handleWorkflowNoticePageSizeChange"
+        />
+      </div>
+    </div>
+  </el-dialog>
 </template>
+
+<style scoped>
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.topbar-item {
+  flex: 0 0 auto;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.user-dropdown {
+  line-height: 1;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.page-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.org-switch-trigger,
+.workflow-notice-trigger,
+.user-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--el-text-color-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.org-switch-trigger:hover,
+.workflow-notice-trigger:hover,
+.user-trigger:hover {
+  color: var(--el-color-primary);
+}
+
+.org-switch-trigger {
+  padding: 0;
+  min-width: 0;
+  max-width: 340px;
+  height: 24px;
+  text-align: left;
+  background: transparent;
+  line-height: 1;
+  gap: 4px;
+}
+
+.org-switch-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.org-switch-arrow {
+  flex: 0 0 auto;
+  margin-left: -2px;
+}
+
+.workflow-notice-badge {
+  display: inline-flex;
+}
+
+.workflow-notice-trigger {
+  width: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.user-trigger {
+  height: 24px;
+  padding: 0 4px;
+  max-width: 160px;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1;
+}
+
+.user-trigger__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.user-role-text {
+  min-width: 0;
+  white-space: nowrap;
+  color: var(--el-text-color-primary);
+  font-size: inherit;
+  font-weight: inherit;
+  flex: 0 0 auto;
+  line-height: 1;
+  padding: 0;
+}
+
+.workflow-notice-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.workflow-notice-table :deep(.workflow-notice-row) {
+  cursor: pointer;
+}
+
+.workflow-notice-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.org-dialog :deep(.el-dialog__body),
+.workflow-notice-dialog :deep(.el-dialog__body) {
+  padding-top: 12px;
+}
+
+.workflow-notice-dialog :deep(.el-tag) {
+  min-width: 68px;
+  justify-content: center;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-height: 48px;
+  height: auto;
+  padding: 6px 16px;
+}
+
+@media (max-width: 1200px) {
+  .topbar-left {
+    flex-basis: 100%;
+  }
+
+  .topbar-right {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+</style>

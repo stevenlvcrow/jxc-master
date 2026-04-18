@@ -28,11 +28,13 @@ public class WorkflowProcessRegistryRepositoryImpl implements WorkflowProcessReg
         if (scopeType == null || scopeId == null || processCode == null) {
             return Optional.empty();
         }
-        return Optional.ofNullable(workflowProcessRegistryMapper.selectOne(new LambdaQueryWrapper<WorkflowProcessRegistryDO>()
+        return workflowProcessRegistryMapper.selectList(new LambdaQueryWrapper<WorkflowProcessRegistryDO>()
                 .eq(WorkflowProcessRegistryDO::getScopeType, scopeType)
                 .eq(WorkflowProcessRegistryDO::getScopeId, scopeId)
                 .eq(WorkflowProcessRegistryDO::getProcessCode, processCode)
-                .last("limit 1")));
+                .orderByDesc(WorkflowProcessRegistryDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

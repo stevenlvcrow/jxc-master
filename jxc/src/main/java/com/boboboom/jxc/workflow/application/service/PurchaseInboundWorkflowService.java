@@ -72,6 +72,36 @@ public class PurchaseInboundWorkflowService {
         return workflowActionService.shouldTriggerAction(BUSINESS_CODE, scopeType, scopeId, groupId, action);
     }
 
+    public String businessCode() {
+        return BUSINESS_CODE;
+    }
+
+    public String resolveBusinessName(String scopeType, Long scopeId, Long groupId) {
+        WorkflowBinding binding = resolveBinding(scopeType, scopeId, groupId).orElse(null);
+        if (binding == null) {
+            return "采购入库";
+        }
+        return processRegistryRepository.findByScopeAndProcessCode(SCOPE_GROUP, groupId, binding.processCode())
+                .map(WorkflowProcessRegistryDO::getBusinessName)
+                .filter(StringUtils::hasText)
+                .orElse("采购入库");
+    }
+
+    public String resolveApprovalRoleLabel(String scopeType,
+                                          Long scopeId,
+                                          Long groupId,
+                                          Long operatorId,
+                                          String taskName) {
+        return workflowActionService.resolveApprovalRoleLabel(BUSINESS_CODE, scopeType, scopeId, groupId, operatorId, taskName);
+    }
+
+    public Optional<WorkflowActionService.ApprovalTarget> resolveApprovalTarget(String scopeType,
+                                                                                Long scopeId,
+                                                                                Long groupId,
+                                                                                String taskName) {
+        return workflowActionService.resolveApprovalTarget(BUSINESS_CODE, scopeType, scopeId, groupId, taskName);
+    }
+
     public boolean syncOnAction(String scopeType, Long scopeId, Long groupId, PurchaseInboundDO header, Long operatorId, String action) {
         if (!shouldTriggerAction(scopeType, scopeId, groupId, action)) {
             cancelWorkflowInstanceIfRunning(header);

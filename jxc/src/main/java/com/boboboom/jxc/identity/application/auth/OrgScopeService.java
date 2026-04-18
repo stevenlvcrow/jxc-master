@@ -1,56 +1,53 @@
 package com.boboboom.jxc.identity.application.auth;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.domain.repository.GroupRepository;
+import com.boboboom.jxc.identity.domain.repository.RoleRepository;
+import com.boboboom.jxc.identity.domain.repository.StoreRepository;
+import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.GroupMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class OrgScopeService {
 
+    private static final String PLATFORM_SCOPE_LITERAL = "platform";
     public static final String SCOPE_PLATFORM = "PLATFORM";
     public static final String SCOPE_GROUP = "GROUP";
     public static final String SCOPE_STORE = "STORE";
 
     private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
+    private static final String STATUS_ENABLED = "ENABLED";
 
-    private final RoleMapper roleMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
-    private final StoreMapper storeMapper;
-    private final GroupMapper groupMapper;
+    private final RoleRepository roleRepository;
+    private final UserRoleRelRepository userRoleRelRepository;
+    private final StoreRepository storeRepository;
+    private final GroupRepository groupRepository;
 
-    public OrgScopeService(RoleMapper roleMapper,
-                           UserRoleRelMapper userRoleRelMapper,
-                           StoreMapper storeMapper,
-                           GroupMapper groupMapper) {
-        this.roleMapper = roleMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
-        this.storeMapper = storeMapper;
-        this.groupMapper = groupMapper;
+    public OrgScopeService(RoleRepository roleRepository,
+                           UserRoleRelRepository userRoleRelRepository,
+                           StoreRepository storeRepository,
+                           GroupRepository groupRepository) {
+        this.roleRepository = roleRepository;
+        this.userRoleRelRepository = userRoleRelRepository;
+        this.storeRepository = storeRepository;
+        this.groupRepository = groupRepository;
     }
 
     public boolean isPlatformAdmin(Long userId) {
-        RoleDO role = roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
-                .eq(RoleDO::getRoleCode, PLATFORM_SUPER_ADMIN_ROLE_CODE)
-                .last("limit 1"));
+        RoleDO role = roleRepository.findByRoleCode(PLATFORM_SUPER_ADMIN_ROLE_CODE).orElse(null);
         if (role == null || userId == null) {
             return false;
         }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getRoleId, role.getId())
-                .eq(UserRoleRelDO::getScopeType, SCOPE_PLATFORM)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
+        return userRoleRelRepository.existsByUserIdAndRoleIdAndScopeTypeAndStatus(
+                userId,
+                role.getId(),
+                SCOPE_PLATFORM,
+                STATUS_ENABLED
+        );
     }
 
     public AccessibleScope resolveAccessibleScope(Long userId, String orgId) {
@@ -91,7 +88,7 @@ public class OrgScopeService {
         }
         ScopeRequest requested = parseWorkflowScopeRequest(normalizedOrgId);
         if (SCOPE_GROUP.equals(requested.scopeType())) {
-            GroupDO group = groupMapper.selectById(requested.scopeId());
+            GroupDO group = groupRepository.findById(requested.scopeId()).orElse(null);
             if (group == null) {
                 throw new BusinessException("集团不存在");
             }
@@ -101,7 +98,7 @@ public class OrgScopeService {
             return new WorkflowScope(SCOPE_GROUP, requested.scopeId(), requested.scopeId());
         }
 
-        StoreDO store = storeMapper.selectById(requested.scopeId());
+        StoreDO store = storeRepository.findById(requested.scopeId()).orElse(null);
         if (store == null) {
             throw new BusinessException("门店不存在");
         }
@@ -132,7 +129,7 @@ public class OrgScopeService {
             throw new BusinessException("流程管理仅支持集团机构");
         }
         Long groupId = parseNumericId(normalizedOrgId.substring("group-".length()));
-        GroupDO group = groupMapper.selectById(groupId);
+        GroupDO group = groupRepository.findById(groupId).orElse(null);
         if (group == null) {
             throw new BusinessException("集团不存在");
         }
@@ -157,7 +154,7 @@ public class OrgScopeService {
         if (normalizedOrgId == null) {
             throw new BusinessException("请先选择机构");
         }
-        if ("platform".equalsIgnoreCase(normalizedOrgId)) {
+        if (PLATFORM_SCOPE_LITERAL.equals(normalizedOrgId)) {
             return new ScopeRequest(SCOPE_PLATFORM, 0L);
         }
         return parseRequiredGroupOrStoreScope(normalizedOrgId);
@@ -189,23 +186,19 @@ public class OrgScopeService {
     }
 
     private boolean hasScope(Long userId, String scopeType, Long scopeId) {
-        if (userId == null || scopeId == null) {
-            return false;
-        }
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, userId)
-                .eq(UserRoleRelDO::getScopeType, scopeType)
-                .eq(UserRoleRelDO::getScopeId, scopeId)
-                .eq(UserRoleRelDO::getStatus, "ENABLED")
-                .last("limit 1"));
-        return rel != null;
+        return userRoleRelRepository.existsByUserIdAndScopeTypeAndScopeIdAndStatus(
+                userId,
+                scopeType,
+                scopeId,
+                STATUS_ENABLED
+        );
     }
 
     private Long findGroupIdByStoreId(Long storeId) {
         if (storeId == null) {
             return null;
         }
-        StoreDO store = storeMapper.selectById(storeId);
+        StoreDO store = storeRepository.findById(storeId).orElse(null);
         if (store == null) {
             return null;
         }

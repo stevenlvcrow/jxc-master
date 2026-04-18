@@ -12,6 +12,7 @@ import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest.UserB
 import com.boboboom.jxc.identity.interfaces.rest.request.UserRoleAssignRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
@@ -73,9 +75,12 @@ public class IdentityUserAdminController {
     /**
      * 查询用户列表。
      *
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @return 用户列表响应
      */
-    public CodeDataResponse<List<UserAdminView>> listUsers() {
+    public CodeDataResponse<PageData<UserAdminView>> listUsers(@RequestParam(defaultValue = "1") Integer pageNum,
+                                                               @RequestParam(defaultValue = "10") Integer pageSize) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         List<UserAdminView> result = userAdministrationService
                 .listUsers(operatorId, identityAdminSupport.isPlatformAdmin(operatorId))
@@ -101,7 +106,7 @@ public class IdentityUserAdminController {
                                 .toList()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @GetMapping("/salesmen")
@@ -109,9 +114,13 @@ public class IdentityUserAdminController {
      * 查询可选销售员候选人。
      *
      * @param orgId 机构标识
+     * @param pageNum 页码
+     * @param pageSize 每页条数
      * @return 销售员候选人列表响应
      */
-    public CodeDataResponse<List<SalesmanCandidateView>> listSalesmen(@org.springframework.web.bind.annotation.RequestParam String orgId) {
+    public CodeDataResponse<PageData<SalesmanCandidateView>> listSalesmen(@RequestParam String orgId,
+                                                                          @RequestParam(defaultValue = "1") Integer pageNum,
+                                                                          @RequestParam(defaultValue = "10") Integer pageSize) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, orgId);
         if (!OrgScopeService.SCOPE_STORE.equals(scope.scopeType())) {
@@ -124,7 +133,7 @@ public class IdentityUserAdminController {
                         candidate.phone()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @PostMapping
@@ -248,5 +257,13 @@ public class IdentityUserAdminController {
                 request.getAssignments()
         );
         return CodeDataResponse.ok();
+    }
+
+    private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
+        int toIndex = Math.min(fromIndex + safePageSize, rows.size());
+        return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);
     }
 }

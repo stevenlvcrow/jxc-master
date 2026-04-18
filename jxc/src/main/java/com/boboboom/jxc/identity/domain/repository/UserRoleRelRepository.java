@@ -12,6 +12,10 @@ public interface UserRoleRelRepository {
 
     List<UserRoleRelDO> findByUserIdAndScopeTypeAndStatus(Long userId, String scopeType, String status);
 
+    boolean existsByUserIdAndRoleIdAndScopeTypeAndStatus(Long userId, Long roleId, String scopeType, String status);
+
+    boolean existsByUserIdAndScopeTypeAndScopeIdAndStatus(Long userId, String scopeType, Long scopeId, String status);
+
     Optional<UserRoleRelDO> findByUserIdRoleAndScope(Long userId, Long roleId, String scopeType, Long scopeId);
 
     List<UserRoleRelDO> findByStatusAndGroupScopes(String status, Set<Long> groupIds);

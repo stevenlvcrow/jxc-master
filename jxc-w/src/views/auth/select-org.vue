@@ -16,7 +16,6 @@ const menuStore = useMenuStore();
 const useRealOrgApi = import.meta.env.VITE_USE_REAL_ORG_API === '1';
 const PROFILE_HOME_PATH = '/profile';
 
-const topTrialNodes = computed(() => sessionStore.rootGroups.filter((node) => node.type === 'trial'));
 const groupNodes = computed(() => sessionStore.rootGroups.filter((node) => node.type === 'group'));
 const topStoreNodes = computed(() => sessionStore.rootGroups.filter((node) => node.type === 'store'));
 const activeGroups = ref<string[]>(groupNodes.value.map((item) => item.id));
@@ -74,22 +73,6 @@ onMounted(async () => {
         <h1 class="select-org-title">请选择机构</h1>
         <el-button text type="danger" @click="handleLogout">退出登录</el-button>
       </div>
-
-      <el-card
-        v-for="trial in topTrialNodes"
-        :key="trial.id"
-        class="org-card"
-        shadow="never"
-      >
-        <div class="org-row-head">
-          <div class="org-title-line">
-            <el-tag type="success" effect="light">试店</el-tag>
-            <strong>{{ trial.name }}</strong>
-          </div>
-          <el-button type="primary" size="small" @click="chooseOrg(trial.id)">选择</el-button>
-        </div>
-        <p class="org-meta">商户号：{{ trial.merchantNo }}　机构编码：{{ trial.code }}</p>
-      </el-card>
 
       <el-card
         v-for="store in topStoreNodes"

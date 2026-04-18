@@ -24,18 +24,13 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**");
 
         registry.addInterceptor(authInterceptor)
-                .addPathPatterns("/auth/me", "/auth/logout", "/org/**")
-                .addPathPatterns("/api/identity/auth/me", "/api/identity/auth/logout", "/api/identity/org/**")
-                .addPathPatterns("/api/identity/**")
-                .addPathPatterns("/api/items/**")
-                .addPathPatterns("/api/inventory/**")
-                .addPathPatterns("/api/workflow/**")
-                .addPathPatterns("/api/users/**")
+                .addPathPatterns("/auth/**", "/api/**")
                 .excludePathPatterns(
                         "/api/identity/auth/login",
                         "/api/identity/auth/refresh",
                         "/auth/login",
-                        "/auth/refresh"
+                        "/auth/refresh",
+                        "/error"
                 );
     }
 

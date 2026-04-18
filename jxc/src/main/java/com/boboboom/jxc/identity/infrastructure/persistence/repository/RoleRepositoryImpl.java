@@ -43,9 +43,11 @@ public class RoleRepositoryImpl implements RoleRepository {
 
     @Override
     public Optional<RoleDO> findByRoleCode(String roleCode) {
-        return Optional.ofNullable(roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
+        return roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
                 .eq(RoleDO::getRoleCode, roleCode)
-                .last("limit 1")));
+                .orderByDesc(RoleDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override
@@ -60,10 +62,12 @@ public class RoleRepositoryImpl implements RoleRepository {
 
     @Override
     public Optional<RoleDO> findByTenantGroupIdAndRoleCode(Long tenantGroupId, String roleCode) {
-        return Optional.ofNullable(roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
+        return roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
                 .eq(RoleDO::getTenantGroupId, tenantGroupId)
                 .eq(RoleDO::getRoleCode, roleCode)
-                .last("limit 1")));
+                .orderByDesc(RoleDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override
