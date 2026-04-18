@@ -12,6 +12,20 @@ public class UserUpsertRequest {
 
     private String status;
 
+    public static class UserBatchDeleteRequest {
+
+        @jakarta.validation.constraints.NotEmpty
+        private java.util.List<Long> ids;
+
+        public java.util.List<Long> getIds() {
+            return ids;
+        }
+
+        public void setIds(java.util.List<Long> ids) {
+            this.ids = ids;
+        }
+    }
+
     public String getRealName() {
         return realName;
     }

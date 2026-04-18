@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
+import com.boboboom.jxc.identity.infrastructure.persistence.query.StoreAdminView;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collections;
@@ -32,6 +33,23 @@ public class StoreRepositoryImpl implements StoreRepository {
     }
 
     @Override
+    public List<StoreDO> findAllOrdered() {
+        return storeMapper.selectList(new LambdaQueryWrapper<StoreDO>()
+                .orderByDesc(StoreDO::getCreatedAt)
+                .orderByDesc(StoreDO::getId));
+    }
+
+    @Override
+    public List<String> findAllStoreCodes() {
+        return storeMapper.selectList(new LambdaQueryWrapper<StoreDO>()
+                        .select(StoreDO::getStoreCode))
+                .stream()
+                .map(StoreDO::getStoreCode)
+                .filter(code -> code != null && !code.isBlank())
+                .toList();
+    }
+
+    @Override
     public List<StoreDO> findByGroupId(Long groupId) {
         return storeMapper.selectList(new LambdaQueryWrapper<StoreDO>()
                 .eq(StoreDO::getGroupId, groupId)
@@ -52,6 +70,11 @@ public class StoreRepositoryImpl implements StoreRepository {
     @Override
     public Long countByGroupId(Long groupId) {
         return storeMapper.selectCount(new LambdaQueryWrapper<StoreDO>().eq(StoreDO::getGroupId, groupId));
+    }
+
+    @Override
+    public List<StoreAdminView> findStoreAdminViewsByGroupId(Long groupId, String status) {
+        return storeMapper.selectStoreAdminViewByGroupId(groupId, status);
     }
 
     @Override

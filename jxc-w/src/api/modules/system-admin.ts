@@ -8,6 +8,7 @@ export type RoleAssignment = {
   scopeType: string;
   scopeId: number | null;
   scopeName: string;
+  builtin: boolean;
 };
 
 export type GroupAdminItem = {
@@ -51,9 +52,17 @@ export type UserAdminItem = {
   roles: RoleAssignment[];
 };
 
+export type SalesmanCandidateItem = {
+  userId: number;
+  realName: string;
+  phone: string;
+};
+
 export type RoleAdminItem = {
   id: number;
   roleCode: string;
+  tenantGroupId: number;
+  tenantGroupName: string | null;
   roleName: string;
   roleType: string;
   dataScopeType: string;
@@ -87,6 +96,10 @@ export type RoleUpsertPayload = {
 };
 
 export const fetchAdminUsersApi = () => apiClient.get<UserAdminItem[]>('/api/identity/admin/users');
+export const fetchStoreSalesmenApi = (orgId: string) =>
+  apiClient.get<SalesmanCandidateItem[]>('/api/identity/admin/users/salesmen', {
+    params: { orgId },
+  });
 export const fetchAdminGroupsApi = () => apiClient.get<GroupAdminItem[]>('/api/identity/admin/groups');
 
 export const createAdminGroupApi = (payload: {
@@ -128,29 +141,56 @@ export const createGroupStoreApi = (groupId: number, payload: {
   remark?: string;
 }) => apiClient.post<{ id: number }>(`/api/identity/admin/groups/${groupId}/stores`, payload);
 
+export const updateGroupStoreApi = (groupId: number, storeId: number, payload: {
+  storeName: string;
+  status?: 'ENABLED' | 'DISABLED';
+  contactName?: string;
+  contactPhone?: string;
+  address?: string;
+  remark?: string;
+}) => apiClient.put<void>(`/api/identity/admin/groups/${groupId}/stores/${storeId}`, payload);
+
+export const deleteGroupStoreApi = (groupId: number, storeId: number) =>
+  apiClient.delete<void>(`/api/identity/admin/groups/${groupId}/stores/${storeId}`);
+
 export const createAdminUserApi = (payload: { realName: string; phone: string; status?: string }) =>
   apiClient.post<{ id: number }>('/api/identity/admin/users', payload);
 
+export const updateAdminUserApi = (id: number, payload: { realName: string; phone: string; status?: string }) =>
+  apiClient.put<void>(`/api/identity/admin/users/${id}`, payload);
+
 export const updateAdminUserStatusApi = (id: number, status: 'ENABLED' | 'DISABLED') =>
   apiClient.put<void>(`/api/identity/admin/users/${id}/status`, { status });
+
+export const deleteAdminUserApi = (id: number) =>
+  apiClient.delete<void>(`/api/identity/admin/users/${id}`);
+
+export const batchDeleteAdminUsersApi = (ids: number[]) =>
+  apiClient.delete<void>('/api/identity/admin/users', { data: { ids } });
 
 export const assignAdminUserRolesApi = (
   id: number,
   assignments: Array<{ roleId: number; scopeType: string; scopeId: number | null }>,
 ) => apiClient.put<void>(`/api/identity/admin/users/${id}/roles`, { assignments });
 
-export const fetchAdminRolesApi = () => apiClient.get<RoleAdminItem[]>('/api/identity/admin/roles');
+export const fetchAdminRolesApi = (orgId?: string) =>
+  apiClient.get<RoleAdminItem[]>('/api/identity/admin/roles', { params: orgId ? { orgId } : undefined });
 
-export const createAdminRoleApi = (payload: RoleUpsertPayload) =>
-  apiClient.post<{ id: number }>('/api/identity/admin/roles', payload);
+export const createAdminRoleApi = (payload: RoleUpsertPayload, orgId?: string) =>
+  apiClient.post<{ id: number }>('/api/identity/admin/roles', payload, {
+    params: orgId ? { orgId } : undefined,
+  });
 
-export const updateAdminRoleApi = (id: number, payload: RoleUpsertPayload) =>
-  apiClient.put<void>(`/api/identity/admin/roles/${id}`, payload);
+export const updateAdminRoleApi = (id: number, payload: RoleUpsertPayload, orgId?: string) =>
+  apiClient.put<void>(`/api/identity/admin/roles/${id}`, payload, {
+    params: orgId ? { orgId } : undefined,
+  });
 
 export const updateAdminRoleStatusApi = (id: number, status: 'ENABLED' | 'DISABLED') =>
   apiClient.put<void>(`/api/identity/admin/roles/${id}/status`, { status });
 
-export const fetchAdminMenusApi = () => apiClient.get<MenuAdminItem[]>('/api/identity/admin/menus');
+export const fetchAdminMenusApi = (orgId?: string) =>
+  apiClient.get<MenuAdminItem[]>('/api/identity/admin/menus', { params: orgId ? { orgId } : undefined });
 
 export const assignAdminRoleMenusApi = (id: number, menuIds: number[]) =>
   apiClient.put<void>(`/api/identity/admin/roles/${id}/menus`, { menuIds });

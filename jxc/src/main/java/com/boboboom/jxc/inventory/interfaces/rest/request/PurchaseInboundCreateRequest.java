@@ -17,6 +17,8 @@ public record PurchaseInboundCreateRequest(
         String warehouse,
         @NotBlank(message = "供应商不能为空")
         String supplier,
+        Long salesmanUserId,
+        String salesmanName,
         String upstreamCode,
         String remark,
         @NotEmpty(message = "入库物品不能为空")
@@ -39,4 +41,3 @@ public record PurchaseInboundCreateRequest(
     ) {
     }
 }
-

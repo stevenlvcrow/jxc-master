@@ -31,11 +31,23 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 
 const resolveGroupId = (): number | null => {
-  const orgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!orgId) return null;
-  const raw = orgId.includes('-') ? orgId.slice(orgId.lastIndexOf('-') + 1) : orgId;
-  const id = Number(raw);
-  return Number.isNaN(id) ? null : id;
+  const currentOrg = sessionStore.currentOrg;
+  if (!currentOrg) {
+    return null;
+  }
+  if (currentOrg.type === 'group') {
+    const groupId = Number(String(currentOrg.id).slice('group-'.length));
+    return Number.isNaN(groupId) ? null : groupId;
+  }
+  if (currentOrg.type === 'store') {
+    const parentGroup = sessionStore.rootGroups.find((group) => group.children?.some((child) => child.id === currentOrg.id));
+    if (!parentGroup) {
+      return null;
+    }
+    const groupId = Number(String(parentGroup.id).slice('group-'.length));
+    return Number.isNaN(groupId) ? null : groupId;
+  }
+  return null;
 };
 
 const formatDateTime = (value?: string) => {

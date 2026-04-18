@@ -5,6 +5,7 @@ import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.identity.domain.repository.UnitRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -41,6 +42,7 @@ public class UnitAdministrationService {
                 .toList();
     }
 
+    @Transactional
     public UnitDO createUnit(String scopeType,
                              Long scopeId,
                              String unitCode,
@@ -66,6 +68,7 @@ public class UnitAdministrationService {
         return entity;
     }
 
+    @Transactional
     public UnitDO updateUnit(Long id,
                              String scopeType,
                              Long scopeId,
@@ -86,6 +89,7 @@ public class UnitAdministrationService {
         return entity;
     }
 
+    @Transactional
     public UnitDO updateUnitStatus(Long id, String scopeType, Long scopeId, String status) {
         UnitDO entity = requireUnit(id, scopeType, scopeId);
         entity.setStatus(normalizeStatus(status));
@@ -93,6 +97,7 @@ public class UnitAdministrationService {
         return entity;
     }
 
+    @Transactional
     public void deleteUnit(Long id, String scopeType, Long scopeId) {
         requireUnit(id, scopeType, scopeId);
         unitRepository.deleteByIdAndScope(id, scopeType, scopeId);

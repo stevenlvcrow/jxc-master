@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ArrowDown, Delete, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import { useSessionStore } from '@/stores/session';
+import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 
 type TimeType = '单据日期' | '创建时间';
 type DocumentStatus = '草稿' | '已提交' | '已审核';
@@ -30,17 +32,8 @@ const timeTypeOptions: TimeType[] = ['单据日期', '创建时间'];
 const documentStatusOptions: DocumentStatus[] = ['草稿', '已提交', '已审核'];
 const printStatusOptions: PrintStatus[] = ['全部', '未打印', '已打印'];
 const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
-const warehouseTree: TreeNode[] = [
-  {
-    value: 'warehouse-root',
-    label: '仓库中心',
-    children: [
-      { value: '中央成品仓', label: '中央成品仓' },
-      { value: '北区原料仓', label: '北区原料仓' },
-      { value: '南区包材仓', label: '南区包材仓' },
-    ],
-  },
-];
+const sessionStore = useSessionStore();
+const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 
 const query = reactive({
   timeType: '单据日期' as TimeType,
@@ -97,6 +90,17 @@ const tableData: ProfitInboundRow[] = [
     remark: '盘盈补录',
   },
 ];
+
+onMounted(() => {
+  void loadWarehouseTree();
+});
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    void loadWarehouseTree();
+  },
+);
 
 const currentPage = ref(1);
 const pageSize = ref(10);

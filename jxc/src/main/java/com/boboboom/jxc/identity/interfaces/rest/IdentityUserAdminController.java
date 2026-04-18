@@ -5,14 +5,16 @@ import com.boboboom.jxc.identity.application.service.IdentityAdminLookupService;
 import com.boboboom.jxc.identity.application.service.IdentityAccessControlService;
 import com.boboboom.jxc.identity.application.service.UserAdministrationService;
 import com.boboboom.jxc.identity.application.service.UserRoleAssignmentService;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest.UserBatchDeleteRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserRoleAssignRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import jakarta.validation.Valid;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,17 +39,20 @@ public class IdentityUserAdminController {
     private final UserRoleAssignmentService userRoleAssignmentService;
     private final IdentityAdminLookupService identityAdminLookupService;
     private final IdentityAdminSupport identityAdminSupport;
+    private final OrgScopeService orgScopeService;
 
     public IdentityUserAdminController(IdentityAccessControlService identityAccessControlService,
                                        UserAdministrationService userAdministrationService,
                                        UserRoleAssignmentService userRoleAssignmentService,
                                        IdentityAdminLookupService identityAdminLookupService,
-                                       IdentityAdminSupport identityAdminSupport) {
+                                       IdentityAdminSupport identityAdminSupport,
+                                       OrgScopeService orgScopeService) {
         this.identityAccessControlService = identityAccessControlService;
         this.userAdministrationService = userAdministrationService;
         this.userRoleAssignmentService = userRoleAssignmentService;
         this.identityAdminLookupService = identityAdminLookupService;
         this.identityAdminSupport = identityAdminSupport;
+        this.orgScopeService = orgScopeService;
     }
 
     @GetMapping
@@ -71,7 +76,8 @@ public class IdentityUserAdminController {
                                         role.roleType(),
                                         role.scopeType(),
                                         role.scopeId(),
-                                        role.scopeName()
+                                        role.scopeName(),
+                                        role.builtin()
                                 ))
                                 .toList()
                 ))
@@ -79,8 +85,24 @@ public class IdentityUserAdminController {
         return CodeDataResponse.ok(result);
     }
 
+    @GetMapping("/salesmen")
+    public CodeDataResponse<List<SalesmanCandidateView>> listSalesmen(@org.springframework.web.bind.annotation.RequestParam String orgId) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, orgId);
+        if (!OrgScopeService.SCOPE_STORE.equals(scope.scopeType())) {
+            throw new BusinessException("请先选择门店机构");
+        }
+        List<SalesmanCandidateView> result = userAdministrationService.listStoreSalesmen(scope.scopeId()).stream()
+                .map(candidate -> new SalesmanCandidateView(
+                        candidate.userId(),
+                        candidate.realName(),
+                        candidate.phone()
+                ))
+                .toList();
+        return CodeDataResponse.ok(result);
+    }
+
     @PostMapping
-    @Transactional
     public CodeDataResponse<IdPayload> createUser(@Valid @RequestBody UserUpsertRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
@@ -92,8 +114,19 @@ public class IdentityUserAdminController {
         return CodeDataResponse.ok(new IdPayload(user.getId()));
     }
 
+    @PutMapping("/{id}")
+    public CodeDataResponse<Void> updateUser(@PathVariable Long id,
+                                             @Valid @RequestBody UserUpsertRequest request) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
+        if (!platformAdmin) {
+            userAdministrationService.ensureCanManageUser(id, operatorId);
+        }
+        userAdministrationService.updateUser(id, request);
+        return CodeDataResponse.ok();
+    }
+
     @PutMapping("/{id}/status")
-    @Transactional
     public CodeDataResponse<Void> updateUserStatus(@PathVariable Long id,
                                                    @Valid @RequestBody StatusUpdateRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
@@ -105,8 +138,23 @@ public class IdentityUserAdminController {
         return CodeDataResponse.ok();
     }
 
+    @DeleteMapping("/{id}")
+    public CodeDataResponse<Void> deleteUser(@PathVariable Long id) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
+        userAdministrationService.deleteUsers(operatorId, platformAdmin, List.of(id));
+        return CodeDataResponse.ok();
+    }
+
+    @DeleteMapping
+    public CodeDataResponse<Void> batchDeleteUsers(@Valid @RequestBody UserBatchDeleteRequest request) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
+        userAdministrationService.deleteUsers(operatorId, platformAdmin, request.getIds());
+        return CodeDataResponse.ok();
+    }
+
     @PutMapping("/{id}/roles")
-    @Transactional
     public CodeDataResponse<Void> assignUserRoles(@PathVariable Long id,
                                                   @Valid @RequestBody UserRoleAssignRequest request) {
         identityAdminLookupService.requireUser(id);

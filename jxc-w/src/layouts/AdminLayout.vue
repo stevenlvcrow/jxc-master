@@ -19,6 +19,7 @@ import {
 } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue';
+import { logoutApi } from '@/api/modules/auth';
 import { fetchOrgTreeApi } from '@/api/modules/org';
 import { useAppStore } from '@/stores/app';
 import { useMenuStore } from '@/stores/menu';
@@ -75,7 +76,7 @@ const findMenuTitleByPath = (items: typeof menuItems.value, path: string): strin
 };
 const fallbackHomePath = computed(() => {
   const firstPath = resolveFirstAvailableMenuPath(menuItems.value);
-  return firstPath ?? (sessionStore.requiresOrgSelection ? '/dashboard' : '/system/groups');
+  return firstPath ?? '/profile';
 });
 
 const activeMenu = computed(() => String(route.meta.activeMenu ?? route.path));
@@ -347,14 +348,8 @@ const switchOrg = async (orgId: string) => {
   sessionStore.selectOrg(orgId);
   appStore.resetVisitedTabs();
   menuStore.clearMenus();
-  await menuStore.loadMenus(orgId);
 
-  const targetPath = resolveFirstAvailableMenuPath(menuStore.menuItems);
-  if (targetPath) {
-    await router.replace(targetPath);
-    return;
-  }
-  await router.replace('/select-org');
+  await router.replace('/profile');
 };
 
 const selectOrg = async (org: OrgNode) => {
@@ -369,15 +364,23 @@ const selectOrg = async (org: OrgNode) => {
 
 const handleUserCommand = (command: string | number | object) => {
   if (command === 'profile') {
-    ElMessage.info('个人中心开发中');
+    router.push('/profile');
     return;
   }
 
   if (command === 'logout') {
-    sessionStore.logout();
-    menuStore.clearMenus();
-    appStore.resetVisitedTabs();
-    router.replace('/login');
+    void (async () => {
+      try {
+        await logoutApi();
+      } catch {
+        // Ignore logout API failure and continue local cleanup.
+      } finally {
+        sessionStore.logout();
+        menuStore.clearMenus();
+        appStore.resetVisitedTabs();
+        router.replace('/login');
+      }
+    })();
   }
 };
 
@@ -426,12 +429,11 @@ watch(
     try {
       await menuStore.loadMenus(targetOrgId || undefined);
       const allowedPaths = new Set(flattenMenuPaths(menuStore.menuItems));
-      if (route.path !== '/select-org' && route.path !== '/login' && !allowedPaths.has(route.path)) {
-        const fallbackPath = resolveFirstAvailableMenuPath(menuStore.menuItems);
-        if (fallbackPath) {
-          await router.replace(fallbackPath);
-        } else if (sessionStore.requiresOrgSelection) {
+      if (route.path !== '/select-org' && route.path !== '/login' && route.path !== '/profile' && !allowedPaths.has(route.path)) {
+        if (sessionStore.requiresOrgSelection && !sessionStore.hasSelectedOrg) {
           await router.replace('/select-org');
+        } else {
+          await router.replace('/profile');
         }
       }
     } catch {

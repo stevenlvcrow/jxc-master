@@ -9,7 +9,7 @@ import com.boboboom.jxc.identity.interfaces.rest.request.UserRoleAssignRequest;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -42,7 +42,7 @@ public class UserRoleAssignmentService {
         }
 
         List<UserRoleRelDO> toInsert = new ArrayList<>();
-        LinkedHashMap<String, UserRoleAssignRequest.UserRoleAssignment> deduped = new LinkedHashMap<>();
+        LinkedHashSet<String> seenKeys = new LinkedHashSet<>();
         List<UserRoleAssignRequest.UserRoleAssignment> safeAssignments = assignments == null ? List.of() : assignments;
         for (UserRoleAssignRequest.UserRoleAssignment assignment : safeAssignments) {
             if (assignment.getRoleId() == null) {
@@ -60,11 +60,10 @@ public class UserRoleAssignmentService {
             if (!platformAdmin && !isAllowedScope(scopeType, scopeId, managedGroupIds, managedStoreIds)) {
                 throw new BusinessException("包含无权限授权范围");
             }
-            String key = assignment.getRoleId() + ":" + scopeType + ":" + String.valueOf(scopeId);
-            if (deduped.containsKey(key)) {
-                continue;
+            String key = buildAssignmentKey(scopeType, scopeId, assignment.getRoleId());
+            if (!seenKeys.add(key)) {
+                throw new BusinessException("同一用户同一门店只能分配一个角色");
             }
-            deduped.put(key, assignment);
 
             UserRoleRelDO rel = new UserRoleRelDO();
             rel.setUserId(targetUserId);
@@ -172,5 +171,12 @@ public class UserRoleAssignmentService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String buildAssignmentKey(String scopeType, Long scopeId, Long roleId) {
+        if (SCOPE_STORE.equals(scopeType)) {
+            return SCOPE_STORE + ":" + String.valueOf(scopeId);
+        }
+        return String.valueOf(roleId) + ":" + scopeType + ":" + String.valueOf(scopeId);
     }
 }

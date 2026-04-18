@@ -9,7 +9,7 @@ import CommonSelectorDialog, {
   type SelectorTreeNode,
 } from '@/components/CommonSelectorDialog.vue';
 import { useSessionStore } from '@/stores/session';
-import { fetchWarehousesApi, type WarehouseRow as ApiWarehouseRow } from '@/api/modules/warehouse';
+import { fetchStoreWarehousesApi, type WarehouseRow as ApiWarehouseRow } from '@/api/modules/warehouse';
 import { createItemRuleApi, type RuleCreatePayload } from '@/api/modules/warehouse-item-rule';
 import {
   fetchItemCategoryTreeApi,
@@ -136,11 +136,43 @@ let seed = 0;
 const nextId = () => `row-${++seed}`;
 
 const resolveGroupId = (): number | null => {
-  const orgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!orgId) return null;
-  const raw = orgId.includes('-') ? orgId.slice(orgId.lastIndexOf('-') + 1) : orgId;
-  const id = Number(raw);
-  return Number.isNaN(id) ? null : id;
+  const currentOrg = sessionStore.currentOrg;
+  if (!currentOrg) {
+    return null;
+  }
+  if (currentOrg.type === 'group') {
+    const groupId = Number(String(currentOrg.id).slice('group-'.length));
+    return Number.isNaN(groupId) ? null : groupId;
+  }
+  if (currentOrg.type === 'store') {
+    const parentGroup = sessionStore.rootGroups.find((group) => group.children?.some((child) => child.id === currentOrg.id));
+    if (!parentGroup) {
+      return null;
+    }
+    const groupId = Number(String(parentGroup.id).slice('group-'.length));
+    return Number.isNaN(groupId) ? null : groupId;
+  }
+  return null;
+};
+
+const resolveStoreId = (): number | null => {
+  const currentOrg = sessionStore.currentOrg;
+  if (!currentOrg) {
+    return null;
+  }
+  if (currentOrg.type === 'store') {
+    const storeId = Number(String(currentOrg.id).slice('store-'.length));
+    return Number.isNaN(storeId) ? null : storeId;
+  }
+  if (currentOrg.type === 'group') {
+    const firstStore = currentOrg.children?.[0];
+    if (!firstStore) {
+      return null;
+    }
+    const storeId = Number(String(firstStore.id).slice('store-'.length));
+    return Number.isNaN(storeId) ? null : storeId;
+  }
+  return null;
 };
 
 const nowTime = () => {
@@ -235,12 +267,12 @@ const handleBack = () => {
 };
 
 const loadWarehouses = async () => {
-  const groupId = resolveGroupId();
-  if (!groupId) {
+  const storeId = resolveStoreId();
+  if (!storeId) {
     warehouseOptions.value = [];
     return;
   }
-  warehouseOptions.value = await fetchWarehousesApi(groupId);
+  warehouseOptions.value = await fetchStoreWarehousesApi(storeId);
 };
 
 type ItemCodeSuggestion = {

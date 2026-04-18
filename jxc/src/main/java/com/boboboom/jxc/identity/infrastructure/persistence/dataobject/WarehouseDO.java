@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 @TableName("sys_warehouse")
 public class WarehouseDO extends BaseAuditDO {
 
+    private Long storeId;
     private Long groupId;
     private String warehouseCode;
     private String warehouseName;
@@ -19,6 +20,9 @@ public class WarehouseDO extends BaseAuditDO {
     private String idealPurchaseSaleRatio;
     private Boolean isDefault;
     private String remark;
+
+    public Long getStoreId() { return storeId; }
+    public void setStoreId(Long storeId) { this.storeId = storeId; }
 
     public Long getGroupId() { return groupId; }
     public void setGroupId(Long groupId) { this.groupId = groupId; }

@@ -11,7 +11,7 @@ const sessionStore = useSessionStore();
 const account = ref('13800000000');
 const password = ref('123654');
 const useRealAuthApi = import.meta.env.VITE_USE_REAL_AUTH_API === '1';
-const SYSTEM_ADMIN_HOME = '/system/groups';
+const PROFILE_HOME_PATH = '/profile';
 
 const isMockPlatformAccount = (value: string) => {
   const normalized = value.trim().toLowerCase();
@@ -29,7 +29,7 @@ const submitLogin = async () => {
     sessionStore.login('李智杰', loginAccount, {
       platformAdminMode: isMockPlatformAccount(loginAccount),
     });
-    router.replace(sessionStore.requiresOrgSelection ? '/select-org' : SYSTEM_ADMIN_HOME);
+    router.replace(sessionStore.requiresOrgSelection ? '/select-org' : PROFILE_HOME_PATH);
     return;
   }
 
@@ -46,7 +46,7 @@ const submitLogin = async () => {
     sessionStore.login(result.userName || loginAccount, loginAccount, {
       platformAdminMode: Boolean(result.platformAdmin),
     });
-    router.replace(sessionStore.requiresOrgSelection ? '/select-org' : SYSTEM_ADMIN_HOME);
+    router.replace(sessionStore.requiresOrgSelection ? '/select-org' : PROFILE_HOME_PATH);
   } catch {
     // Global error message handled in http interceptor.
   }

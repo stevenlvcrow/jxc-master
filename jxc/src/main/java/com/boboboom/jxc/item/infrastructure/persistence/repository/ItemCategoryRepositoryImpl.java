@@ -21,6 +21,15 @@ public class ItemCategoryRepositoryImpl implements ItemCategoryRepository {
     }
 
     @Override
+    public List<ItemCategoryDO> findByScopeOrdered(String scopeType, Long scopeId) {
+        return itemCategoryMapper.selectList(new LambdaQueryWrapper<ItemCategoryDO>()
+                .eq(ItemCategoryDO::getScopeType, scopeType)
+                .eq(ItemCategoryDO::getScopeId, scopeId)
+                .orderByAsc(ItemCategoryDO::getCreatedAt)
+                .orderByAsc(ItemCategoryDO::getId));
+    }
+
+    @Override
     public List<ItemCategoryDO> findPlatformTemplates() {
         return itemCategoryMapper.selectList(new LambdaQueryWrapper<ItemCategoryDO>()
                 .eq(ItemCategoryDO::getScopeType, PLATFORM_SCOPE)
@@ -40,5 +49,15 @@ public class ItemCategoryRepositoryImpl implements ItemCategoryRepository {
     @Override
     public void save(ItemCategoryDO itemCategory) {
         itemCategoryMapper.insert(itemCategory);
+    }
+
+    @Override
+    public void update(ItemCategoryDO itemCategory) {
+        itemCategoryMapper.updateById(itemCategory);
+    }
+
+    @Override
+    public void deleteById(Long id) {
+        itemCategoryMapper.deleteById(id);
     }
 }

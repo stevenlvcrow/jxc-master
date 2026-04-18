@@ -38,7 +38,8 @@ public record WorkflowConfigSaveRequest(
             @Size(max = 32, message = "节点类型长度不能超过32")
             String nodeType,
             @Size(max = 256, message = "条件表达式长度不能超过256")
-            String conditionExpression
+            String conditionExpression,
+            List<String> triggerActions
     ) {
     }
 }

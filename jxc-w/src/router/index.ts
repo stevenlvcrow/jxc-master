@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { featureRoutes } from '@/config/menu';
+import { authStorage } from '@/api/auth-storage';
 import { pinia } from '@/stores';
 import { useMenuStore } from '@/stores/menu';
 import { useSessionStore } from '@/stores/session';
@@ -26,8 +27,16 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/',
     component: () => import('@/layouts/AdminLayout.vue'),
-    redirect: '/system/groups',
+    redirect: '/profile',
     children: [
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/profile/index.vue'),
+        meta: {
+          title: '个人中心',
+        },
+      },
       {
         path: 'system/groups',
         name: 'SystemGroups',
@@ -194,6 +203,28 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'inventory/1/2/view/:id',
+        name: 'PurchaseInboundView',
+        component: () => import('@/views/inventory/purchase-inbound-create.vue'),
+        meta: {
+          title: '查看采购入库',
+          activeMenu: '/inventory/1/2',
+          breadcrumbs: ['库存管理', '库存单据', '采购入库', '查看采购入库'],
+          openKeys: ['m4', 'm4-m1'],
+        },
+      },
+      {
+        path: 'inventory/1/2/edit/:id',
+        name: 'PurchaseInboundEdit',
+        component: () => import('@/views/inventory/purchase-inbound-create.vue'),
+        meta: {
+          title: '编辑采购入库',
+          activeMenu: '/inventory/1/2',
+          breadcrumbs: ['库存管理', '库存单据', '采购入库', '编辑采购入库'],
+          openKeys: ['m4', 'm4-m1'],
+        },
+      },
+      {
         path: 'inventory/5/1/create',
         name: 'InventoryTemplateCreate',
         component: () => import('@/views/inventory/inventory-template-create.vue'),
@@ -215,7 +246,7 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 });
 
-const SYSTEM_ADMIN_HOME = '/system/groups';
+const PROFILE_HOME_PATH = '/profile';
 const SELECT_ORG_PATH = '/select-org';
 
 const flattenMenuPaths = (items: AppMenuItem[]): string[] => items.flatMap((item) => {
@@ -242,20 +273,23 @@ const resolveMenuHomePath = async (
     return '/login';
   }
   if (!sessionStore.requiresOrgSelection) {
-    return SYSTEM_ADMIN_HOME;
+    return PROFILE_HOME_PATH;
   }
   if (!sessionStore.hasSelectedOrg) {
     return SELECT_ORG_PATH;
   }
+  if (!authStorage.getAccessToken()) {
+    return PROFILE_HOME_PATH;
+  }
   const targetOrgId = sessionStore.currentOrgId;
-  if (!targetOrgId) {
-    return SELECT_ORG_PATH;
+  if (targetOrgId && (menuStore.loadedOrgId !== targetOrgId || !menuStore.menuItems.length)) {
+    try {
+      await menuStore.loadMenus(targetOrgId);
+    } catch {
+      menuStore.clearMenus();
+    }
   }
-  if (menuStore.loadedOrgId !== targetOrgId || !menuStore.menuItems.length) {
-    await menuStore.loadMenus(targetOrgId);
-  }
-  const firstPath = resolveFirstAvailableMenuPath(menuStore.menuItems);
-  return firstPath ?? SELECT_ORG_PATH;
+  return PROFILE_HOME_PATH;
 };
 
 router.beforeEach(async (to) => {
@@ -276,12 +310,11 @@ router.beforeEach(async (to) => {
   }
 
   if (sessionStore.isLoggedIn && !sessionStore.requiresOrgSelection && to.path === SELECT_ORG_PATH) {
-    return SYSTEM_ADMIN_HOME;
+    return resolveMenuHomePath(sessionStore, menuStore);
   }
 
   if (sessionStore.isLoggedIn && sessionStore.requiresOrgSelection && sessionStore.hasSelectedOrg && to.path === SELECT_ORG_PATH) {
-    const homePath = await resolveMenuHomePath(sessionStore, menuStore);
-    return homePath === SELECT_ORG_PATH ? true : homePath;
+    return PROFILE_HOME_PATH;
   }
 
   if (to.path === '/dashboard') {
@@ -289,23 +322,33 @@ router.beforeEach(async (to) => {
   }
 
   if (sessionStore.isLoggedIn && sessionStore.requiresOrgSelection && sessionStore.hasSelectedOrg) {
+    if (!authStorage.getAccessToken()) {
+      return PROFILE_HOME_PATH;
+    }
     const targetOrgId = sessionStore.currentOrgId;
     if (menuStore.loadedOrgId !== targetOrgId || !menuStore.menuItems.length) {
-      await menuStore.loadMenus(targetOrgId);
+      try {
+        await menuStore.loadMenus(targetOrgId);
+      } catch {
+        menuStore.clearMenus();
+        return PROFILE_HOME_PATH;
+      }
     }
     const allowedPaths = new Set(flattenMenuPaths(menuStore.menuItems));
     const activeMenuPath = typeof to.meta.activeMenu === 'string' ? to.meta.activeMenu : '';
     const canAccessWorkflowConfig = to.path === '/group/workflow-config'
       && allowedPaths.has('/group/workflow-history');
+    const canAccessProfile = to.path === '/profile';
     const canAccess = allowedPaths.has(to.path)
       || (activeMenuPath && allowedPaths.has(activeMenuPath))
-      || canAccessWorkflowConfig;
+      || canAccessWorkflowConfig
+      || canAccessProfile;
     if (allowedPaths.size > 0 && !canAccess) {
       return resolveMenuHomePath(sessionStore, menuStore);
     }
   }
 
-  if (sessionStore.isLoggedIn && to.path !== SELECT_ORG_PATH && to.path !== '/login' && !canResolvePath(to.path)) {
+  if (sessionStore.isLoggedIn && to.path !== SELECT_ORG_PATH && to.path !== '/login' && to.path !== '/profile' && !canResolvePath(to.path)) {
     return resolveMenuHomePath(sessionStore, menuStore);
   }
 

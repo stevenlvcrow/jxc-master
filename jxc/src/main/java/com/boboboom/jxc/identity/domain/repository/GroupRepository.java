@@ -10,5 +10,19 @@ public interface GroupRepository {
 
     Optional<GroupDO> findById(Long id);
 
+    Optional<GroupDO> findByGroupCode(String groupCode);
+
+    List<GroupDO> findAllOrdered();
+
+    List<GroupDO> findByIdsOrdered(List<Long> ids);
+
+    List<String> findAllGroupCodes();
+
     List<GroupStoreSummary> findActiveGroupStoreSummaries(String status);
+
+    void save(GroupDO group);
+
+    void update(GroupDO group);
+
+    void deleteById(Long id);
 }

@@ -14,5 +14,8 @@ public interface UserAccountMapper extends BaseMapper<UserAccountDO> {
     List<UserRoleView> selectUserRoles(@Param("userId") Long userId);
 
     List<UserRoleView> selectUserRolesByUserIds(@Param("userIds") List<Long> userIds);
-}
 
+    List<UserRoleView> selectUsersByRoleAndScope(@Param("roleCode") String roleCode,
+                                                 @Param("scopeType") String scopeType,
+                                                 @Param("scopeId") Long scopeId);
+}

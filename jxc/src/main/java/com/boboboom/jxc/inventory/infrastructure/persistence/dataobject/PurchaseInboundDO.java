@@ -15,8 +15,18 @@ public class PurchaseInboundDO extends BaseAuditDO {
     private LocalDate inboundDate;
     private String warehouseName;
     private String supplierName;
+    private Long salesmanUserId;
+    private String salesmanName;
     private String upstreamCode;
     private String status;
+    private String workflowProcessCode;
+    private String workflowDefinitionKey;
+    private String workflowDefinitionId;
+    private String workflowInstanceId;
+    private String workflowTaskId;
+    private String workflowTaskName;
+    private String workflowStatus;
+    private String pendingOperation;
     private String remark;
     private Long createdBy;
     private Long approvedBy;
@@ -70,6 +80,22 @@ public class PurchaseInboundDO extends BaseAuditDO {
         this.supplierName = supplierName;
     }
 
+    public Long getSalesmanUserId() {
+        return salesmanUserId;
+    }
+
+    public void setSalesmanUserId(Long salesmanUserId) {
+        this.salesmanUserId = salesmanUserId;
+    }
+
+    public String getSalesmanName() {
+        return salesmanName;
+    }
+
+    public void setSalesmanName(String salesmanName) {
+        this.salesmanName = salesmanName;
+    }
+
     public String getUpstreamCode() {
         return upstreamCode;
     }
@@ -84,6 +110,70 @@ public class PurchaseInboundDO extends BaseAuditDO {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getWorkflowProcessCode() {
+        return workflowProcessCode;
+    }
+
+    public void setWorkflowProcessCode(String workflowProcessCode) {
+        this.workflowProcessCode = workflowProcessCode;
+    }
+
+    public String getWorkflowDefinitionKey() {
+        return workflowDefinitionKey;
+    }
+
+    public void setWorkflowDefinitionKey(String workflowDefinitionKey) {
+        this.workflowDefinitionKey = workflowDefinitionKey;
+    }
+
+    public String getWorkflowDefinitionId() {
+        return workflowDefinitionId;
+    }
+
+    public void setWorkflowDefinitionId(String workflowDefinitionId) {
+        this.workflowDefinitionId = workflowDefinitionId;
+    }
+
+    public String getWorkflowInstanceId() {
+        return workflowInstanceId;
+    }
+
+    public void setWorkflowInstanceId(String workflowInstanceId) {
+        this.workflowInstanceId = workflowInstanceId;
+    }
+
+    public String getWorkflowTaskId() {
+        return workflowTaskId;
+    }
+
+    public void setWorkflowTaskId(String workflowTaskId) {
+        this.workflowTaskId = workflowTaskId;
+    }
+
+    public String getWorkflowTaskName() {
+        return workflowTaskName;
+    }
+
+    public void setWorkflowTaskName(String workflowTaskName) {
+        this.workflowTaskName = workflowTaskName;
+    }
+
+    public String getWorkflowStatus() {
+        return workflowStatus;
+    }
+
+    public void setWorkflowStatus(String workflowStatus) {
+        this.workflowStatus = workflowStatus;
+    }
+
+    public String getPendingOperation() {
+        return pendingOperation;
+    }
+
+    public void setPendingOperation(String pendingOperation) {
+        this.pendingOperation = pendingOperation;
     }
 
     public String getRemark() {
@@ -118,4 +208,3 @@ public class PurchaseInboundDO extends BaseAuditDO {
         this.approvedAt = approvedAt;
     }
 }
-

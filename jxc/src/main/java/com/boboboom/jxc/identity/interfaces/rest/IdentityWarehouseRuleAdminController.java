@@ -8,7 +8,6 @@ import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleCreate
 import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import jakarta.validation.Valid;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -91,7 +90,6 @@ public class IdentityWarehouseRuleAdminController {
     }
 
     @PostMapping("/groups/{groupId}/item-rules")
-    @Transactional
     public CodeDataResponse<IdPayload> createItemRule(@PathVariable Long groupId,
                                                       @Valid @RequestBody WarehouseItemRuleCreateRequest request) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
@@ -119,7 +117,6 @@ public class IdentityWarehouseRuleAdminController {
     }
 
     @PutMapping("/item-rules/{id}")
-    @Transactional
     public CodeDataResponse<Void> updateItemRule(@PathVariable Long id,
                                                  @Valid @RequestBody WarehouseItemRuleUpdateRequest request) {
         WarehouseItemRuleRepository.RuleRecord rule = warehouseItemRuleAdministrationService.requireRule(id);
@@ -148,7 +145,6 @@ public class IdentityWarehouseRuleAdminController {
     }
 
     @DeleteMapping("/item-rules/{id}")
-    @Transactional
     public CodeDataResponse<Void> deleteItemRule(@PathVariable Long id) {
         WarehouseItemRuleRepository.RuleRecord rule = warehouseItemRuleAdministrationService.requireRule(id);
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), rule.groupId());

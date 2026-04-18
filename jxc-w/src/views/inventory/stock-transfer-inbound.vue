@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ArrowDown, ArrowUp, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import PageTabsLayout, { type PageTabItem } from '@/components/PageTabsLayout.vue';
+import { useSessionStore } from '@/stores/session';
+import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 
 type DocumentTimeType = '入库日期' | '创建时间';
 type ItemTimeType = '移库日期' | '创建时间';
@@ -11,11 +13,6 @@ type DocumentStatus = '全部' | '草稿' | '已提交' | '已审核';
 type TransferType = '全部' | '普通移库' | '退库移库' | '紧急调拨';
 type InboundStatus = '全部' | '未入库' | '部分入库' | '已入库';
 type PrintStatus = '全部' | '未打印' | '已打印';
-type TreeNode = {
-  value: string;
-  label: string;
-  children?: TreeNode[];
-};
 type TransferInboundDocumentRow = {
   id: number;
   documentCode: string;
@@ -66,18 +63,8 @@ const transferTypeOptions: TransferType[] = ['全部', '普通移库', '退库�
 const inboundStatusOptions: InboundStatus[] = ['全部', '未入库', '部分入库', '已入库'];
 const printStatusOptions: PrintStatus[] = ['全部', '未打印', '已打印'];
 const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
-const warehouseTree: TreeNode[] = [
-  {
-    value: 'warehouse-root',
-    label: '仓库中心',
-    children: [
-      { value: '中央成品仓', label: '中央成品仓' },
-      { value: '北区原料仓', label: '北区原料仓' },
-      { value: '南区包材仓', label: '南区包材仓' },
-      { value: '东区备货仓', label: '东区备货仓' },
-    ],
-  },
-];
+const sessionStore = useSessionStore();
+const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 
 const activeTab = ref('document');
 const documentFiltersCollapsed = ref(true);
@@ -232,6 +219,17 @@ const itemRows: TransferInboundItemRow[] = [
     remark: '外卖高峰备货入库',
   },
 ];
+
+onMounted(() => {
+  void loadWarehouseTree();
+});
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    void loadWarehouseTree();
+  },
+);
 
 const matchesDateRange = (dateRange: string[], businessDate: string, createdAt: string, isCreatedTime: boolean) => {
   if (dateRange.length !== 2) {

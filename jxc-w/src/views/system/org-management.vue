@@ -1,43 +1,82 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { Download, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import { fetchOrgTreeApi } from '@/api/modules/org';
+import { useSessionStore, type OrgNode } from '@/stores/session';
 
-type OrgType = '门店';
 type OrgRow = {
-  id: number;
+  id: string;
   orgCode: string;
   orgName: string;
-  orgType: OrgType;
   parentOrg: string;
+  city: string;
 };
 
-const orgTypeOptions: Array<'门店'> = ['门店'];
+const sessionStore = useSessionStore();
+const useRealOrgApi = import.meta.env.VITE_USE_REAL_ORG_API === '1';
 const query = reactive({
   orgCode: '',
   orgName: '',
-  orgType: '门店' as OrgType,
 });
-
-const tableData: OrgRow[] = [
-  { id: 1, orgCode: 'STORE-001', orgName: '虹桥门店', orgType: '门店', parentOrg: '华东大区' },
-  { id: 2, orgCode: 'STORE-002', orgName: '浦东门店', orgType: '门店', parentOrg: '华东大区' },
-  { id: 3, orgCode: 'STORE-003', orgName: '徐汇门店', orgType: '门店', parentOrg: '上海直营中心' },
-  { id: 4, orgCode: 'STORE-004', orgName: '静安门店', orgType: '门店', parentOrg: '上海直营中心' },
-];
 
 const currentPage = ref(1);
 const pageSize = ref(10);
+const selectedGroupId = ref('');
+
+const groupOptions = computed(() => sessionStore.rootGroups.filter((node) => node.type === 'group'));
+
+const resolveParentGroup = (org: OrgNode | null) => {
+  if (!org) {
+    return null;
+  }
+  if (org.type === 'group') {
+    return org;
+  }
+  return sessionStore.rootGroups.find((group) => group.children?.some((child) => child.id === org.id)) ?? null;
+};
+
+const syncSelectedGroup = () => {
+  const currentGroup = resolveParentGroup(sessionStore.currentOrg);
+  selectedGroupId.value = currentGroup?.id ?? groupOptions.value[0]?.id ?? '';
+};
+
+watch(
+  () => [sessionStore.currentOrgId, groupOptions.value.length],
+  () => {
+    syncSelectedGroup();
+  },
+  { immediate: true },
+);
+
+watch(selectedGroupId, () => {
+  currentPage.value = 1;
+});
+
+const activeGroup = computed(() => {
+  return groupOptions.value.find((group) => group.id === selectedGroupId.value)
+    ?? resolveParentGroup(sessionStore.currentOrg)
+    ?? groupOptions.value[0]
+    ?? null;
+});
 
 const filteredRows = computed(() => {
   const orgCodeKeyword = query.orgCode.trim().toLowerCase();
   const orgNameKeyword = query.orgName.trim().toLowerCase();
-  return tableData.filter((row) => {
+  const group = activeGroup.value;
+  const rows = group?.children ?? [];
+
+  return rows.map((row) => ({
+    id: row.id,
+    orgCode: row.code,
+    orgName: row.name,
+    parentOrg: group?.name ?? '-',
+    city: row.city,
+  })).filter((row) => {
     const matchedCode = !orgCodeKeyword || row.orgCode.toLowerCase().includes(orgCodeKeyword);
     const matchedName = !orgNameKeyword || row.orgName.toLowerCase().includes(orgNameKeyword);
-    const matchedType = row.orgType === query.orgType;
-    return matchedCode && matchedName && matchedType;
+    return matchedCode && matchedName;
   });
 });
 
@@ -53,7 +92,7 @@ const handleSearch = () => {
 const handleReset = () => {
   query.orgCode = '';
   query.orgName = '';
-  query.orgType = '门店';
+  syncSelectedGroup();
   currentPage.value = 1;
 };
 
@@ -77,11 +116,42 @@ const handlePageSizeChange = (size: number) => {
   pageSize.value = size;
   currentPage.value = 1;
 };
+
+const loadOrgTree = async () => {
+  if (!useRealOrgApi) {
+    return;
+  }
+  try {
+    const tree = await fetchOrgTreeApi();
+    sessionStore.setOrgTree(tree);
+  } catch {
+    // Global error message handled in http interceptor.
+  }
+};
+
+onMounted(() => {
+  loadOrgTree();
+});
 </script>
 
 <template>
   <section class="panel item-main-panel">
     <CommonQuerySection :model="query">
+      <el-form-item label="所属集团">
+        <el-select
+          v-model="selectedGroupId"
+          style="width: 240px"
+          filterable
+          :disabled="groupOptions.length <= 1"
+        >
+          <el-option
+            v-for="group in groupOptions"
+            :key="group.id"
+            :label="group.name"
+            :value="group.id"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="机构编码">
         <el-input
           v-model="query.orgCode"
@@ -97,16 +167,6 @@ const handlePageSizeChange = (size: number) => {
           clearable
           style="width: 180px"
         />
-      </el-form-item>
-      <el-form-item label="机构类型">
-        <el-select v-model="query.orgType" style="width: 120px">
-          <el-option
-            v-for="option in orgTypeOptions"
-            :key="option"
-            :label="option"
-            :value="option"
-          />
-        </el-select>
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="handleSearch">
@@ -139,8 +199,8 @@ const handlePageSizeChange = (size: number) => {
       <el-table-column type="index" label="序号" width="56" />
       <el-table-column prop="orgCode" label="机构编码" min-width="140" show-overflow-tooltip />
       <el-table-column prop="orgName" label="机构名称" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="orgType" label="机构类型" min-width="100" show-overflow-tooltip />
       <el-table-column prop="parentOrg" label="上级机构" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="city" label="城市" min-width="120" show-overflow-tooltip />
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
           <el-button text type="primary" @click="handleView(row)">查看</el-button>

@@ -34,6 +34,14 @@ public class RoleRepositoryImpl implements RoleRepository {
     }
 
     @Override
+    public List<RoleDO> findByTenantGroupId(Long tenantGroupId) {
+        return roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
+                .eq(RoleDO::getTenantGroupId, tenantGroupId)
+                .orderByDesc(RoleDO::getCreatedAt)
+                .orderByDesc(RoleDO::getId));
+    }
+
+    @Override
     public Optional<RoleDO> findByRoleCode(String roleCode) {
         return Optional.ofNullable(roleMapper.selectOne(new LambdaQueryWrapper<RoleDO>()
                 .eq(RoleDO::getRoleCode, roleCode)

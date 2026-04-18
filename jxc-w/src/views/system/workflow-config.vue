@@ -7,7 +7,6 @@ import {
   fetchWorkflowProcessesApi,
   fetchCurrentWorkflowConfigApi,
   saveCurrentWorkflowConfigApi,
-  updateWorkflowProcessApi,
   type WorkflowProcessItem,
   type WorkflowNode,
 } from '@/api/modules/workflow';
@@ -36,10 +35,19 @@ const approverLoading = ref(false);
 const workflowBusinesses = ref<WorkflowProcessItem[]>([]);
 const roleOptions = ref<RoleAdminItem[]>([]);
 const userOptions = ref<UserAdminItem[]>([]);
+const TARGET_BUSINESS_CODE = 'PURCHASE_INBOUND';
+const TARGET_BUSINESS_NAME = '采购入库流程';
+const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
+const copySourceWorkflowCode = ref('');
+const viewWorkflowCode = ref('');
+const isReadOnlyMode = computed(() => Boolean(viewWorkflowCode.value));
 
 const selectedNodeKey = ref<string>('');
 const canvasRef = ref<HTMLDivElement | null>(null);
 const canvasSize = reactive({ width: 1200, height: 560 });
+const canvasContentSize = reactive({ width: 1600, height: 960 });
+let canvasResizeObserver: ResizeObserver | null = null;
+let lastCanvasWidth = 0;
 
 const connectingMode = ref(false);
 const connectingFromKey = ref('');
@@ -54,6 +62,12 @@ const contextMenu = reactive({
 });
 type NodeType = 'NORMAL' | 'CONDITION' | 'SUCCESS' | 'FAIL' | 'START' | 'END';
 type RoleSignMode = 'OR' | 'AND';
+type ActionCode = 'CREATE' | 'UPDATE' | 'DELETE';
+const ACTION_OPTIONS: Array<{ label: string; value: ActionCode }> = [
+  { label: '新增', value: 'CREATE' },
+  { label: '修改', value: 'UPDATE' },
+  { label: '删除', value: 'DELETE' },
+];
 const NODE_TYPE_LABEL: Record<NodeType, string> = {
   NORMAL: '普通节点',
   CONDITION: '条件节点',
@@ -71,6 +85,13 @@ const normalizeNodeTypeValue = (value?: string): NodeType => {
 };
 
 const normalizeRoleSignMode = (value?: string): RoleSignMode => (value === 'AND' ? 'AND' : 'OR');
+const supportsRoleAssignment = (type?: string) => {
+  const nodeType = normalizeNodeTypeValue(type);
+  return nodeType === 'NORMAL' || nodeType === 'CONDITION';
+};
+
+const supportsActionTriggers = (type?: string) => normalizeNodeTypeValue(type) === 'NORMAL';
+const supportsApproverUser = (type?: string) => normalizeNodeTypeValue(type) === 'CONDITION';
 
 const nodeDraft = reactive({
   nodeType: 'NORMAL' as NodeType,
@@ -79,6 +100,7 @@ const nodeDraft = reactive({
   approverRoleCode: '',
   roleSignMode: 'OR' as RoleSignMode,
   approverUserId: undefined as number | undefined,
+  triggerActions: [] as ActionCode[],
 });
 
 const dragState = reactive({
@@ -105,7 +127,7 @@ const isScopedContext = computed(
 const businessOptions = computed(() => workflowBusinesses.value.map((item) => ({
   label: item.businessName,
   value: item.processId,
-})));
+})).filter((item) => item.value === TARGET_BUSINESS_CODE));
 
 const currentBusiness = computed(
   () => workflowBusinesses.value.find((item) => item.processId === currentBusinessCode.value) ?? null,
@@ -138,9 +160,18 @@ const editDraft = reactive({
   approverRoleCode: '',
   roleSignMode: 'OR' as RoleSignMode,
   approverUserId: undefined as number | undefined,
+  triggerActions: [] as ActionCode[],
 });
 
 const applyBusinessSelection = (businessCode: string) => {
+  if (businessCode !== TARGET_BUSINESS_CODE) {
+    currentBusinessCode.value = '';
+    form.businessCode = '';
+    form.workflowName = '';
+    form.workflowCode = '';
+    form.deployedAt = '';
+    return;
+  }
   currentBusinessCode.value = businessCode;
   const selected = workflowBusinesses.value.find((item) => item.processId === businessCode) ?? null;
   form.businessCode = selected?.processId ?? '';
@@ -158,13 +189,28 @@ const normalizeNode = (node: Partial<EditableNode>, index: number): EditableNode
     allowReject: false,
     allowUnapprove,
     nodeType,
-    approverRoleCode: nodeType === 'CONDITION' ? String(node.approverRoleCode ?? '').trim() : '',
+    approverRoleCode: supportsRoleAssignment(nodeType) ? String(node.approverRoleCode ?? '').trim() : '',
     roleSignMode: nodeType === 'CONDITION' ? normalizeRoleSignMode(node.roleSignMode) : 'OR',
-    approverUserId: nodeType === 'CONDITION' && typeof node.approverUserId === 'number' ? node.approverUserId : undefined,
+    approverUserId: supportsApproverUser(nodeType) && typeof node.approverUserId === 'number' ? node.approverUserId : undefined,
     conditionExpression: (node.conditionExpression ?? '').trim(),
+    triggerActions: supportsActionTriggers(nodeType) ? normalizeActionTriggers(node.triggerActions) : [],
     x: typeof node.x === 'number' ? node.x : 40 + ((index % 6) * 180),
     y: typeof node.y === 'number' ? node.y : 40 + (Math.floor(index / 6) * 120),
   };
+};
+
+const normalizeActionTriggers = (values?: Array<ActionCode | string>) => {
+  if (!Array.isArray(values)) {
+    return [] as ActionCode[];
+  }
+  const normalized = new Set<ActionCode>();
+  values.forEach((item) => {
+    const upper = String(item ?? '').trim().toUpperCase() as ActionCode;
+    if (upper === 'CREATE' || upper === 'UPDATE' || upper === 'DELETE') {
+      normalized.add(upper);
+    }
+  });
+  return Array.from(normalized);
 };
 
 const resetNodeDraft = () => {
@@ -174,6 +220,7 @@ const resetNodeDraft = () => {
   nodeDraft.approverRoleCode = '';
   nodeDraft.roleSignMode = 'OR';
   nodeDraft.approverUserId = undefined;
+  nodeDraft.triggerActions = [];
 };
 
 const generateNodeKey = () => {
@@ -193,6 +240,9 @@ const createStartNode = (): EditableNode => normalizeNode({
 }, 0);
 
 const openAddNodeDialog = () => {
+  if (isReadOnlyMode.value) {
+    return;
+  }
   addAfterNodeKey.value = '';
   resetNodeDraft();
   addDialogVisible.value = true;
@@ -202,10 +252,17 @@ const syncDraftByType = () => {
   if (nodeDraft.nodeType !== 'SUCCESS') {
     nodeDraft.allowUnapprove = false;
   }
-  if (nodeDraft.nodeType !== 'CONDITION') {
+  if (!supportsRoleAssignment(nodeDraft.nodeType)) {
     nodeDraft.approverRoleCode = '';
-    nodeDraft.roleSignMode = 'OR';
+  }
+  if (!supportsApproverUser(nodeDraft.nodeType)) {
     nodeDraft.approverUserId = undefined;
+  }
+  if (!supportsActionTriggers(nodeDraft.nodeType)) {
+    nodeDraft.triggerActions = [];
+  }
+  if (nodeDraft.nodeType !== 'CONDITION') {
+    nodeDraft.roleSignMode = 'OR';
   }
   if (nodeDraft.nodeType === 'SUCCESS' && nodeDraft.allowUnapprove === false) {
     nodeDraft.allowUnapprove = true;
@@ -219,6 +276,21 @@ const nodeTypeClass = (type?: string) => {
 
 const getNodeSize = (type?: string) => {
   return { width: 118, height: 38 };
+};
+
+const updateCanvasContentSize = () => {
+  const paddingX = 160;
+  const paddingY = 160;
+  const maxRight = form.nodes.reduce((acc, node) => {
+    const { width } = getNodeSize(node.nodeType);
+    return Math.max(acc, node.x + width);
+  }, 0);
+  const maxBottom = form.nodes.reduce((acc, node) => {
+    const { height } = getNodeSize(node.nodeType);
+    return Math.max(acc, node.y + height);
+  }, 0);
+  canvasContentSize.width = Math.max(1600, canvasSize.width + 320, maxRight + paddingX);
+  canvasContentSize.height = Math.max(960, canvasSize.height + 220, maxBottom + paddingY);
 };
 
 const MIN_NODE_GAP = 28;
@@ -241,8 +313,8 @@ const rectsOverlap = (
 const clampNodePosition = (x: number, y: number, type?: string) => {
   const { width, height } = getNodeSize(type);
   return {
-    x: Math.max(0, Math.min(x, canvasSize.width - width)),
-    y: Math.max(0, Math.min(y, canvasSize.height - height)),
+    x: Math.max(0, Math.min(x, canvasContentSize.width - width)),
+    y: Math.max(0, Math.min(y, canvasContentSize.height - height)),
   };
 };
 
@@ -292,9 +364,10 @@ const normalizeNodePositions = () => {
   let cursorX = LAYOUT_PADDING_X;
   let rowY = LAYOUT_PADDING_Y;
   let rowMaxHeight = 0;
+  const contentWidth = canvasContentSize.width;
   ordered.forEach((node) => {
     const { width, height } = getNodeSize(node.nodeType);
-    if (cursorX + width > canvasSize.width - 24) {
+    if (cursorX + width > contentWidth - 24) {
       cursorX = LAYOUT_PADDING_X;
       rowY += rowMaxHeight + LAYOUT_GAP_Y;
       rowMaxHeight = 0;
@@ -314,10 +387,17 @@ const normalizeNodePositions = () => {
 
 const ensureRoleByNodeType = (node: EditableNode) => {
   const nodeType = normalizeNodeTypeValue(node.nodeType);
-  if (nodeType !== 'CONDITION') {
+  if (!supportsRoleAssignment(nodeType)) {
     node.approverRoleCode = '';
-    node.roleSignMode = 'OR';
+  }
+  if (!supportsApproverUser(nodeType)) {
     node.approverUserId = undefined;
+  }
+  if (!supportsActionTriggers(nodeType)) {
+    node.triggerActions = [];
+  }
+  if (nodeType !== 'CONDITION') {
+    node.roleSignMode = 'OR';
   } else {
     node.roleSignMode = normalizeRoleSignMode(node.roleSignMode);
   }
@@ -342,6 +422,9 @@ const closeContextMenu = () => {
 };
 
 const openNodeContextMenu = (node: EditableNode, event: MouseEvent) => {
+  if (isReadOnlyMode.value) {
+    return;
+  }
   event.preventDefault();
   selectedNodeKey.value = node.nodeKey;
   contextMenu.visible = true;
@@ -370,10 +453,17 @@ const syncEditByType = () => {
   if (editDraft.nodeType !== 'SUCCESS') {
     editDraft.allowUnapprove = false;
   }
-  if (editDraft.nodeType !== 'CONDITION') {
+  if (!supportsRoleAssignment(editDraft.nodeType)) {
     editDraft.approverRoleCode = '';
-    editDraft.roleSignMode = 'OR';
+  }
+  if (!supportsApproverUser(editDraft.nodeType)) {
     editDraft.approverUserId = undefined;
+  }
+  if (!supportsActionTriggers(editDraft.nodeType)) {
+    editDraft.triggerActions = [];
+  }
+  if (editDraft.nodeType !== 'CONDITION') {
+    editDraft.roleSignMode = 'OR';
   }
   if (editDraft.nodeType === 'SUCCESS' && editDraft.allowUnapprove === false) {
     editDraft.allowUnapprove = true;
@@ -392,6 +482,7 @@ const openEditDialog = (nodeKey: string) => {
   editDraft.approverRoleCode = String(node.approverRoleCode ?? '').trim();
   editDraft.roleSignMode = normalizeRoleSignMode(node.roleSignMode);
   editDraft.approverUserId = typeof node.approverUserId === 'number' ? node.approverUserId : undefined;
+  editDraft.triggerActions = normalizeActionTriggers(node.triggerActions);
   syncEditByType();
   editDialogVisible.value = true;
 };
@@ -408,9 +499,10 @@ const applyNodeEdit = () => {
   }
   node.nodeName = editDraft.nodeName.trim();
   node.nodeType = editDraft.nodeType;
-  node.approverRoleCode = editDraft.nodeType === 'CONDITION' ? editDraft.approverRoleCode : '';
+  node.approverRoleCode = supportsRoleAssignment(editDraft.nodeType) ? editDraft.approverRoleCode : '';
   node.roleSignMode = editDraft.nodeType === 'CONDITION' ? editDraft.roleSignMode : 'OR';
-  node.approverUserId = editDraft.nodeType === 'CONDITION' ? editDraft.approverUserId : undefined;
+  node.approverUserId = supportsApproverUser(editDraft.nodeType) ? editDraft.approverUserId : undefined;
+  node.triggerActions = supportsActionTriggers(editDraft.nodeType) ? normalizeActionTriggers(editDraft.triggerActions) : [];
   node.allowReject = false;
   node.allowUnapprove = editDraft.nodeType === 'SUCCESS' ? editDraft.allowUnapprove : false;
   ensureRoleByNodeType(node);
@@ -616,6 +708,9 @@ const linkNewNodeAfter = (sourceNodeKey: string, newNodeKey: string) => {
 };
 
 const handleContextAdd = () => {
+  if (isReadOnlyMode.value) {
+    return;
+  }
   if (!contextMenu.nodeKey) {
     return;
   }
@@ -626,6 +721,9 @@ const handleContextAdd = () => {
 };
 
 const handleContextRollback = (targetNodeKey: string) => {
+  if (isReadOnlyMode.value) {
+    return;
+  }
   if (!contextMenu.nodeKey) {
     return;
   }
@@ -678,9 +776,9 @@ const addNode = () => {
     nodeName,
     allowReject: false,
     allowUnapprove: nodeType === 'SUCCESS' ? nodeDraft.allowUnapprove : false,
-    approverRoleCode: nodeType === 'CONDITION' ? nodeDraft.approverRoleCode : '',
+    approverRoleCode: supportsRoleAssignment(nodeType) ? nodeDraft.approverRoleCode : '',
     roleSignMode: nodeType === 'CONDITION' ? nodeDraft.roleSignMode : 'OR',
-    approverUserId: nodeType === 'CONDITION' ? nodeDraft.approverUserId : undefined,
+    approverUserId: supportsApproverUser(nodeType) ? nodeDraft.approverUserId : undefined,
     conditionExpression: '',
   }, form.nodes.length);
   if (addAfterNodeKey.value) {
@@ -690,14 +788,15 @@ const addNode = () => {
       node.x = source.x + sourceSize.width + LAYOUT_GAP_X;
       node.y = source.y;
       const nodeSize = getNodeSize(node.nodeType);
-      node.x = Math.max(0, Math.min(node.x, canvasSize.width - nodeSize.width));
-      node.y = Math.max(0, Math.min(node.y, canvasSize.height - nodeSize.height));
+      node.x = Math.max(0, Math.min(node.x, canvasContentSize.width - nodeSize.width));
+      node.y = Math.max(0, Math.min(node.y, canvasContentSize.height - nodeSize.height));
     }
   }
   const availablePosition = findAvailablePosition(node.nodeKey, node.x, node.y, node.nodeType);
   node.x = availablePosition.x;
   node.y = availablePosition.y;
   form.nodes.push(node);
+  updateCanvasContentSize();
   if (addAfterNodeKey.value) {
     linkNewNodeAfter(addAfterNodeKey.value, node.nodeKey);
   }
@@ -707,6 +806,9 @@ const addNode = () => {
 };
 
 const removeNode = (nodeKey: string) => {
+  if (isReadOnlyMode.value) {
+    return;
+  }
   const node = form.nodes.find((item) => item.nodeKey === nodeKey);
   if (node?.nodeType === 'START') {
     ElMessage.warning('开始节点不允许删除');
@@ -720,6 +822,7 @@ const removeNode = (nodeKey: string) => {
   if (connectingFromKey.value === nodeKey) {
     connectingFromKey.value = '';
   }
+  updateCanvasContentSize();
 };
 
 const updateCanvasSize = () => {
@@ -731,7 +834,24 @@ const updateCanvasSize = () => {
   canvasSize.height = Math.max(560, Math.floor(rect.height));
 };
 
+const syncCanvasLayout = () => {
+  const previousWidth = lastCanvasWidth;
+  updateCanvasSize();
+  updateCanvasContentSize();
+  if (!canvasRef.value) {
+    return;
+  }
+  if (previousWidth > 0 && canvasSize.width !== previousWidth && !dragState.active) {
+    normalizeNodePositions();
+  }
+  lastCanvasWidth = canvasSize.width;
+  updateCanvasContentSize();
+};
+
 const beginDrag = (node: EditableNode, event: MouseEvent) => {
+  if (isReadOnlyMode.value) {
+    return;
+  }
   if (!canvasRef.value) {
     return;
   }
@@ -759,16 +879,18 @@ const onMouseMove = (event: MouseEvent) => {
   const { width: cardWidth, height: cardHeight } = getNodeSize(node.nodeType);
   const nextX = event.clientX - canvasRect.left - dragState.offsetX;
   const nextY = event.clientY - canvasRect.top - dragState.offsetY;
-  const candidateX = Math.max(0, Math.min(nextX, canvasSize.width - cardWidth));
-  const candidateY = Math.max(0, Math.min(nextY, canvasSize.height - cardHeight));
+  const candidateX = Math.max(0, Math.min(nextX, canvasContentSize.width - cardWidth));
+  const candidateY = Math.max(0, Math.min(nextY, canvasContentSize.height - cardHeight));
   const position = findAvailablePosition(node.nodeKey, candidateX, candidateY, node.nodeType);
   node.x = position.x;
   node.y = position.y;
+  updateCanvasContentSize();
 };
 
 const endDrag = () => {
   dragState.active = false;
   dragState.nodeKey = '';
+  updateCanvasContentSize();
 };
 
 const toggleConnectMode = () => {
@@ -777,6 +899,10 @@ const toggleConnectMode = () => {
 };
 
 const connectNodeClick = (node: EditableNode) => {
+  if (isReadOnlyMode.value) {
+    selectedNodeKey.value = node.nodeKey;
+    return;
+  }
   if (!connectingMode.value) {
     selectedNodeKey.value = node.nodeKey;
     return;
@@ -942,6 +1068,7 @@ const openEdgeExpression = async (edge: EdgeItem) => {
 
 const clearEdges = () => {
   edges.value = [];
+  updateCanvasContentSize();
 };
 
 const toggleBatchUnapproveForSuccessNodes = () => {
@@ -1034,7 +1161,7 @@ const loadApproverOptions = async () => {
   approverLoading.value = true;
   try {
     const [roles, users] = await Promise.all([
-      fetchAdminRolesApi(),
+      fetchAdminRolesApi(currentOrgId.value),
       fetchAdminUsersApi(),
     ]);
     roleOptions.value = (roles || []).filter((item) => item.status === 'ENABLED');
@@ -1048,6 +1175,8 @@ const loadBusinesses = async () => {
   if (!sessionStore.currentOrgId?.startsWith('group-')) {
     workflowBusinesses.value = [];
     currentBusinessCode.value = '';
+    copySourceWorkflowCode.value = '';
+    viewWorkflowCode.value = '';
     form.businessCode = '';
     form.workflowName = '';
     form.workflowCode = '';
@@ -1055,9 +1184,13 @@ const loadBusinesses = async () => {
   }
   businessLoading.value = true;
   try {
-    workflowBusinesses.value = await fetchWorkflowProcessesApi(sessionStore.currentOrgId);
+    workflowBusinesses.value = (await fetchWorkflowProcessesApi(sessionStore.currentOrgId))
+      .filter((item) => item.processId === TARGET_BUSINESS_CODE);
     if (!workflowBusinesses.value.length) {
+      ElMessage.warning(`请先在业务管理中新增“${TARGET_BUSINESS_NAME}（${TARGET_BUSINESS_CODE}）”`);
       currentBusinessCode.value = '';
+      copySourceWorkflowCode.value = '';
+      viewWorkflowCode.value = '';
       form.businessCode = '';
       form.workflowName = '';
       form.workflowCode = '';
@@ -1066,6 +1199,10 @@ const loadBusinesses = async () => {
     const exists = workflowBusinesses.value.some((item) => item.processId === currentBusinessCode.value);
     const targetBusinessCode = exists ? currentBusinessCode.value : workflowBusinesses.value[0].processId;
     applyBusinessSelection(targetBusinessCode);
+    if (copySourceWorkflowCode.value) {
+      form.workflowCode = '';
+      form.deployedAt = '';
+    }
   } finally {
     businessLoading.value = false;
   }
@@ -1073,8 +1210,11 @@ const loadBusinesses = async () => {
 
 const applyRouteSelection = () => {
   const routeBusinessCode = String(route.query.businessCode ?? '').trim();
-  const routeWorkflowCode = String(route.query.workflowCode ?? '').trim();
-  if (!routeBusinessCode) {
+  const routeCopyFromWorkflowCode = String(route.query.copyFromWorkflowCode ?? '').trim();
+  const routeViewWorkflowCode = String(route.query.viewWorkflowCode ?? '').trim();
+  copySourceWorkflowCode.value = routeCopyFromWorkflowCode;
+  viewWorkflowCode.value = routeViewWorkflowCode;
+  if (routeBusinessCode !== TARGET_BUSINESS_CODE) {
     return;
   }
   const matched = workflowBusinesses.value.find((item) => item.processId === routeBusinessCode);
@@ -1082,10 +1222,14 @@ const applyRouteSelection = () => {
     return;
   }
   applyBusinessSelection(routeBusinessCode);
-  if (routeWorkflowCode) {
-    form.workflowCode = routeWorkflowCode;
-  } else {
+  if (routeViewWorkflowCode) {
+    form.workflowCode = routeViewWorkflowCode;
+    form.deployedAt = '';
+    return;
+  }
+  if (routeCopyFromWorkflowCode) {
     form.workflowCode = '';
+    form.deployedAt = '';
   }
 };
 
@@ -1099,18 +1243,23 @@ const loadConfig = async () => {
     ElMessage.warning('请先切换到集团或门店机构后再配置流程');
     return;
   }
+  const sourceWorkflowCode = copySourceWorkflowCode.value.trim();
+  const readOnlyWorkflowCode = viewWorkflowCode.value.trim();
   if (!form.businessCode) {
     form.deployedAt = '';
     form.nodes = [createStartNode()];
     selectedNodeKey.value = '';
     buildEdgesFromNodeConfig();
+    updateCanvasContentSize();
     return;
   }
-  if (!form.workflowCode.trim()) {
+  const workflowCodeForLoad = readOnlyWorkflowCode || sourceWorkflowCode || form.workflowCode.trim();
+  if (!workflowCodeForLoad) {
     form.deployedAt = '';
     form.nodes = [createStartNode()];
     selectedNodeKey.value = '';
     buildEdgesFromNodeConfig();
+    updateCanvasContentSize();
     return;
   }
   loading.value = true;
@@ -1118,11 +1267,20 @@ const loadConfig = async () => {
     const data = await fetchCurrentWorkflowConfigApi({
       orgId: sessionStore.currentOrgId,
       businessCode: form.businessCode,
-      workflowCode: form.workflowCode,
+      workflowCode: workflowCodeForLoad,
     });
     form.scopeType = data.scopeType ?? '';
     form.workflowName = data.workflowName || form.workflowName;
-    form.deployedAt = data.deployedAt ?? '';
+    if (readOnlyWorkflowCode) {
+      form.workflowCode = readOnlyWorkflowCode;
+      form.deployedAt = data.deployedAt ?? '';
+    } else if (sourceWorkflowCode) {
+      form.workflowCode = '';
+      form.deployedAt = '';
+    } else {
+      form.workflowCode = workflowCodeForLoad;
+      form.deployedAt = data.deployedAt ?? '';
+    }
     form.nodes = (data.nodes ?? []).map((item, idx) => normalizeNode(item, idx));
     if (!form.nodes.length) {
       form.nodes = [createStartNode()];
@@ -1138,12 +1296,17 @@ const loadConfig = async () => {
     }
     selectedNodeKey.value = '';
     buildEdgesFromNodeConfig();
+    updateCanvasContentSize();
   } finally {
     loading.value = false;
   }
 };
 
 const saveConfig = async () => {
+  if (isReadOnlyMode.value) {
+    ElMessage.warning('当前为查看模式，不允许保存');
+    return;
+  }
   if (!isScopedContext.value) {
     ElMessage.warning('请先切换到集团或门店机构后再保存流程');
     return;
@@ -1203,8 +1366,21 @@ const saveConfig = async () => {
     ElMessage.warning(`条件节点【${invalidConditionNode.nodeName}】需选择审批角色或指定人员`);
     return;
   }
+  const invalidActionNode = form.nodes.find((item) => {
+    if (normalizeNodeTypeValue(item.nodeType) !== 'NORMAL') {
+      return false;
+    }
+    const hasActions = normalizeActionTriggers(item.triggerActions).length > 0;
+    const hasRole = Boolean(String(item.approverRoleCode ?? '').trim());
+    return hasActions && !hasRole;
+  });
+  if (invalidActionNode) {
+    ElMessage.warning(`普通节点【${invalidActionNode.nodeName}】已选择触发动作，请同时配置审批角色`);
+    return;
+  }
   saving.value = true;
   try {
+    const isCopyMode = Boolean(copySourceWorkflowCode.value.trim());
     if (!form.workflowCode.trim()) {
       form.workflowCode = generateWorkflowCode();
     }
@@ -1222,12 +1398,13 @@ const saveConfig = async () => {
         nodeName: node.nodeName,
         x: Math.round(node.x),
         y: Math.round(node.y),
-        approverRoleCode: node.nodeType === 'CONDITION' ? String(node.approverRoleCode ?? '').trim() : '',
+        approverRoleCode: supportsRoleAssignment(node.nodeType) ? String(node.approverRoleCode ?? '').trim() : '',
         roleSignMode: node.nodeType === 'CONDITION' ? normalizeRoleSignMode(node.roleSignMode) : 'OR',
-        approverUserId: node.nodeType === 'CONDITION' ? node.approverUserId : undefined,
+        approverUserId: supportsApproverUser(node.nodeType) ? node.approverUserId : undefined,
         allowReject: false,
         allowUnapprove: node.nodeType === 'SUCCESS' ? node.allowUnapprove : false,
         nodeType: node.nodeType,
+        triggerActions: supportsActionTriggers(node.nodeType) ? normalizeActionTriggers(node.triggerActions) : [],
         conditionExpression: JSON.stringify(
           edges.value
             .filter((edge) => edge.from === node.nodeKey)
@@ -1238,21 +1415,14 @@ const saveConfig = async () => {
         ),
       })),
     });
-    const selected = currentBusiness.value;
-    if (selected && selected.templateId !== form.workflowCode) {
-      await updateWorkflowProcessApi(selected.id, {
-        orgId: sessionStore.currentOrgId,
-        processCode: selected.processId,
-        businessName: selected.businessName,
-        templateId: form.workflowCode,
-      });
-      selected.templateId = form.workflowCode;
+    if (isCopyMode) {
+      copySourceWorkflowCode.value = '';
     }
     if (!form.deployedAt) {
       form.deployedAt = formatDateTime(new Date());
     }
-    ElMessage.success('流程草稿保存成功');
-    await loadConfig();
+    ElMessage.success('流程版本已保存');
+    goBack();
   } finally {
     saving.value = false;
   }
@@ -1270,9 +1440,16 @@ onMounted(async () => {
   await loadApproverOptions();
   await loadBusinesses();
   applyRouteSelection();
-  updateCanvasSize();
+  syncCanvasLayout();
   await loadConfig();
-  window.addEventListener('resize', updateCanvasSize);
+  syncCanvasLayout();
+  canvasResizeObserver = new ResizeObserver(() => {
+    syncCanvasLayout();
+  });
+  if (canvasRef.value) {
+    canvasResizeObserver.observe(canvasRef.value);
+  }
+  window.addEventListener('resize', syncCanvasLayout);
   window.addEventListener('mousemove', onMouseMove);
   window.addEventListener('mouseup', endDrag);
   window.addEventListener('click', closeContextMenu);
@@ -1280,7 +1457,9 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateCanvasSize);
+  canvasResizeObserver?.disconnect();
+  canvasResizeObserver = null;
+  window.removeEventListener('resize', syncCanvasLayout);
   window.removeEventListener('mousemove', onMouseMove);
   window.removeEventListener('mouseup', endDrag);
   window.removeEventListener('click', closeContextMenu);
@@ -1297,7 +1476,7 @@ watch(
 );
 
 watch(
-  () => [route.query.businessCode, route.query.workflowCode],
+  () => [route.query.businessCode, route.query.workflowCode, route.query.copyFromWorkflowCode, route.query.viewWorkflowCode],
   () => {
     applyRouteSelection();
     void loadConfig();
@@ -1332,109 +1511,120 @@ watch(
 
       <div class="table-toolbar compact-toolbar">
         <el-button @click="goBack">返回上一页</el-button>
-        <el-button @click="toggleBatchUnapproveForSuccessNodes">批量反审</el-button>
-        <el-button :type="connectingMode ? 'warning' : 'default'" @click="toggleConnectMode">
-          {{ connectingMode ? '退出连线模式' : '连线模式' }}
-        </el-button>
-        <el-button @click="clearEdges">清空连线</el-button>
-        <el-button :loading="saving" @click="saveConfig">保存草稿</el-button>
+        <template v-if="!isReadOnlyMode">
+          <el-button @click="toggleBatchUnapproveForSuccessNodes">批量反审</el-button>
+          <el-button :type="connectingMode ? 'warning' : 'default'" @click="toggleConnectMode">
+            {{ connectingMode ? '退出连线模式' : '连线模式' }}
+          </el-button>
+          <el-button @click="clearEdges">清空连线</el-button>
+          <el-button :loading="saving" @click="saveConfig">保存版本</el-button>
+        </template>
       </div>
 
       <div ref="canvasRef" class="designer-canvas" @click="selectedNodeKey = ''; closeContextMenu()">
-        <svg class="edge-layer" :viewBox="`0 0 ${canvasSize.width} ${canvasSize.height}`" preserveAspectRatio="none">
-          <defs>
-            <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="12" refY="6" orient="auto">
-              <path d="M0,0 L12,6 L0,12 z" fill="#4f6f95" />
-            </marker>
-          </defs>
-          <path
-            v-for="edge in edges"
-            :key="edge.id"
-            :d="edgePath(edge)"
-            class="edge-line"
-            stroke="#5c7ea7"
-            stroke-width="2"
-            fill="none"
-            marker-end="url(#arrow)"
-          />
-          <path
-            v-for="edge in edges"
-            :key="`${edge.id}_hit`"
-            :d="edgePath(edge)"
-            class="edge-hit"
-            stroke="transparent"
-            stroke-width="14"
-            fill="none"
-            @click.stop="openEdgeExpression(edge)"
-          />
-          <g v-for="edge in edges" :key="`${edge.id}_label`">
-            <text
-              v-if="edge.conditionExpression"
-              :x="edgeLabelPoint(edge).x"
-              :y="edgeLabelPoint(edge).y"
-              class="edge-label"
-            >
-              {{ edge.conditionExpression }}
-            </text>
-          </g>
-        </svg>
-
         <div
-          v-for="node in form.nodes"
-          :key="node.nodeKey"
-          class="node-mini"
-          :class="{
-            active: selectedNodeKey === node.nodeKey,
-            connectFrom: connectingFromKey === node.nodeKey,
-            [nodeTypeClass(node.nodeType)]: true,
-          }"
-          :style="{ left: `${node.x}px`, top: `${node.y}px` }"
-          @mousedown.stop="beginDrag(node, $event)"
-          @click.stop="connectNodeClick(node)"
-          @contextmenu.prevent.stop="openNodeContextMenu(node, $event)"
+          class="designer-canvas__surface"
+          :style="{ width: `${canvasContentSize.width}px`, height: `${canvasContentSize.height}px` }"
         >
-          <button
-            v-if="node.nodeType !== 'START'"
-            class="node-delete-btn"
-            type="button"
-            title="删除节点"
-            @click.stop="removeNode(node.nodeKey)"
+          <svg
+            class="edge-layer"
+            :viewBox="`0 0 ${canvasContentSize.width} ${canvasContentSize.height}`"
+            preserveAspectRatio="none"
           >
-            ×
-          </button>
-          <div class="node-title">{{ node.nodeName }}</div>
-          <span
-            v-if="node.nodeType === 'SUCCESS' && node.allowUnapprove"
-            class="node-unapprove-tag"
-            title="可反审"
-            aria-label="可反审"
-          />
+            <defs>
+              <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="12" refY="6" orient="auto">
+                <path d="M0,0 L12,6 L0,12 z" fill="#4f6f95" />
+              </marker>
+            </defs>
+            <path
+              v-for="edge in edges"
+              :key="edge.id"
+              :d="edgePath(edge)"
+              class="edge-line"
+              stroke="#5c7ea7"
+              stroke-width="2"
+              fill="none"
+              marker-end="url(#arrow)"
+            />
+            <path
+              v-for="edge in edges"
+              :key="`${edge.id}_hit`"
+              :d="edgePath(edge)"
+              class="edge-hit"
+              stroke="transparent"
+              stroke-width="14"
+              fill="none"
+              @click.stop="openEdgeExpression(edge)"
+            />
+            <g v-for="edge in edges" :key="`${edge.id}_label`">
+              <text
+                v-if="edge.conditionExpression"
+                :x="edgeLabelPoint(edge).x"
+                :y="edgeLabelPoint(edge).y"
+                class="edge-label"
+              >
+                {{ edge.conditionExpression }}
+              </text>
+            </g>
+          </svg>
+
           <div
-            v-if="contextMenu.visible && contextMenu.nodeKey === node.nodeKey"
-            class="node-context-menu"
-            @click.stop
+            v-for="node in form.nodes"
+            :key="node.nodeKey"
+            class="node-mini"
+            :class="{
+              active: selectedNodeKey === node.nodeKey,
+              connectFrom: connectingFromKey === node.nodeKey,
+              [nodeTypeClass(node.nodeType)]: true,
+            }"
+            :style="{ left: `${node.x}px`, top: `${node.y}px` }"
+            @mousedown.stop="beginDrag(node, $event)"
+            @click.stop="connectNodeClick(node)"
+            @contextmenu.prevent.stop="openNodeContextMenu(node, $event)"
           >
-            <template v-if="normalizeNodeTypeValue(node.nodeType) === 'FAIL'">
-              <div class="node-context-menu__divider">选择节点</div>
+            <button
+              v-if="!isReadOnlyMode && node.nodeType !== 'START'"
+              class="node-delete-btn"
+              type="button"
+              title="删除节点"
+              @click.stop="removeNode(node.nodeKey)"
+            >
+              ×
+            </button>
+            <div class="node-title">{{ node.nodeName }}</div>
+            <span
+              v-if="node.nodeType === 'SUCCESS' && node.allowUnapprove"
+              class="node-unapprove-tag"
+              title="可反审"
+              aria-label="可反审"
+            />
+            <div
+              v-if="!isReadOnlyMode && contextMenu.visible && contextMenu.nodeKey === node.nodeKey"
+              class="node-context-menu"
+              @click.stop
+            >
+              <template v-if="normalizeNodeTypeValue(node.nodeType) === 'FAIL'">
+                <div class="node-context-menu__divider">选择节点</div>
+                <button
+                  v-for="target in rollbackTargetNodes"
+                  :key="target.nodeKey"
+                  type="button"
+                  class="node-context-menu__item"
+                  @click="handleContextRollback(target.nodeKey)"
+                >
+                  {{ target.nodeName }}
+                </button>
+                <div v-if="!rollbackTargetNodes.length" class="node-context-menu__empty">暂无可选节点</div>
+              </template>
               <button
-                v-for="target in rollbackTargetNodes"
-                :key="target.nodeKey"
+                v-else
                 type="button"
                 class="node-context-menu__item"
-                @click="handleContextRollback(target.nodeKey)"
+                @click="handleContextAdd"
               >
-                {{ target.nodeName }}
+                添加节点
               </button>
-              <div v-if="!rollbackTargetNodes.length" class="node-context-menu__empty">暂无可选节点</div>
-            </template>
-            <button
-              v-else
-              type="button"
-              class="node-context-menu__item"
-              @click="handleContextAdd"
-            >
-              添加节点
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1462,7 +1652,7 @@ watch(
               <el-switch v-model="selectedNode.allowUnapprove" />
             </el-form-item>
           </template>
-          <template v-if="selectedNode.nodeType === 'CONDITION'">
+          <template v-if="selectedNode.nodeType === 'NORMAL' || selectedNode.nodeType === 'CONDITION'">
             <el-form-item label="审批角色">
               <el-select
                 v-model="selectedNode.approverRoleCode"
@@ -1479,6 +1669,17 @@ watch(
                 />
               </el-select>
             </el-form-item>
+          </template>
+          <template v-if="selectedNode.nodeType === 'NORMAL'">
+            <el-form-item label="触发动作">
+              <el-checkbox-group v-model="selectedNode.triggerActions">
+                <el-checkbox v-for="item in ACTION_OPTIONS" :key="item.value" :label="item.value">
+                  {{ item.label }}
+                </el-checkbox>
+              </el-checkbox-group>
+            </el-form-item>
+          </template>
+          <template v-if="selectedNode.nodeType === 'CONDITION'">
             <el-form-item label="会签方式">
               <el-radio-group v-model="selectedNode.roleSignMode">
                 <el-radio label="OR">或签</el-radio>
@@ -1528,7 +1729,7 @@ watch(
               <el-switch v-model="editDraft.allowUnapprove" />
             </el-form-item>
           </template>
-          <template v-if="editDraft.nodeType === 'CONDITION'">
+          <template v-if="editDraft.nodeType === 'NORMAL' || editDraft.nodeType === 'CONDITION'">
             <el-form-item label="审批角色">
               <el-select
                 v-model="editDraft.approverRoleCode"
@@ -1545,6 +1746,17 @@ watch(
                 />
               </el-select>
             </el-form-item>
+          </template>
+          <template v-if="editDraft.nodeType === 'NORMAL'">
+            <el-form-item label="触发动作">
+              <el-checkbox-group v-model="editDraft.triggerActions">
+                <el-checkbox v-for="item in ACTION_OPTIONS" :key="item.value" :label="item.value">
+                  {{ item.label }}
+                </el-checkbox>
+              </el-checkbox-group>
+            </el-form-item>
+          </template>
+          <template v-if="editDraft.nodeType === 'CONDITION'">
             <el-form-item label="会签方式">
               <el-radio-group v-model="editDraft.roleSignMode">
                 <el-radio label="OR">或签</el-radio>
@@ -1595,7 +1807,7 @@ watch(
               <el-switch v-model="nodeDraft.allowUnapprove" />
             </el-form-item>
           </template>
-          <template v-if="nodeDraft.nodeType === 'CONDITION'">
+          <template v-if="nodeDraft.nodeType === 'NORMAL' || nodeDraft.nodeType === 'CONDITION'">
             <el-form-item label="审批角色">
               <el-select
                 v-model="nodeDraft.approverRoleCode"
@@ -1612,6 +1824,17 @@ watch(
                 />
               </el-select>
             </el-form-item>
+          </template>
+          <template v-if="nodeDraft.nodeType === 'NORMAL'">
+            <el-form-item label="触发动作">
+              <el-checkbox-group v-model="nodeDraft.triggerActions">
+                <el-checkbox v-for="item in ACTION_OPTIONS" :key="item.value" :label="item.value">
+                  {{ item.label }}
+                </el-checkbox>
+              </el-checkbox-group>
+            </el-form-item>
+          </template>
+          <template v-if="nodeDraft.nodeType === 'CONDITION'">
             <el-form-item label="会签方式">
               <el-radio-group v-model="nodeDraft.roleSignMode">
                 <el-radio label="OR">或签</el-radio>
@@ -1648,7 +1871,11 @@ watch(
 <style scoped>
 .workflow-panel {
   position: relative;
-  min-height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 92px);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .workflow-form-compact {
@@ -1661,12 +1888,18 @@ watch(
 
 .designer-canvas {
   position: relative;
-  height: calc(100vh - 290px);
-  min-height: 540px;
+  flex: 1 1 auto;
+  min-height: 0;
   border: 1px dashed #c6d2e1;
   border-radius: 8px;
   background: linear-gradient(180deg, #f8fbff 0%, #f3f7fd 100%);
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.designer-canvas__surface {
+  position: relative;
 }
 
 .edge-layer {
@@ -1809,12 +2042,14 @@ watch(
 }
 
 .prop-panel.floating {
-  position: absolute;
-  right: 18px;
-  top: 104px;
-  max-height: calc(100% - 120px);
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  top: auto;
+  right: auto;
+  max-height: calc(100vh - 36px);
   overflow: auto;
-  z-index: 3;
+  z-index: 30;
 }
 
 .prop-form :deep(.el-form-item) {
@@ -1887,7 +2122,7 @@ watch(
   }
 
   .designer-canvas {
-    height: 520px;
+    min-height: 420px;
   }
 }
 </style>

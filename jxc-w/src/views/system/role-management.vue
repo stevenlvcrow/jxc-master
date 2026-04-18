@@ -46,6 +46,7 @@ const isBuiltinRole = (role: RoleAdminItem) => role.builtin === true;
 const roleTypeSelectableOptions = computed(() => (
   sessionStore.platformAdminMode ? roleTypeOptions : roleTypeOptions.filter((item) => item !== 'PLATFORM')
 ));
+const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
 
 const filteredRoles = computed(() => {
   const keyword = queryForm.keyword.trim().toLowerCase();
@@ -101,7 +102,7 @@ const handlePageSizeChange = (size: number) => {
 const loadRoles = async () => {
   loading.value = true;
   try {
-    roles.value = await fetchAdminRolesApi();
+    roles.value = await fetchAdminRolesApi(currentOrgId.value);
   } finally {
     loading.value = false;
   }
@@ -154,10 +155,10 @@ const handleSave = async () => {
       menuIds: form.menuIds ?? [],
     };
     if (editingRoleId.value) {
-      await updateAdminRoleApi(editingRoleId.value, payload);
+      await updateAdminRoleApi(editingRoleId.value, payload, currentOrgId.value);
       ElMessage.success('角色更新成功');
     } else {
-      await createAdminRoleApi(payload);
+      await createAdminRoleApi(payload, currentOrgId.value);
       ElMessage.success('角色创建成功');
     }
     dialogVisible.value = false;
@@ -171,6 +172,13 @@ const handleSave = async () => {
 onMounted(() => {
   loadRoles();
 });
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    loadRoles();
+  },
+);
 
 watch(
   () => [queryForm.keyword, queryForm.roleType],
@@ -212,6 +220,11 @@ watch(
       <el-table :data="pagedRoles" border stripe class="erp-table" v-loading="loading">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="roleCode" label="角色编码" min-width="200" />
+        <el-table-column label="所属集团" min-width="180">
+          <template #default="{ row }">
+            <span>{{ row.tenantGroupName || (row.tenantGroupId > 0 ? `集团ID ${row.tenantGroupId}` : '平台') }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="roleName" label="角色名称" min-width="180" />
         <el-table-column prop="roleType" label="角色类型" width="140" />
         <el-table-column label="属性" width="110">

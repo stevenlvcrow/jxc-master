@@ -14,6 +14,8 @@ import {
 } from '@/api/modules/supplier';
 import { useSessionStore } from '@/stores/session';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonCodeField from '@/components/CommonCodeField.vue';
+import CommonMnemonicField from '@/components/CommonMnemonicField.vue';
 
 type SectionKey = 'basic' | 'params' | 'supply' | 'qualification' | 'contract' | 'finance' | 'invoice';
 
@@ -561,18 +563,24 @@ const saveSupplier = async () => {
         <div class="form-section-block" :ref="registerSectionRef('basic')">
           <div class="form-section-title">基础信息</div>
           <div class="item-form-grid">
-            <el-form-item v-if="isEditMode" label="供货商编码" data-field="supplierCode">
-              <el-input v-model="form.supplierCode" placeholder="请输入供货商编码" />
-            </el-form-item>
+            <CommonCodeField
+              label="供货商编码"
+              :value="form.supplierCode"
+              placeholder="保存后生成"
+            />
             <el-form-item label="供货商名称" data-field="supplierName">
               <el-input v-model="form.supplierName" placeholder="请输入供货商名称" />
             </el-form-item>
-            <el-form-item label="供货商简称" data-field="supplierShortName">
-              <el-input v-model="form.supplierShortName" placeholder="请输入供货商简称" />
-            </el-form-item>
-            <el-form-item label="供货商助记码" data-field="supplierMnemonic">
-              <el-input v-model="form.supplierMnemonic" placeholder="请输入供货商助记码" />
-            </el-form-item>
+            <CommonMnemonicField
+              v-model:source-value="form.supplierShortName"
+              v-model="form.supplierMnemonic"
+              source-label="供货商简称"
+              mnemonic-label="供货商助记码"
+              source-field="supplierShortName"
+              mnemonic-field="supplierMnemonic"
+              source-placeholder="请输入供货商简称"
+              mnemonic-placeholder="根据供货商简称自动生成"
+            />
             <el-form-item label="供货商类别" data-field="supplierCategory">
               <el-tree-select
                 v-model="form.supplierCategory"

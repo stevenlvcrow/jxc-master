@@ -9,7 +9,6 @@ import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.UnitUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import jakarta.validation.Valid;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -58,7 +57,6 @@ public class UnitController {
     }
 
     @PostMapping
-    @Transactional
     public CodeDataResponse<IdPayload> createUnit(@RequestParam(required = false) String orgId,
                                                   @Valid @RequestBody UnitUpsertRequest request) {
         UnitScope scope = resolveUnitScope(orgId);
@@ -77,7 +75,6 @@ public class UnitController {
     }
 
     @PutMapping("/{id}")
-    @Transactional
     public CodeDataResponse<Void> updateUnit(@PathVariable Long id,
                                              @RequestParam(required = false) String orgId,
                                              @Valid @RequestBody UnitUpsertRequest request) {
@@ -98,7 +95,6 @@ public class UnitController {
     }
 
     @PutMapping("/{id}/status")
-    @Transactional
     public CodeDataResponse<Void> updateUnitStatus(@PathVariable Long id,
                                                    @RequestParam(required = false) String orgId,
                                                    @Valid @RequestBody StatusUpdateRequest request) {
@@ -108,7 +104,6 @@ public class UnitController {
     }
 
     @DeleteMapping("/{id}")
-    @Transactional
     public CodeDataResponse<Void> deleteUnit(@PathVariable Long id,
                                              @RequestParam(required = false) String orgId) {
         UnitScope scope = resolveUnitScope(orgId);

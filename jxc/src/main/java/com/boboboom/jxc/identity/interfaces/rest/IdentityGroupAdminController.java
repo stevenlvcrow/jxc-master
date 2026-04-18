@@ -12,7 +12,6 @@ import com.boboboom.jxc.identity.interfaces.rest.request.GroupUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import jakarta.validation.Valid;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -66,7 +65,6 @@ public class IdentityGroupAdminController {
     }
 
     @PostMapping
-    @Transactional
     public CodeDataResponse<IdPayload> createGroup(@Valid @RequestBody GroupUpsertRequest request) {
         identityAdminSupport.requirePlatformAdmin();
         GroupDO group = groupAdministrationService.createGroup(request, identityAdminSupport.currentOperatorId());
@@ -74,7 +72,6 @@ public class IdentityGroupAdminController {
     }
 
     @PutMapping("/{id}")
-    @Transactional
     public CodeDataResponse<Void> updateGroup(@PathVariable Long id,
                                               @Valid @RequestBody GroupUpsertRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
@@ -86,7 +83,6 @@ public class IdentityGroupAdminController {
     }
 
     @DeleteMapping("/{id}")
-    @Transactional
     public CodeDataResponse<Void> deleteGroup(@PathVariable Long id) {
         identityAdminSupport.requirePlatformAdmin();
         groupAdministrationService.deleteGroup(id);
@@ -94,7 +90,6 @@ public class IdentityGroupAdminController {
     }
 
     @PutMapping("/{id}/status")
-    @Transactional
     public CodeDataResponse<Void> updateGroupStatus(@PathVariable Long id,
                                                     @Valid @RequestBody StatusUpdateRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
@@ -106,7 +101,6 @@ public class IdentityGroupAdminController {
     }
 
     @PostMapping("/{groupId}/bind-admin")
-    @Transactional
     public CodeDataResponse<BindGroupAdminResult> bindGroupAdmin(@PathVariable Long groupId,
                                                                  @Valid @RequestBody GroupAdminBindRequest request) {
         identityAdminSupport.requirePlatformAdmin();
@@ -167,12 +161,28 @@ public class IdentityGroupAdminController {
     }
 
     @PostMapping("/{groupId}/stores")
-    @Transactional
     public CodeDataResponse<IdPayload> createGroupStore(@PathVariable Long groupId,
                                                         @Valid @RequestBody GroupStoreCreateRequest request) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
         StoreDO store = groupAdministrationService.createGroupStore(groupId, request);
         storeSampleDataInitializationService.initializeStoreSampleData(store.getId());
         return CodeDataResponse.ok(new IdPayload(store.getId()));
+    }
+
+    @PutMapping("/{groupId}/stores/{storeId}")
+    public CodeDataResponse<Void> updateGroupStore(@PathVariable Long groupId,
+                                                   @PathVariable Long storeId,
+                                                   @Valid @RequestBody GroupStoreCreateRequest request) {
+        identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
+        groupAdministrationService.updateGroupStore(groupId, storeId, request);
+        return CodeDataResponse.ok();
+    }
+
+    @DeleteMapping("/{groupId}/stores/{storeId}")
+    public CodeDataResponse<Void> deleteGroupStore(@PathVariable Long groupId,
+                                                   @PathVariable Long storeId) {
+        identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
+        groupAdministrationService.deleteGroupStore(groupId, storeId);
+        return CodeDataResponse.ok();
     }
 }

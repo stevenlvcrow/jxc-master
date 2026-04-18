@@ -116,6 +116,16 @@ public class UserRoleRelRepositoryImpl implements UserRoleRelRepository {
     }
 
     @Override
+    public Long countByScopeTypeAndScopeId(String scopeType, Long scopeId) {
+        if (scopeType == null || scopeId == null) {
+            return 0L;
+        }
+        return userRoleRelMapper.selectCount(new LambdaQueryWrapper<UserRoleRelDO>()
+                .eq(UserRoleRelDO::getScopeType, scopeType)
+                .eq(UserRoleRelDO::getScopeId, scopeId));
+    }
+
+    @Override
     public void save(UserRoleRelDO rel) {
         userRoleRelMapper.insert(rel);
     }
@@ -128,6 +138,16 @@ public class UserRoleRelRepositoryImpl implements UserRoleRelRepository {
     @Override
     public void deleteByUserId(Long userId) {
         userRoleRelMapper.delete(new LambdaQueryWrapper<UserRoleRelDO>().eq(UserRoleRelDO::getUserId, userId));
+    }
+
+    @Override
+    public void deleteByScopeTypeAndScopeId(String scopeType, Long scopeId) {
+        if (scopeType == null || scopeId == null) {
+            return;
+        }
+        userRoleRelMapper.delete(new LambdaQueryWrapper<UserRoleRelDO>()
+                .eq(UserRoleRelDO::getScopeType, scopeType)
+                .eq(UserRoleRelDO::getScopeId, scopeId));
     }
 
     @Override

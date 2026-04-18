@@ -4,6 +4,7 @@ import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.domain.repository.WarehouseItemRuleRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,6 +41,7 @@ public class WarehouseItemRuleAdministrationService {
                 .orElseThrow(() -> new BusinessException("规则不存在"));
     }
 
+    @Transactional
     public Long createRule(CreateRuleCommand command) {
         WarehouseItemRuleRepository.RuleRecord rule = new WarehouseItemRuleRepository.RuleRecord(
                 null,
@@ -61,6 +63,7 @@ public class WarehouseItemRuleAdministrationService {
         return ruleId;
     }
 
+    @Transactional
     public void updateRule(UpdateRuleCommand command) {
         WarehouseItemRuleRepository.RuleRecord current = requireRule(command.ruleId());
         WarehouseItemRuleRepository.RuleRecord updated = new WarehouseItemRuleRepository.RuleRecord(
@@ -82,6 +85,7 @@ public class WarehouseItemRuleAdministrationService {
         warehouseItemRuleRepository.replaceRuleDetails(command.ruleId(), command.items(), command.categories(), command.warehouses());
     }
 
+    @Transactional
     public void deleteRule(Long ruleId) {
         requireRule(ruleId);
         warehouseItemRuleRepository.replaceRuleDetails(ruleId, null, null, null);

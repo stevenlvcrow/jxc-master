@@ -11,6 +11,8 @@ public interface RoleRepository {
 
     List<RoleDO> findAll();
 
+    List<RoleDO> findByTenantGroupId(Long tenantGroupId);
+
     Optional<RoleDO> findByRoleCode(String roleCode);
 
     List<RoleDO> findBuiltinTemplateRoles();

@@ -1,14 +1,15 @@
 package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.domain.repository.MenuRepository;
 import com.boboboom.jxc.identity.domain.repository.RoleMenuRelRepository;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.MenuDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleMenuRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.query.MenuPermissionView;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,15 +28,19 @@ public class RoleMenuAdministrationService {
     private final MenuRepository menuRepository;
     private final RoleMenuRelRepository roleMenuRelRepository;
     private final RoleRepository roleRepository;
+    private final OrgScopeService orgScopeService;
 
     public RoleMenuAdministrationService(MenuRepository menuRepository,
                                          RoleMenuRelRepository roleMenuRelRepository,
-                                         RoleRepository roleRepository) {
+                                         RoleRepository roleRepository,
+                                         OrgScopeService orgScopeService) {
         this.menuRepository = menuRepository;
         this.roleMenuRelRepository = roleMenuRelRepository;
         this.roleRepository = roleRepository;
+        this.orgScopeService = orgScopeService;
     }
 
+    @Transactional
     public void ensureGroupMgmtMenusForGroupAdmin() {
         MenuDO groupMgmt = menuRepository.findByMenuCode("GROUP_MGMT").orElse(null);
         if (groupMgmt == null) {
@@ -85,46 +90,15 @@ public class RoleMenuAdministrationService {
 
     public List<MenuAssignmentOption> listAssignableMenus(Long operatorId,
                                                           boolean platformAdmin,
-                                                          List<Long> managedGroups,
-                                                          List<Long> managedStoreIds) {
-        if (platformAdmin) {
-            return menuRepository.findAllOrdered()
-                    .stream()
-                    .map(this::toOption)
-                    .toList();
+                                                          String orgId) {
+        if (!platformAdmin) {
+            resolveTenantGroupId(operatorId, false, orgId);
         }
-        if (managedGroups == null || managedGroups.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        List<MenuPermissionView> scopedMenus = new ArrayList<>();
-        for (Long groupId : managedGroups) {
-            scopedMenus.addAll(menuRepository.findMenusByUserContext(operatorId, "GROUP", groupId));
-        }
-        if (managedStoreIds != null) {
-            for (Long storeId : managedStoreIds) {
-                scopedMenus.addAll(menuRepository.findMenusByUserContext(operatorId, "STORE", storeId));
-            }
-        }
-
-        LinkedHashMap<Long, MenuAssignmentOption> deduped = new LinkedHashMap<>();
-        for (MenuPermissionView row : scopedMenus) {
-            if (!STATUS_ENABLED.equals(row.getStatus())) {
-                continue;
-            }
-            deduped.putIfAbsent(row.getId(), new MenuAssignmentOption(
-                    row.getId(),
-                    row.getMenuCode(),
-                    row.getMenuName(),
-                    row.getParentId(),
-                    row.getMenuType(),
-                    row.getRoutePath(),
-                    row.getPermissionCode(),
-                    row.getStatus(),
-                    row.getSortNo()
-            ));
-        }
-        return new ArrayList<>(deduped.values());
+        return menuRepository.findAllOrdered()
+                .stream()
+                .filter(menu -> STATUS_ENABLED.equals(menu.getStatus()))
+                .map(this::toOption)
+                .toList();
     }
 
     public List<Long> listRoleMenuIds(Long roleId) {
@@ -134,6 +108,7 @@ public class RoleMenuAdministrationService {
                 .toList();
     }
 
+    @Transactional
     public void saveRoleMenus(RoleDO role, List<Long> menuIds) {
         if (role == null || role.getId() == null) {
             throw new BusinessException("角色不存在");
@@ -268,6 +243,14 @@ public class RoleMenuAdministrationService {
                 menu.getStatus(),
                 menu.getSortNo()
         );
+    }
+
+    private Long resolveTenantGroupId(Long operatorId, boolean platformAdmin, String orgId) {
+        if (platformAdmin && trimToNull(orgId) == null) {
+            return null;
+        }
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScopeAllowAnonymous(operatorId, orgId);
+        return scope.groupId();
     }
 
     private String trimToNull(String value) {

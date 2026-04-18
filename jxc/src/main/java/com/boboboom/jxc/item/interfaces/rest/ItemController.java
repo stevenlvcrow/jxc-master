@@ -1,25 +1,14 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.common.BusinessCodeGenerator;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemProfileDO;
-import com.boboboom.jxc.item.infrastructure.persistence.mapper.ItemProfileMapper;
+import com.boboboom.jxc.item.application.service.ItemApplicationService;
+import com.boboboom.jxc.item.application.service.ItemApplicationService.IdPayload;
+import com.boboboom.jxc.item.application.service.ItemApplicationService.ItemListRow;
+import com.boboboom.jxc.item.application.service.ItemApplicationService.PageData;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemBatchDeleteRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemBatchStatusUpdateRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCreateRequest;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.validation.Valid;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,109 +19,40 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
-
 @Validated
 @RestController
 @RequestMapping("/api/items")
 public class ItemController {
 
-    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
-    private static final String STATUS_ENABLED = "启用";
-    private static final String STATUS_DISABLED = "停用";
-    private static final String STATUS_ALL = "全部";
-    private static final String ITEM_TYPE_DEFAULT = "普通物品";
-    private static final String SOURCE_SELF_BUILT = "自建";
-    private static final String PLACEHOLDER = "-";
-    private static final String ITEM_CODE_PREFIX = "WPBM";
+    private final ItemApplicationService itemApplicationService;
 
-    private final ItemProfileMapper itemProfileMapper;
-    private final ObjectMapper objectMapper;
-    private final BusinessCodeGenerator businessCodeGenerator;
-    private final OrgScopeService orgScopeService;
-
-    public ItemController(ItemProfileMapper itemProfileMapper,
-                          ObjectMapper objectMapper,
-                          BusinessCodeGenerator businessCodeGenerator,
-                          OrgScopeService orgScopeService) {
-        this.itemProfileMapper = itemProfileMapper;
-        this.objectMapper = objectMapper;
-        this.businessCodeGenerator = businessCodeGenerator;
-        this.orgScopeService = orgScopeService;
+    public ItemController(ItemApplicationService itemApplicationService) {
+        this.itemApplicationService = itemApplicationService;
     }
 
     @PostMapping
-    @Transactional
     public CodeDataResponse<IdPayload> create(@RequestParam(required = false) String orgId,
                                               @Valid @RequestBody ItemCreateRequest request) {
-        ItemScope scope = resolveItemScope(orgId);
-        String itemCode = generateItemCode(scope);
-        validateRequest(request);
-
-        ItemProfileDO entity = new ItemProfileDO();
-        entity.setScopeType(scope.scopeType());
-        entity.setScopeId(scope.scopeId());
-        entity.setItemId(generateId("itm"));
-        entity.setItemCode(itemCode);
-        entity.setDetailJson(writeRequestJson(copyWithCode(request, itemCode)));
-        entity.setDraft(Boolean.FALSE);
-        itemProfileMapper.insert(entity);
-        return CodeDataResponse.ok(new IdPayload(entity.getItemId()));
+        return itemApplicationService.create(orgId, request);
     }
 
     @PostMapping("/drafts")
-    @Transactional
     public CodeDataResponse<IdPayload> saveDraft(@RequestParam(required = false) String orgId,
                                                  @RequestBody ItemCreateRequest request) {
-        ItemScope scope = resolveItemScope(orgId);
-        String itemCode = generateItemCode(scope);
-
-        ItemProfileDO entity = new ItemProfileDO();
-        entity.setScopeType(scope.scopeType());
-        entity.setScopeId(scope.scopeId());
-        entity.setItemId(generateId("draft"));
-        entity.setItemCode(itemCode);
-        entity.setDetailJson(writeRequestJson(copyWithCode(request, itemCode)));
-        entity.setDraft(Boolean.TRUE);
-        itemProfileMapper.insert(entity);
-        return CodeDataResponse.ok(new IdPayload(entity.getItemId()));
+        return itemApplicationService.saveDraft(orgId, request);
     }
 
     @GetMapping("/{id}")
     public CodeDataResponse<ItemCreateRequest> detail(@PathVariable String id,
                                                       @RequestParam(required = false) String orgId) {
-        ItemScope scope = resolveItemScope(orgId);
-        ItemProfileDO entity = requireItem(id, scope, true);
-        return CodeDataResponse.ok(parseRequestJson(entity.getDetailJson()));
+        return itemApplicationService.detail(id, orgId);
     }
 
     @PutMapping("/{id}")
-    @Transactional
     public CodeDataResponse<Void> update(@PathVariable String id,
                                          @RequestParam(required = false) String orgId,
                                          @Valid @RequestBody ItemCreateRequest request) {
-        ItemScope scope = resolveItemScope(orgId);
-        ItemProfileDO entity = requireItem(id, scope, true);
-        validateRequest(request);
-        String itemCode = trimNullable(entity.getItemCode());
-        if (itemCode == null) {
-            itemCode = generateItemCode(scope);
-            entity.setItemCode(itemCode);
-        }
-        entity.setDetailJson(writeRequestJson(copyWithCode(request, itemCode)));
-        itemProfileMapper.updateById(entity);
-        return CodeDataResponse.ok();
+        return itemApplicationService.update(id, orgId, request);
     }
 
     @GetMapping
@@ -146,462 +66,18 @@ public class ItemController {
                                                         @RequestParam(required = false) String storageMode,
                                                         @RequestParam(required = false) String tag,
                                                         @RequestParam(required = false) String orgId) {
-        ItemScope scope = resolveItemScope(orgId);
-        int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
-
-        String keywordValue = trimNullable(keyword);
-        Set<String> categorySet = parseCategorySet(trimNullable(category));
-        String statusValue = trimNullable(status);
-        String itemTypeValue = trimNullable(itemType);
-        String statTypeValue = trimNullable(statType);
-        String storageModeValue = trimNullable(storageMode);
-        String tagValue = trimNullable(tag);
-
-        // 使用 MyBatis-Plus IPage 数据库分页，仅查询当前页数据
-        IPage<ItemProfileDO> pageResult = itemProfileMapper.selectPage(
-                new Page<>(safePageNo, safePageSize),
-                scopeQuery(scope)
-                        .eq(ItemProfileDO::getDraft, Boolean.FALSE)
-                        .orderByDesc(ItemProfileDO::getCreatedAt)
-                        .orderByDesc(ItemProfileDO::getId)
-        );
-
-        // 仅对当前页数据进行投影和内存过滤（detailJson字段无法下推SQL）
-        List<ItemListRow> filtered = pageResult.getRecords().stream()
-                .map(this::toListProjection)
-                .filter(row -> matchKeyword(row, keywordValue))
-                .filter(row -> matchCategory(row.category(), categorySet))
-                .filter(row -> matchCondition(row.status(), statusValue))
-                .filter(row -> matchCondition(row.type(), itemTypeValue))
-                .filter(row -> matchCondition(row.statType(), statTypeValue))
-                .filter(row -> matchStorageMode(row.storageMode(), storageModeValue))
-                .filter(row -> matchTag(row.tag(), tagValue))
-                .toList();
-
-        return CodeDataResponse.ok(new PageData<>(filtered, pageResult.getTotal(), safePageNo, safePageSize));
+        return itemApplicationService.list(pageNo, pageSize, keyword, category, status, itemType, statType, storageMode, tag, orgId);
     }
 
     @PostMapping("/batch-status")
-    @Transactional
     public CodeDataResponse<Void> batchUpdateStatus(@RequestParam(required = false) String orgId,
                                                     @Valid @RequestBody ItemBatchStatusUpdateRequest request) {
-        ItemScope scope = resolveItemScope(orgId);
-        String nextStatus = normalizeStatus(request.status());
-        Set<String> idSet = sanitizeAndValidateIds(request.ids());
-        List<ItemProfileDO> items = requireItems(scope, idSet);
-        for (ItemProfileDO item : items) {
-            ItemCreateRequest detail = parseRequestJson(item.getDetailJson());
-            item.setDetailJson(writeRequestJson(copyWithStatus(detail, nextStatus)));
-            itemProfileMapper.updateById(item);
-        }
-        return CodeDataResponse.ok();
+        return itemApplicationService.batchUpdateStatus(orgId, request);
     }
 
     @PostMapping("/batch-delete")
-    @Transactional
     public CodeDataResponse<Void> batchDelete(@RequestParam(required = false) String orgId,
                                               @Valid @RequestBody ItemBatchDeleteRequest request) {
-        ItemScope scope = resolveItemScope(orgId);
-        Set<String> idSet = sanitizeAndValidateIds(request.ids());
-        requireItems(scope, idSet);
-        itemProfileMapper.delete(scopeQuery(scope)
-                .eq(ItemProfileDO::getDraft, Boolean.FALSE)
-                .in(ItemProfileDO::getItemId, idSet));
-        return CodeDataResponse.ok();
-    }
-
-    private ItemProfileDO requireItem(String itemId, ItemScope scope, boolean includeDraft) {
-        LambdaQueryWrapper<ItemProfileDO> query = scopeQuery(scope)
-                .eq(ItemProfileDO::getItemId, requiredTrim(itemId, "物品ID不能为空"))
-                .last("limit 1");
-        if (!includeDraft) {
-            query.eq(ItemProfileDO::getDraft, Boolean.FALSE);
-        }
-        ItemProfileDO entity = itemProfileMapper.selectOne(query);
-        if (entity == null) {
-            throw new BusinessException("物品不存在");
-        }
-        return entity;
-    }
-
-    private List<ItemProfileDO> requireItems(ItemScope scope, Set<String> itemIds) {
-        List<ItemProfileDO> items = itemProfileMapper.selectList(
-                scopeQuery(scope)
-                        .eq(ItemProfileDO::getDraft, Boolean.FALSE)
-                        .in(ItemProfileDO::getItemId, itemIds)
-        );
-        if (items.size() != itemIds.size()) {
-            throw new BusinessException("存在无效的物品ID");
-        }
-        return items;
-    }
-
-    private void ensureCodeUnique(ItemScope scope, String itemCode, String excludeItemId, boolean includeDraft) {
-        LambdaQueryWrapper<ItemProfileDO> query = scopeQuery(scope)
-                .eq(ItemProfileDO::getItemCode, itemCode)
-                .last("limit 1");
-        if (!includeDraft) {
-            query.eq(ItemProfileDO::getDraft, Boolean.FALSE);
-        }
-        if (excludeItemId != null) {
-            query.ne(ItemProfileDO::getItemId, excludeItemId);
-        }
-        ItemProfileDO existing = itemProfileMapper.selectOne(query);
-        if (existing != null) {
-            throw new BusinessException("物品编码已存在");
-        }
-    }
-
-    private void validateRequest(ItemCreateRequest request) {
-        requiredTrim(request.name(), "物品名称不能为空");
-        requiredTrim(request.category(), "物品类别不能为空");
-        normalizeStatus(request.status());
-        normalizeStorageMode(request.storageMode());
-        normalizeNumericString(request.stockMin());
-        normalizeNumericString(request.stockMax());
-        normalizeMoneyString(request.productionRefCost());
-        normalizeMoneyString(request.suggestPurchasePrice());
-        validateStockRange(
-                normalizeNumericString(request.stockMin()),
-                normalizeNumericString(request.stockMax())
-        );
-        resolveVolume(request);
-        resolveWeight(request);
-    }
-
-    private ItemListRow toListProjection(ItemProfileDO profile) {
-        ItemCreateRequest request = parseRequestJson(profile.getDetailJson());
-        String itemCode = trimNullable(profile.getItemCode());
-        if (itemCode == null) {
-            itemCode = trimNullable(request.code());
-        }
-        String baseUnit = resolveBaseUnit(request);
-        String purchaseUnit = resolveUnit(request.defaultPurchaseUnit(), baseUnit);
-        String orderUnit = resolveUnit(request.defaultOrderUnit(), baseUnit);
-        String stockUnit = resolveUnit(request.defaultStockUnit(), baseUnit);
-        String costUnit = resolveUnit(request.defaultCostUnit(), baseUnit);
-        return new ItemListRow(
-                profile.getItemId(),
-                0,
-                defaultIfBlank(itemCode, PLACEHOLDER),
-                requiredTrim(request.name(), "物品名称不能为空"),
-                defaultIfBlank(trimNullable(request.spec()), PLACEHOLDER),
-                ITEM_TYPE_DEFAULT,
-                requiredTrim(request.category(), "物品类别不能为空"),
-                defaultIfBlank(trimNullable(request.brand()), PLACEHOLDER),
-                defaultIfBlank(normalizeMoneyString(request.productionRefCost()), "0.00"),
-                baseUnit,
-                purchaseUnit,
-                orderUnit,
-                stockUnit,
-                costUnit,
-                defaultIfBlank(normalizeMoneyString(request.suggestPurchasePrice()), "0.00"),
-                resolveVolume(request),
-                resolveWeight(request),
-                defaultIfBlank(trimNullable(request.statType()), PLACEHOLDER),
-                defaultIfBlank(trimNullable(request.thirdPartyCode()), PLACEHOLDER),
-                defaultIfBlank(trimNullable(request.abcClass()), PLACEHOLDER),
-                defaultIfBlank(normalizeNumericString(request.stockMin()), "0"),
-                defaultIfBlank(normalizeNumericString(request.stockMax()), "0"),
-                SOURCE_SELF_BUILT,
-                normalizeStatus(request.status()),
-                normalizeStorageMode(request.storageMode()),
-                defaultIfBlank(trimNullable(request.tag()), PLACEHOLDER),
-                hasImages(request.introImages()) ? "已上传" : "未上传",
-                formatDateTime(profile.getCreatedAt()),
-                formatDateTime(profile.getUpdatedAt())
-        );
-    }
-
-    private ItemCreateRequest copyWithStatus(ItemCreateRequest request, String status) {
-        try {
-            JsonNode root = objectMapper.valueToTree(request);
-            if (root instanceof ObjectNode objectNode) {
-                objectNode.put("status", status);
-            }
-            return objectMapper.treeToValue(root, ItemCreateRequest.class);
-        } catch (JsonProcessingException ex) {
-            throw new BusinessException("物品详情序列化失败");
-        }
-    }
-
-    private ItemCreateRequest copyWithCode(ItemCreateRequest request, String code) {
-        try {
-            JsonNode root = objectMapper.valueToTree(request);
-            if (root instanceof ObjectNode objectNode) {
-                objectNode.put("code", code);
-            }
-            return objectMapper.treeToValue(root, ItemCreateRequest.class);
-        } catch (JsonProcessingException ex) {
-            throw new BusinessException("物品详情序列化失败");
-        }
-    }
-
-    private boolean matchKeyword(ItemListRow row, String keyword) {
-        if (!StringUtils.hasText(keyword)) {
-            return true;
-        }
-        String text = keyword.toLowerCase(Locale.ROOT);
-        String joined = (row.code() + " " + row.name() + " " + row.spec() + " " + row.thirdPartyCode()).toLowerCase(Locale.ROOT);
-        return joined.contains(text);
-    }
-
-    private boolean matchCondition(String rowValue, String queryValue) {
-        if (!StringUtils.hasText(queryValue) || Objects.equals(queryValue, STATUS_ALL)) {
-            return true;
-        }
-        return Objects.equals(rowValue, queryValue);
-    }
-
-    private boolean matchCategory(String rowValue, Set<String> categorySet) {
-        if (categorySet == null || categorySet.isEmpty()) {
-            return true;
-        }
-        return categorySet.contains(rowValue);
-    }
-
-    private Set<String> parseCategorySet(String category) {
-        if (!StringUtils.hasText(category)) {
-            return Set.of();
-        }
-        return List.of(category.split(","))
-                .stream()
-                .map(this::trimNullable)
-                .filter(StringUtils::hasText)
-                .filter(value -> !Objects.equals(value, "物品类别"))
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-    }
-
-    private boolean matchStorageMode(String rowValue, String queryValue) {
-        if (!StringUtils.hasText(queryValue)) {
-            return true;
-        }
-        return Objects.equals(rowValue, queryValue);
-    }
-
-    private boolean matchTag(String rowValue, String queryValue) {
-        if (!StringUtils.hasText(queryValue)) {
-            return true;
-        }
-        return rowValue.contains(queryValue);
-    }
-
-    private Set<String> sanitizeAndValidateIds(List<String> ids) {
-        if (ids == null || ids.isEmpty()) {
-            throw new BusinessException("物品ID不能为空");
-        }
-        Set<String> idSet = new LinkedHashSet<>();
-        for (String id : ids) {
-            idSet.add(requiredTrim(id, "物品ID不能为空"));
-        }
-        return idSet;
-    }
-
-    private ItemCreateRequest parseRequestJson(String detailJson) {
-        if (!StringUtils.hasText(detailJson)) {
-            throw new BusinessException("物品详情数据为空");
-        }
-        try {
-            return objectMapper.readValue(detailJson, ItemCreateRequest.class);
-        } catch (JsonProcessingException ex) {
-            throw new BusinessException("物品详情数据已损坏");
-        }
-    }
-
-    private String writeRequestJson(ItemCreateRequest request) {
-        try {
-            return objectMapper.writeValueAsString(request);
-        } catch (JsonProcessingException ex) {
-            throw new BusinessException("物品详情序列化失败");
-        }
-    }
-
-    private String resolveBaseUnit(ItemCreateRequest request) {
-        List<ItemCreateRequest.UnitSettingRow> rows = request.unitSettingRows();
-        if (rows == null || rows.isEmpty()) {
-            return "斤";
-        }
-        String unit = trimNullable(rows.get(0).unit());
-        return unit == null ? "斤" : unit;
-    }
-
-    private String resolveUnit(String unit, String fallback) {
-        String normalized = trimNullable(unit);
-        return normalized == null ? fallback : normalized;
-    }
-
-    private String resolveVolume(ItemCreateRequest request) {
-        List<ItemCreateRequest.UnitSettingRow> rows = request.unitSettingRows();
-        if (rows == null || rows.isEmpty()) {
-            return "0.000";
-        }
-        return defaultIfBlank(normalizeDecimal(rows.get(0).volume(), 3), "0.000");
-    }
-
-    private String resolveWeight(ItemCreateRequest request) {
-        List<ItemCreateRequest.UnitSettingRow> rows = request.unitSettingRows();
-        if (rows == null || rows.isEmpty()) {
-            return "0.000";
-        }
-        return defaultIfBlank(normalizeDecimal(rows.get(0).weight(), 3), "0.000");
-    }
-
-    private String normalizeStatus(String status) {
-        String normalized = requiredTrim(status, "状态不能为空");
-        if (Objects.equals(normalized, STATUS_ENABLED) || Objects.equals(normalized, "ENABLED")) {
-            return STATUS_ENABLED;
-        }
-        if (Objects.equals(normalized, STATUS_DISABLED) || Objects.equals(normalized, "DISABLED")) {
-            return STATUS_DISABLED;
-        }
-        throw new BusinessException("状态仅支持 启用/停用");
-    }
-
-    private String normalizeStorageMode(String storageMode) {
-        String normalized = requiredTrim(storageMode, "储存方式不能为空");
-        if (Objects.equals(normalized, "冷冻") || Objects.equals(normalized, "冷藏") || Objects.equals(normalized, "常温")) {
-            return normalized;
-        }
-        throw new BusinessException("储存方式仅支持 冷藏/冷冻/常温");
-    }
-
-    private void validateStockRange(String stockMin, String stockMax) {
-        if (stockMin == null || stockMax == null) {
-            return;
-        }
-        try {
-            BigDecimal min = new BigDecimal(stockMin);
-            BigDecimal max = new BigDecimal(stockMax);
-            if (min.compareTo(max) > 0) {
-                throw new BusinessException("库存下限不能大于库存上限");
-            }
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("库存上下限格式不正确");
-        }
-    }
-
-    private String normalizeMoneyString(String value) {
-        return normalizeDecimal(value, 2);
-    }
-
-    private String normalizeNumericString(String value) {
-        String normalized = trimNullable(value);
-        if (normalized == null) {
-            return null;
-        }
-        try {
-            return new BigDecimal(normalized).stripTrailingZeros().toPlainString();
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("数值格式不正确");
-        }
-    }
-
-    private String normalizeDecimal(String value, int scale) {
-        String normalized = trimNullable(value);
-        if (normalized == null) {
-            return null;
-        }
-        try {
-            return new BigDecimal(normalized).setScale(scale, RoundingMode.HALF_UP).toPlainString();
-        } catch (NumberFormatException ex) {
-            throw new BusinessException("金额格式不正确");
-        }
-    }
-
-    private boolean hasImages(List<ItemCreateRequest.IntroImageRow> images) {
-        return images != null && images.stream().anyMatch(image -> image != null && StringUtils.hasText(image.url()));
-    }
-
-    private String requiredTrim(String value, String message) {
-        String normalized = trimNullable(value);
-        if (normalized == null) {
-            throw new BusinessException(message);
-        }
-        return normalized;
-    }
-
-    private String defaultIfBlank(String value, String fallback) {
-        return value == null || value.isBlank() ? fallback : value;
-    }
-
-    private String trimNullable(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        return value.trim();
-    }
-
-    private String formatDateTime(LocalDateTime value) {
-        if (value == null) {
-            return null;
-        }
-        return DATETIME_FORMATTER.format(value);
-    }
-
-    private String generateId(String prefix) {
-        return prefix + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
-    }
-
-    private String generateItemCode(ItemScope scope) {
-        List<ItemProfileDO> exists = itemProfileMapper.selectList(
-                scopeQuery(scope).select(ItemProfileDO::getItemCode)
-        );
-        List<String> codes = exists.stream()
-                .map(ItemProfileDO::getItemCode)
-                .filter(StringUtils::hasText)
-                .toList();
-        return businessCodeGenerator.nextCode(ITEM_CODE_PREFIX, codes);
-    }
-
-    private LambdaQueryWrapper<ItemProfileDO> scopeQuery(ItemScope scope) {
-        return new LambdaQueryWrapper<ItemProfileDO>()
-                .eq(ItemProfileDO::getScopeType, scope.scopeType())
-                .eq(ItemProfileDO::getScopeId, scope.scopeId());
-    }
-
-    private ItemScope resolveItemScope(String orgId) {
-        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
-        return new ItemScope(scope.scopeType(), scope.scopeId());
-    }
-
-    public record ItemListRow(String id,
-                              Integer index,
-                              String code,
-                              String name,
-                              String spec,
-                              String type,
-                              String category,
-                              String brand,
-                              String productionCost,
-                              String baseUnit,
-                              String purchaseUnit,
-                              String orderUnit,
-                              String stockUnit,
-                              String costUnit,
-                              String suggestPrice,
-                              String volume,
-                              String weight,
-                              String statType,
-                              String thirdPartyCode,
-                              String abcClass,
-                              String stockMin,
-                              String stockMax,
-                              String source,
-                              String status,
-                              String storageMode,
-                              String tag,
-                              String image,
-                              String createdAt,
-                              String updatedAt) {
-    }
-
-    public record PageData<T>(List<T> list, long total, int pageNo, int pageSize) {
-    }
-
-    public record IdPayload(String id) {
-    }
-
-    private record ItemScope(String scopeType, Long scopeId) {
+        return itemApplicationService.batchDelete(orgId, request);
     }
 }

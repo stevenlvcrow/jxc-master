@@ -1,26 +1,29 @@
 package com.boboboom.jxc.identity.application.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.PasswordCodec;
+import com.boboboom.jxc.identity.domain.repository.GroupRepository;
+import com.boboboom.jxc.identity.domain.repository.StoreAdminRelRepository;
+import com.boboboom.jxc.identity.domain.repository.StoreRepository;
+import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
+import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.GroupMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserAccountMapper;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper;
+import com.boboboom.jxc.identity.infrastructure.persistence.query.StoreAdminView;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupStoreCreateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupUpsertRequest;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class GroupAdministrationService {
@@ -29,34 +32,39 @@ public class GroupAdministrationService {
     private static final String GROUP_CODE_PREFIX = "JTBM";
     private static final String STORE_CODE_PREFIX = "MDBM";
 
-    private final UserAccountMapper userAccountMapper;
-    private final UserRoleRelMapper userRoleRelMapper;
-    private final GroupMapper groupMapper;
-    private final StoreMapper storeMapper;
+    private final UserAccountRepository userAccountRepository;
+    private final UserRoleRelRepository userRoleRelRepository;
+    private final GroupRepository groupRepository;
+    private final StoreRepository storeRepository;
+    private final StoreAdminRelRepository storeAdminRelRepository;
+    private final WorkflowProcessStoreBindingRepository workflowProcessStoreBindingRepository;
     private final IdentityAdminLookupService identityAdminLookupService;
     private final BusinessCodeGenerator businessCodeGenerator;
 
-    public GroupAdministrationService(UserAccountMapper userAccountMapper,
-                                      UserRoleRelMapper userRoleRelMapper,
-                                      GroupMapper groupMapper,
-                                      StoreMapper storeMapper,
+    public GroupAdministrationService(UserAccountRepository userAccountRepository,
+                                      UserRoleRelRepository userRoleRelRepository,
+                                      GroupRepository groupRepository,
+                                      StoreRepository storeRepository,
+                                      StoreAdminRelRepository storeAdminRelRepository,
+                                      WorkflowProcessStoreBindingRepository workflowProcessStoreBindingRepository,
                                       IdentityAdminLookupService identityAdminLookupService,
                                       BusinessCodeGenerator businessCodeGenerator) {
-        this.userAccountMapper = userAccountMapper;
-        this.userRoleRelMapper = userRoleRelMapper;
-        this.groupMapper = groupMapper;
-        this.storeMapper = storeMapper;
+        this.userAccountRepository = userAccountRepository;
+        this.userRoleRelRepository = userRoleRelRepository;
+        this.groupRepository = groupRepository;
+        this.storeRepository = storeRepository;
+        this.storeAdminRelRepository = storeAdminRelRepository;
+        this.workflowProcessStoreBindingRepository = workflowProcessStoreBindingRepository;
         this.identityAdminLookupService = identityAdminLookupService;
         this.businessCodeGenerator = businessCodeGenerator;
     }
 
+    @Transactional
     public BindGroupAdminSnapshot bindGroupAdmin(GroupDO group,
                                                  Long operatorId,
                                                  String phone,
                                                  String realNameOrPhone) {
-        UserAccountDO user = userAccountMapper.selectOne(
-                new LambdaQueryWrapper<UserAccountDO>().eq(UserAccountDO::getPhone, phone).last("limit 1")
-        );
+        UserAccountDO user = userAccountRepository.findByPhone(phone).orElse(null);
 
         if (user == null) {
             user = new UserAccountDO();
@@ -68,19 +76,15 @@ public class GroupAdministrationService {
             user.setStatus(STATUS_ENABLED);
             user.setSourceType("MANUAL");
             user.setFirstLoginChangedPwd(Boolean.FALSE);
-            userAccountMapper.insert(user);
+            userAccountRepository.save(user);
         } else if (realNameOrPhone != null && !realNameOrPhone.equals(user.getRealName())) {
             user.setRealName(realNameOrPhone);
-            userAccountMapper.updateById(user);
+            userAccountRepository.update(user);
         }
 
         RoleDO groupAdminRole = identityAdminLookupService.requireRoleByCode("GROUP_ADMIN");
-        UserRoleRelDO rel = userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getUserId, user.getId())
-                .eq(UserRoleRelDO::getRoleId, groupAdminRole.getId())
-                .eq(UserRoleRelDO::getScopeType, "GROUP")
-                .eq(UserRoleRelDO::getScopeId, group.getId())
-                .last("limit 1"));
+        UserRoleRelDO rel = userRoleRelRepository.findByUserIdRoleAndScope(user.getId(), groupAdminRole.getId(), "GROUP", group.getId())
+                .orElse(null);
         if (rel == null) {
             rel = new UserRoleRelDO();
             rel.setUserId(user.getId());
@@ -89,10 +93,10 @@ public class GroupAdministrationService {
             rel.setScopeId(group.getId());
             rel.setAssignedBy(operatorId);
             rel.setStatus(STATUS_ENABLED);
-            userRoleRelMapper.insert(rel);
+            userRoleRelRepository.save(rel);
         } else if (!STATUS_ENABLED.equals(rel.getStatus())) {
             rel.setStatus(STATUS_ENABLED);
-            userRoleRelMapper.updateById(rel);
+            userRoleRelRepository.update(rel);
         }
 
         return new BindGroupAdminSnapshot(
@@ -106,37 +110,27 @@ public class GroupAdministrationService {
 
     public List<GroupDO> listGroups(Long operatorId, boolean platformAdmin) {
         if (platformAdmin) {
-            return groupMapper.selectList(new LambdaQueryWrapper<GroupDO>()
-                    .orderByDesc(GroupDO::getCreatedAt)
-                    .orderByDesc(GroupDO::getId));
+            return groupRepository.findAllOrdered();
         }
         RoleDO groupAdminRole = identityAdminLookupService.requireRoleByCode("GROUP_ADMIN");
-        List<Long> groupIds = userRoleRelMapper.selectList(new LambdaQueryWrapper<UserRoleRelDO>()
-                        .eq(UserRoleRelDO::getUserId, operatorId)
-                        .eq(UserRoleRelDO::getRoleId, groupAdminRole.getId())
-                        .eq(UserRoleRelDO::getScopeType, "GROUP")
-                        .eq(UserRoleRelDO::getStatus, STATUS_ENABLED)
-                        .isNotNull(UserRoleRelDO::getScopeId))
+        List<Long> groupIds = userRoleRelRepository.findByUserIdAndStatus(operatorId, STATUS_ENABLED)
                 .stream()
+                .filter(rel -> groupAdminRole.getId().equals(rel.getRoleId()))
+                .filter(rel -> "GROUP".equals(rel.getScopeType()))
                 .map(UserRoleRelDO::getScopeId)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .distinct()
                 .toList();
         if (groupIds.isEmpty()) {
             return List.of();
         }
-        return groupMapper.selectList(new LambdaQueryWrapper<GroupDO>()
-                .in(GroupDO::getId, groupIds)
-                .orderByDesc(GroupDO::getCreatedAt)
-                .orderByDesc(GroupDO::getId));
+        return groupRepository.findByIdsOrdered(groupIds);
     }
 
+    @Transactional
     public GroupDO createGroup(GroupUpsertRequest request, Long operatorId) {
         String groupCode = generateGroupCode();
-        GroupDO codeExists = groupMapper.selectOne(
-                new LambdaQueryWrapper<GroupDO>().eq(GroupDO::getGroupCode, groupCode).last("limit 1")
-        );
-        if (codeExists != null) {
+        if (groupRepository.findByGroupCode(groupCode).isPresent()) {
             throw new BusinessException("集团编码已存在");
         }
         GroupDO group = new GroupDO();
@@ -144,63 +138,59 @@ public class GroupAdministrationService {
         group.setGroupName(identityAdminLookupService.trim(request.getGroupName()));
         group.setStatus(identityAdminLookupService.normalizeStatus(request.getStatus()));
         group.setRemark(identityAdminLookupService.trimNullable(request.getRemark()));
-        groupMapper.insert(group);
+        groupRepository.save(group);
         ensureGroupBuiltinRoles(group.getId(), operatorId);
         return group;
     }
 
+    @Transactional
     public GroupDO updateGroup(Long id, GroupUpsertRequest request) {
         GroupDO group = identityAdminLookupService.requireGroup(id);
         String groupCode = identityAdminLookupService.trim(request.getGroupCode());
-        GroupDO codeExists = groupMapper.selectOne(new LambdaQueryWrapper<GroupDO>()
-                .eq(GroupDO::getGroupCode, groupCode)
-                .ne(GroupDO::getId, id)
-                .last("limit 1"));
-        if (codeExists != null) {
+        boolean codeExists = groupRepository.findByGroupCode(groupCode)
+                .map(GroupDO::getId)
+                .filter(existingId -> !existingId.equals(id))
+                .isPresent();
+        if (codeExists) {
             throw new BusinessException("集团编码已存在");
         }
         group.setGroupCode(groupCode);
         group.setGroupName(identityAdminLookupService.trim(request.getGroupName()));
         group.setStatus(identityAdminLookupService.normalizeStatus(request.getStatus()));
         group.setRemark(identityAdminLookupService.trimNullable(request.getRemark()));
-        groupMapper.updateById(group);
+        groupRepository.update(group);
         return group;
     }
 
+    @Transactional
     public void deleteGroup(Long id) {
         identityAdminLookupService.requireGroup(id);
-        Long storeCount = storeMapper.selectCount(new LambdaQueryWrapper<StoreDO>().eq(StoreDO::getGroupId, id));
+        Long storeCount = storeRepository.countByGroupId(id);
         if (storeCount != null && storeCount > 0) {
             throw new BusinessException("集团下存在门店，无法删除");
         }
-        userRoleRelMapper.delete(new LambdaQueryWrapper<UserRoleRelDO>()
-                .eq(UserRoleRelDO::getScopeType, "GROUP")
-                .eq(UserRoleRelDO::getScopeId, id));
-        groupMapper.deleteById(id);
+        userRoleRelRepository.deleteByScopeTypeAndScopeId("GROUP", id);
+        groupRepository.deleteById(id);
     }
 
+    @Transactional
     public GroupDO updateGroupStatus(Long id, String status) {
         GroupDO group = identityAdminLookupService.requireGroup(id);
         group.setStatus(identityAdminLookupService.normalizeStatus(status));
-        groupMapper.updateById(group);
+        groupRepository.update(group);
         return group;
     }
 
     public List<com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO> listGroupStores(Long groupId) {
-        return storeMapper.selectList(new LambdaQueryWrapper<com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO>()
-                .eq(com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO::getGroupId, groupId)
-                .orderByDesc(com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO::getCreatedAt)
-                .orderByDesc(com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO::getId));
+        return storeRepository.findByGroupId(groupId);
     }
 
+    @Transactional
     public StoreDO createGroupStore(Long groupId, GroupStoreCreateRequest request) {
         identityAdminLookupService.requireGroup(groupId);
 
         String storeCode = generateStoreCode();
-        StoreDO codeExists = storeMapper.selectOne(
-                new LambdaQueryWrapper<StoreDO>().eq(StoreDO::getStoreCode, storeCode).last("limit 1")
-        );
-        if (codeExists != null) {
+        if (storeRepository.findByStoreCode(storeCode).isPresent()) {
             throw new BusinessException("门店编码已存在");
         }
 
@@ -213,8 +203,42 @@ public class GroupAdministrationService {
         store.setContactPhone(identityAdminLookupService.trimNullable(request.getContactPhone()));
         store.setAddress(identityAdminLookupService.trimNullable(request.getAddress()));
         store.setRemark(identityAdminLookupService.trimNullable(request.getRemark()));
-        storeMapper.insert(store);
+        storeRepository.save(store);
         return store;
+    }
+
+    @Transactional
+    public StoreDO updateGroupStore(Long groupId, Long storeId, GroupStoreCreateRequest request) {
+        identityAdminLookupService.requireGroup(groupId);
+        StoreDO store = identityAdminLookupService.requireStore(storeId);
+        if (!groupId.equals(store.getGroupId())) {
+            throw new BusinessException("门店不属于当前集团");
+        }
+        store.setStoreName(identityAdminLookupService.trim(request.getStoreName()));
+        store.setStatus(identityAdminLookupService.normalizeStatus(request.getStatus()));
+        store.setContactName(identityAdminLookupService.trimNullable(request.getContactName()));
+        store.setContactPhone(identityAdminLookupService.trimNullable(request.getContactPhone()));
+        store.setAddress(identityAdminLookupService.trimNullable(request.getAddress()));
+        store.setRemark(identityAdminLookupService.trimNullable(request.getRemark()));
+        storeRepository.update(store);
+        return store;
+    }
+
+    @Transactional
+    public void deleteGroupStore(Long groupId, Long storeId) {
+        identityAdminLookupService.requireGroup(groupId);
+        StoreDO store = identityAdminLookupService.requireStore(storeId);
+        if (!groupId.equals(store.getGroupId())) {
+            throw new BusinessException("门店不属于当前集团");
+        }
+
+        Long storeAdminCount = storeAdminRelRepository.countByStoreId(storeId);
+        Long storeRoleBindingCount = userRoleRelRepository.countByScopeTypeAndScopeId("STORE", storeId);
+        if ((storeAdminCount != null && storeAdminCount > 0) || (storeRoleBindingCount != null && storeRoleBindingCount > 0)) {
+            throw new BusinessException("门店下存在自建角色或已绑定用户，无法删除");
+        }
+        workflowProcessStoreBindingRepository.deleteByStoreId(storeId);
+        storeRepository.deleteById(storeId);
     }
 
     public void ensureGroupBuiltinRoles(Long groupId, Long operatorId) {
@@ -222,11 +246,10 @@ public class GroupAdministrationService {
     }
 
     public List<GroupAdminCandidateSnapshot> listGroupAdminCandidates(Long groupId) {
-        List<com.boboboom.jxc.identity.infrastructure.persistence.query.StoreAdminView> rows =
-                storeMapper.selectStoreAdminViewByGroupId(groupId, STATUS_ENABLED);
+        List<StoreAdminView> rows = storeRepository.findStoreAdminViewsByGroupId(groupId, STATUS_ENABLED);
 
         LinkedHashMap<Long, GroupAdminCandidateSnapshot> deduped = new LinkedHashMap<>();
-        for (com.boboboom.jxc.identity.infrastructure.persistence.query.StoreAdminView row : rows) {
+        for (StoreAdminView row : rows) {
             if (row.getAdminUserId() == null) {
                 continue;
             }
@@ -261,22 +284,12 @@ public class GroupAdministrationService {
     }
 
     private String generateGroupCode() {
-        List<String> existingCodes = groupMapper.selectList(new LambdaQueryWrapper<GroupDO>()
-                        .select(GroupDO::getGroupCode))
-                .stream()
-                .map(GroupDO::getGroupCode)
-                .filter(StringUtils::hasText)
-                .toList();
+        List<String> existingCodes = groupRepository.findAllGroupCodes();
         return businessCodeGenerator.nextCode(GROUP_CODE_PREFIX, existingCodes);
     }
 
     private String generateStoreCode() {
-        List<String> existingCodes = storeMapper.selectList(new LambdaQueryWrapper<StoreDO>()
-                        .select(StoreDO::getStoreCode))
-                .stream()
-                .map(StoreDO::getStoreCode)
-                .filter(StringUtils::hasText)
-                .toList();
+        List<String> existingCodes = storeRepository.findAllStoreCodes();
         return businessCodeGenerator.nextCode(STORE_CODE_PREFIX, existingCodes);
     }
 }

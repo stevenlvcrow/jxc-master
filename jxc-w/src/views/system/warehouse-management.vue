@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonToolbarSection, { type ToolbarButton } from '@/components/CommonToolbarSection.vue';
 import { useSessionStore } from '@/stores/session';
 import {
-  fetchWarehousesApi,
-  createWarehouseApi,
+  fetchStoreWarehousesApi,
+  createStoreWarehouseApi,
   updateWarehouseApi,
   deleteWarehouseApi,
   setWarehouseDefaultApi,
@@ -14,7 +14,7 @@ import {
   type WarehouseRow,
   type WarehouseCreatePayload,
 } from '@/api/modules/warehouse';
-import { fetchAdminGroupsApi, type GroupAdminItem } from '@/api/modules/system-admin';
+import type { OrgNode } from '@/stores/session';
 
 const sessionStore = useSessionStore();
 
@@ -93,9 +93,18 @@ const query = reactive({
   warehouseType: '全部' as (typeof warehouseTypeOptions)[number],
 });
 
-// Group / Table state
-const groups = ref<GroupAdminItem[]>([]);
-const selectedGroupId = ref<number>();
+// Store / Table state
+const storeOptions = computed(() => {
+  const currentOrg = sessionStore.currentOrg;
+  if (currentOrg?.type === 'store') {
+    return [currentOrg];
+  }
+  if (currentOrg?.type === 'group') {
+    return currentOrg.children ?? [];
+  }
+  return sessionStore.flatOrgs.filter((item): item is OrgNode => item.type === 'store');
+});
+const selectedStoreId = ref<number>();
 const tableData = ref<WarehouseRow[]>([]);
 const selectedIds = ref<number[]>([]);
 const currentPage = ref(1);
@@ -112,38 +121,44 @@ const formatStatusLabel = (status: WarehouseRow['status'] | undefined | null) =>
   return status === 'ENABLED' ? '启用' : '停用';
 };
 
-/** Load all groups and auto-select the one matching currentOrgId */
-const loadGroups = async () => {
-  groups.value = await fetchAdminGroupsApi();
-  if (!groups.value.length) {
-    selectedGroupId.value = undefined;
-    tableData.value = [];
-    return;
-  }
+const resolveStoreIdFromCurrentOrg = (): number | undefined => {
   const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!selectedGroupId.value) {
-    if (currentOrgId.startsWith('group-')) {
-      const currentId = Number(currentOrgId.slice('group-'.length));
-      if (!Number.isNaN(currentId) && groups.value.some((item) => item.id === currentId)) {
-        selectedGroupId.value = currentId;
-      }
-    }
-    if (!selectedGroupId.value) {
-      selectedGroupId.value = groups.value[0].id;
-    }
+  if (!currentOrgId) {
+    return undefined;
   }
+  if (currentOrgId.startsWith('store-')) {
+    const currentId = Number(currentOrgId.slice('store-'.length));
+    return Number.isNaN(currentId) ? undefined : currentId;
+  }
+  const currentOrg = sessionStore.currentOrg;
+  if (currentOrg?.type === 'group') {
+    const firstStore = currentOrg.children?.[0];
+    if (!firstStore) {
+      return undefined;
+    }
+    const storeId = Number(String(firstStore.id).slice('store-'.length));
+    return Number.isNaN(storeId) ? undefined : storeId;
+  }
+  const firstStore = sessionStore.flatOrgs.find((item) => item.type === 'store');
+  if (!firstStore) {
+    return undefined;
+  }
+  const storeId = Number(String(firstStore.id).slice('store-'.length));
+  return Number.isNaN(storeId) ? undefined : storeId;
 };
+
+const resolveActiveStoreId = (): number | undefined => selectedStoreId.value ?? resolveStoreIdFromCurrentOrg();
 
 /** Load warehouses from backend */
 const loadData = async () => {
-  const groupId = selectedGroupId.value;
-  if (!groupId) {
+  const storeId = resolveActiveStoreId();
+  if (!storeId) {
     tableData.value = [];
     return;
   }
   loading.value = true;
   try {
-    const rows = await fetchWarehousesApi(groupId, {
+    const rows = await fetchStoreWarehousesApi(storeId, {
       keyword: query.warehouseInfo.trim() || undefined,
       status: query.status !== '全部' ? query.status : undefined,
       warehouseType: query.warehouseType !== '全部' ? query.warehouseType : undefined,
@@ -160,12 +175,20 @@ const loadData = async () => {
 onMounted(async () => {
   loading.value = true;
   try {
-    await loadGroups();
+    selectedStoreId.value = resolveStoreIdFromCurrentOrg();
     await loadData();
   } finally {
     loading.value = false;
   }
 });
+
+watch(
+  () => sessionStore.currentOrgId,
+  async () => {
+    selectedStoreId.value = resolveStoreIdFromCurrentOrg();
+    await loadData();
+  },
+);
 
 const handleSearch = () => {
   currentPage.value = 1;
@@ -182,12 +205,17 @@ const handleReset = () => {
 
 const handleToolbarAction = (action: string) => {
   if (action === '新增') {
-    if (!selectedGroupId.value) {
-      ElMessage.warning('请先选择集团');
+    if (!resolveActiveStoreId()) {
+      ElMessage.warning('请先选择门店');
       return;
     }
     openCreateDialog();
   }
+};
+
+const handleStoreChange = async () => {
+  currentPage.value = 1;
+  await loadData();
 };
 
 const handleSelectionChange = (rows: WarehouseRow[]) => {
@@ -349,9 +377,9 @@ const handleSubmit = async () => {
   const valid = await formRef.value.validate().catch(() => false);
   if (!valid) return;
 
-  const groupId = selectedGroupId.value;
-  if (!groupId) {
-    ElMessage.warning('请先选择集团');
+  const storeId = resolveActiveStoreId();
+  if (!storeId) {
+    ElMessage.warning('请先选择门店');
     return;
   }
 
@@ -360,7 +388,7 @@ const handleSubmit = async () => {
       await updateWarehouseApi(editingId.value, buildPayload());
       ElMessage.success('编辑成功');
     } else {
-      await createWarehouseApi(groupId, buildPayload());
+      await createStoreWarehouseApi(storeId, buildPayload());
       ElMessage.success('新增成功');
     }
     closeDialog();
@@ -383,13 +411,13 @@ const handlePageSizeChange = (size: number) => {
 <template>
   <section class="panel item-main-panel">
     <CommonQuerySection :model="query">
-      <el-form-item label="所属集团" v-if="groups.length > 1">
-        <el-select v-model="selectedGroupId" style="width: 200px">
+      <el-form-item label="所属门店" v-if="storeOptions.length > 1">
+        <el-select v-model="selectedStoreId" style="width: 220px" @change="handleStoreChange">
           <el-option
-            v-for="group in groups"
-            :key="group.id"
-            :label="`${group.groupName} (${group.groupCode})`"
-            :value="group.id"
+            v-for="store in storeOptions"
+            :key="store.id"
+            :label="`${store.name} (${store.code})`"
+            :value="Number(String(store.id).slice(String(store.id).lastIndexOf('-') + 1))"
           />
         </el-select>
       </el-form-item>

@@ -12,6 +12,7 @@ export type WorkflowNode = {
   allowUnapprove: boolean;
   nodeType?: 'NORMAL' | 'CONDITION' | 'SUCCESS' | 'FAIL' | 'START' | 'END';
   conditionExpression?: string;
+  triggerActions?: ('CREATE' | 'UPDATE' | 'DELETE')[];
 };
 
 export type WorkflowConfig = {

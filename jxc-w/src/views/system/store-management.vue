@@ -1,22 +1,27 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonToolbarSection, { type ToolbarButton } from '@/components/CommonToolbarSection.vue';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import {
   createGroupStoreApi,
+  deleteGroupStoreApi,
   fetchAdminGroupsApi,
   fetchGroupStoresApi,
+  updateGroupStoreApi,
   type GroupAdminItem,
   type GroupStoreItem,
 } from '@/api/modules/system-admin';
-import { useSessionStore } from '@/stores/session';
+import { useSessionStore, type OrgNode } from '@/stores/session';
 
 const sessionStore = useSessionStore();
 const loading = ref(false);
 const creating = ref(false);
 const createDialogVisible = ref(false);
+const dialogTitle = ref('新增门店');
+const isEdit = ref(false);
+const editingStoreId = ref<number | null>(null);
 const groups = ref<GroupAdminItem[]>([]);
 const stores = ref<GroupStoreItem[]>([]);
 const currentPage = ref(1);
@@ -40,6 +45,16 @@ const toolbarButtons: ToolbarButton[] = [
   { key: 'create', label: '新增门店', type: 'primary' },
 ];
 
+const resolveParentGroup = (org: OrgNode | null) => {
+  if (!org) {
+    return null;
+  }
+  if (org.type === 'group') {
+    return org;
+  }
+  return sessionStore.rootGroups.find((group) => group.children?.some((child) => child.id === org.id)) ?? null;
+};
+
 const filteredStores = computed(() => stores.value.filter((item) => {
   const keyword = query.keyword.trim().toLowerCase();
   const keywordMatched = keyword
@@ -60,6 +75,9 @@ const resetCreateForm = () => {
   createForm.contactPhone = '';
   createForm.address = '';
   createForm.remark = '';
+  isEdit.value = false;
+  editingStoreId.value = null;
+  dialogTitle.value = '新增门店';
 };
 
 const loadGroups = async () => {
@@ -69,10 +87,10 @@ const loadGroups = async () => {
     stores.value = [];
     return;
   }
-  const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
+  const currentGroup = resolveParentGroup(sessionStore.currentOrg);
   if (!selectedGroupId.value) {
-    if (currentOrgId.startsWith('group-')) {
-      const currentId = Number(currentOrgId.slice('group-'.length));
+    if (currentGroup?.id.startsWith('group-')) {
+      const currentId = Number(currentGroup.id.slice('group-'.length));
       if (!Number.isNaN(currentId) && groups.value.some((item) => item.id === currentId)) {
         selectedGroupId.value = currentId;
       }
@@ -112,9 +130,34 @@ const handleToolbarAction = (key: string) => {
       ElMessage.warning('请先选择集团');
       return;
     }
+    resetCreateForm();
     createDialogVisible.value = true;
     return;
   }
+};
+
+const openEditDialog = (row: GroupStoreItem) => {
+  isEdit.value = true;
+  editingStoreId.value = row.id;
+  dialogTitle.value = '编辑门店';
+  createForm.storeName = row.storeName;
+  createForm.status = row.status;
+  createForm.contactName = row.contactName ?? '';
+  createForm.contactPhone = row.contactPhone ?? '';
+  createForm.address = row.address ?? '';
+  createForm.remark = row.remark ?? '';
+  createDialogVisible.value = true;
+};
+
+const handleDeleteStore = async (row: GroupStoreItem) => {
+  if (!selectedGroupId.value) {
+    ElMessage.warning('请先选择集团');
+    return;
+  }
+  await ElMessageBox.confirm(`确认删除门店“${row.storeName}”吗？`, '删除确认', { type: 'warning' });
+  await deleteGroupStoreApi(selectedGroupId.value, row.id);
+  ElMessage.success('门店删除成功');
+  await loadStores();
 };
 const handlePageChange = (page: number) => {
   currentPage.value = page;
@@ -135,7 +178,7 @@ const handleCreateStore = async () => {
   }
   creating.value = true;
   try {
-    await createGroupStoreApi(selectedGroupId.value, {
+    const payload = {
       storeCode: undefined,
       storeName: createForm.storeName.trim(),
       status: createForm.status,
@@ -143,8 +186,17 @@ const handleCreateStore = async () => {
       contactPhone: createForm.contactPhone.trim() || undefined,
       address: createForm.address.trim() || undefined,
       remark: createForm.remark.trim() || undefined,
-    });
-    ElMessage.success('门店创建成功');
+    };
+    if (isEdit.value && editingStoreId.value != null) {
+      await updateGroupStoreApi(selectedGroupId.value, editingStoreId.value, payload);
+      ElMessage.success('门店更新成功');
+    } else {
+      await createGroupStoreApi(selectedGroupId.value, {
+        ...payload,
+        storeCode: undefined,
+      });
+      ElMessage.success('门店创建成功');
+    }
     createDialogVisible.value = false;
     resetCreateForm();
     await loadStores();
@@ -157,6 +209,14 @@ watch(selectedGroupId, () => {
   currentPage.value = 1;
   loadStores();
 });
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    selectedGroupId.value = undefined;
+    refresh();
+  },
+);
 
 watch(
   () => [query.keyword, query.status],
@@ -204,6 +264,12 @@ onMounted(() => {
         <el-table-column prop="contactPhone" label="联系电话" width="140" />
         <el-table-column prop="status" label="状态" width="100" />
         <el-table-column prop="address" label="地址" min-width="220" show-overflow-tooltip />
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="openEditDialog(row)">编辑</el-button>
+            <el-button type="danger" link @click="handleDeleteStore(row)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <ItemPaginationSection
@@ -218,7 +284,7 @@ onMounted(() => {
 
     <el-dialog
       v-model="createDialogVisible"
-      title="新增门店"
+      :title="dialogTitle"
       width="560px"
       class="standard-form-dialog"
       @closed="resetCreateForm"
@@ -248,7 +314,9 @@ onMounted(() => {
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreateStore">保存</el-button>
+        <el-button type="primary" :loading="creating" @click="handleCreateStore">
+          {{ isEdit ? '更新' : '保存' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>

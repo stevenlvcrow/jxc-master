@@ -13,6 +13,7 @@ import {
   updateItemApi,
 } from '@/api/modules/item';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonMnemonicField from '@/components/CommonMnemonicField.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -733,9 +734,16 @@ const loadDetailIfEditMode = async () => {
         <div class="form-section-block" :ref="registerSectionRef('basic')">
           <div class="form-section-title">基础信息</div>
           <div class="item-form-grid">
-            <el-form-item label="物品名称">
-              <el-input v-model="form.name" placeholder="请输入物品名称" />
-            </el-form-item>
+            <CommonMnemonicField
+              v-model:source-value="form.name"
+              v-model="form.mnemonicCode"
+              source-label="物品名称"
+              mnemonic-label="助记码"
+              source-field="name"
+              mnemonic-field="mnemonicCode"
+              source-placeholder="请输入物品名称"
+              mnemonic-placeholder="根据物品名称自动生成"
+            />
             <el-form-item label="物品类别">
               <el-select v-model="form.category" placeholder="请选择物品类别">
                 <el-option v-for="option in categoryOptions" :key="option" :label="option" :value="option" />
@@ -753,9 +761,6 @@ const loadDetailIfEditMode = async () => {
             </el-form-item>
             <el-form-item label="物品品牌">
               <el-input v-model="form.brand" placeholder="请输入物品品牌" />
-            </el-form-item>
-            <el-form-item label="助记码">
-              <el-input v-model="form.mnemonicCode" placeholder="请输入助记码" />
             </el-form-item>
             <el-form-item label="物品条形码">
               <el-input v-model="form.barcode" placeholder="请输入物品条形码" />

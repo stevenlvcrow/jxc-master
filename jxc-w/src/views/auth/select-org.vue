@@ -2,27 +2,55 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
+import { authStorage } from '@/api/auth-storage';
 import { fetchOrgTreeApi } from '@/api/modules/org';
+import { logoutApi } from '@/api/modules/auth';
+import { useAppStore } from '@/stores/app';
+import { useMenuStore } from '@/stores/menu';
 import { useSessionStore } from '@/stores/session';
 
 const router = useRouter();
 const sessionStore = useSessionStore();
+const appStore = useAppStore();
+const menuStore = useMenuStore();
 const useRealOrgApi = import.meta.env.VITE_USE_REAL_ORG_API === '1';
+const PROFILE_HOME_PATH = '/profile';
 
 const topTrialNodes = computed(() => sessionStore.rootGroups.filter((node) => node.type === 'trial'));
 const groupNodes = computed(() => sessionStore.rootGroups.filter((node) => node.type === 'group'));
 const topStoreNodes = computed(() => sessionStore.rootGroups.filter((node) => node.type === 'store'));
 const activeGroups = ref<string[]>(groupNodes.value.map((item) => item.id));
 
-const chooseOrg = (orgId: string) => {
+const chooseOrg = async (orgId: string) => {
   sessionStore.selectOrg(orgId);
+  appStore.resetVisitedTabs();
+  if (!authStorage.getAccessToken()) {
+    menuStore.clearMenus();
+    ElMessage.success('机构选择成功');
+    await router.replace(PROFILE_HOME_PATH);
+    return;
+  }
+
+  try {
+    await menuStore.loadMenus(orgId);
+  } catch {
+    menuStore.clearMenus();
+  }
   ElMessage.success('机构选择成功');
-  router.replace('/dashboard');
+  await router.replace(PROFILE_HOME_PATH);
 };
 
-const handleLogout = () => {
-  sessionStore.logout();
-  router.replace('/login');
+const handleLogout = async () => {
+  try {
+    await logoutApi();
+  } catch {
+    // Ignore logout API failure and continue local cleanup.
+  } finally {
+    sessionStore.logout();
+    menuStore.clearMenus();
+    appStore.resetVisitedTabs();
+    await router.replace('/login');
+  }
 };
 
 onMounted(async () => {

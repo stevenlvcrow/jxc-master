@@ -6,6 +6,7 @@
 
     <resultMap id="WarehouseDOResultMap" type="com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO">
         <id property="id" column="id"/>
+        <result property="storeId" column="store_id"/>
         <result property="groupId" column="group_id"/>
         <result property="warehouseCode" column="warehouse_code"/>
         <result property="warehouseName" column="warehouse_name"/>

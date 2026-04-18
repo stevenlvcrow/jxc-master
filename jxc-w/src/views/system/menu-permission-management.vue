@@ -9,6 +9,7 @@ import {
   type MenuAdminItem,
   type RoleAdminItem,
 } from '@/api/modules/system-admin';
+import { useSessionStore } from '@/stores/session';
 
 type MenuTreeNode = {
   id: number | string;
@@ -26,6 +27,11 @@ const selectedRoleId = ref<number>();
 const checkedMenuIds = ref<number[]>([]);
 const menuTreeRef = ref<any>();
 const route = useRoute();
+const sessionStore = useSessionStore();
+const currentOrgId = computed(() => {
+  const orgId = sessionStore.currentOrgId?.trim();
+  return orgId ? orgId : undefined;
+});
 
 const isGroupMenuPermissionPage = computed(() => route.path.startsWith('/group/'));
 const filteredRoles = computed(() => {
@@ -94,7 +100,10 @@ const menuTreeData = computed<MenuTreeNode[]>(() => {
 const refreshData = async () => {
   loading.value = true;
   try {
-    const [roleList, menuList] = await Promise.all([fetchAdminRolesApi(), fetchAdminMenusApi()]);
+    const [roleList, menuList] = await Promise.all([
+      fetchAdminRolesApi(currentOrgId.value),
+      fetchAdminMenusApi(currentOrgId.value),
+    ]);
     roles.value = roleList;
     menus.value = menuList;
     if (!selectedRoleId.value && filteredRoles.value.length > 0) {
@@ -151,6 +160,13 @@ const handleSave = async () => {
 onMounted(() => {
   refreshData();
 });
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    refreshData();
+  },
+);
 </script>
 
 <template>

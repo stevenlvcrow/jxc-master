@@ -6,9 +6,15 @@ import java.util.List;
 
 public interface ItemCategoryRepository {
 
+    List<ItemCategoryDO> findByScopeOrdered(String scopeType, Long scopeId);
+
     List<ItemCategoryDO> findPlatformTemplates();
 
     List<ItemCategoryDO> findStoreRows(Long storeId);
 
     void save(ItemCategoryDO itemCategory);
+
+    void update(ItemCategoryDO itemCategory);
+
+    void deleteById(Long id);
 }

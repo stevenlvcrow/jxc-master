@@ -12,7 +12,8 @@ record RoleAssignmentView(Long roleId,
                           String roleType,
                           String scopeType,
                           Long scopeId,
-                          String scopeName) {
+                          String scopeName,
+                          boolean builtin) {
 }
 
 record GroupAdminView(Long id,
@@ -59,8 +60,15 @@ record UserAdminView(Long id,
                      List<RoleAssignmentView> roles) {
 }
 
+record SalesmanCandidateView(Long userId,
+                             String realName,
+                             String phone) {
+}
+
 record RoleAdminView(Long id,
                      String roleCode,
+                     Long tenantGroupId,
+                     String tenantGroupName,
                      String roleName,
                      String roleType,
                      String dataScopeType,

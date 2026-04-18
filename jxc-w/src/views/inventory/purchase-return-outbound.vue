@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ArrowDown, Delete, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import { useSessionStore } from '@/stores/session';
+import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 
 type TimeType = '出库日期' | '创建时间';
 type DocumentStatus = '草稿' | '已提交' | '已审核';
@@ -40,17 +42,8 @@ const reconciliationStatusOptions: ReconciliationStatus[] = ['未对账', '部�
 const splitStatusOptions: SplitStatus[] = ['全部', '未分账', '已分账'];
 const invoiceStatusOptions: InvoiceStatus[] = ['未开票', '部分开票', '已开票'];
 const printStatusOptions: PrintStatus[] = ['全部', '未打印', '已打印'];
-const warehouseTree: TreeNode[] = [
-  {
-    value: 'warehouse-root',
-    label: '仓库中心',
-    children: [
-      { value: '中央成品仓', label: '中央成品仓' },
-      { value: '北区原料仓', label: '北区原料仓' },
-      { value: '南区包材仓', label: '南区包材仓' },
-    ],
-  },
-];
+const sessionStore = useSessionStore();
+const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 const supplierTree: TreeNode[] = [
   {
     value: 'supplier-group',
@@ -132,6 +125,17 @@ const tableData: PurchaseReturnOutboundRow[] = [
     remark: '包材数量差异退回',
   },
 ];
+
+onMounted(() => {
+  void loadWarehouseTree();
+});
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    void loadWarehouseTree();
+  },
+);
 
 const currentPage = ref(1);
 const pageSize = ref(10);

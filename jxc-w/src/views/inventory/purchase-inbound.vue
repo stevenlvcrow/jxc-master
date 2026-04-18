@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 import { Delete, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import {
   batchApprovePurchaseInboundApi,
+  batchDeletePurchaseInboundApi,
   batchUnapprovePurchaseInboundApi,
+  deletePurchaseInboundApi,
   fetchPurchaseInboundPageApi,
+  fetchPurchaseInboundPermissionApi,
   type PurchaseInboundRow,
 } from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
@@ -32,17 +36,7 @@ const reconciliationStatusOptions: ReconciliationStatus[] = ['未对账', '部�
 const splitStatusOptions: SplitStatus[] = ['未分账', '已分账'];
 const invoiceStatusOptions: InvoiceStatus[] = ['未开票', '部分开票', '已开票'];
 const printStatusOptions: PrintStatus[] = ['全部', '未打印', '已打印'];
-const warehouseTree: TreeNode[] = [
-  {
-    value: 'warehouse-root',
-    label: '仓库中心',
-    children: [
-      { value: '中央成品仓', label: '中央成品仓' },
-      { value: '北区原料仓', label: '北区原料仓' },
-      { value: '南区包材仓', label: '南区包材仓' },
-    ],
-  },
-];
+const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 const supplierTree: TreeNode[] = [
   {
     value: 'supplier-group',
@@ -71,7 +65,6 @@ const query = reactive({
   splitStatus: '',
   upstreamCode: '',
   invoiceStatus: '',
-  adjustedPrice: false,
   inspectionCount: '',
   printStatus: '全部' as PrintStatus,
   remark: '',
@@ -83,6 +76,22 @@ const total = ref(0);
 const selectedIds = ref<number[]>([]);
 const tableData = ref<PurchaseInboundRow[]>([]);
 const loading = ref(false);
+const canCreate = ref(false);
+const canUpdate = ref(false);
+const canDelete = ref(false);
+const canApprove = ref(false);
+const canUnapprove = ref(false);
+
+onMounted(() => {
+  void loadWarehouseTree();
+});
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    void loadWarehouseTree();
+  },
+);
 
 const resolveOrgId = () => {
   const orgId = (sessionStore.currentOrgId ?? '').trim();
@@ -114,7 +123,6 @@ const fetchTableData = async () => {
       splitStatus: query.splitStatus || undefined,
       upstreamCode: query.upstreamCode || undefined,
       invoiceStatus: query.invoiceStatus || undefined,
-      adjustedPrice: query.adjustedPrice || undefined,
       inspectionCount: query.inspectionCount || undefined,
       printStatus: query.printStatus === '全部' ? undefined : query.printStatus,
       remark: query.remark || undefined,
@@ -124,6 +132,23 @@ const fetchTableData = async () => {
     selectedIds.value = [];
   } finally {
     loading.value = false;
+  }
+};
+
+const loadPermission = async () => {
+  try {
+    const result = await fetchPurchaseInboundPermissionApi(resolveOrgId());
+    canCreate.value = Boolean(result.canCreate);
+    canUpdate.value = Boolean(result.canUpdate);
+    canDelete.value = Boolean(result.canDelete);
+    canApprove.value = Boolean(result.canApprove);
+    canUnapprove.value = Boolean(result.canUnapprove);
+  } catch {
+    canCreate.value = false;
+    canUpdate.value = false;
+    canDelete.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
   }
 };
 
@@ -145,7 +170,6 @@ const handleReset = async () => {
   query.splitStatus = '';
   query.upstreamCode = '';
   query.invoiceStatus = '';
-  query.adjustedPrice = false;
   query.inspectionCount = '';
   query.printStatus = '全部';
   query.remark = '';
@@ -158,6 +182,25 @@ const handleToolbarAction = async (action: string) => {
     router.push('/inventory/1/2/create');
     return;
   }
+  if (action === '批量删除') {
+    if (!selectedIds.value.length) {
+      ElMessage.warning('请先选择单据');
+      return;
+    }
+    try {
+      await ElMessageBox.confirm(`确认删除选中的 ${selectedIds.value.length} 条单据吗？`, '删除确认', {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      });
+    } catch {
+      return;
+    }
+    await batchDeletePurchaseInboundApi(selectedIds.value, resolveOrgId());
+    ElMessage.success('批量删除成功');
+    await fetchTableData();
+    return;
+  }
   if (action === '批量审核') {
     if (!selectedIds.value.length) {
       ElMessage.warning('请先选择单据');
@@ -168,17 +211,32 @@ const handleToolbarAction = async (action: string) => {
     await fetchTableData();
     return;
   }
-  if (action === '批量反审核') {
+  if (action === '批量取消审核') {
     if (!selectedIds.value.length) {
       ElMessage.warning('请先选择单据');
       return;
     }
     await batchUnapprovePurchaseInboundApi(selectedIds.value, resolveOrgId());
-    ElMessage.success('批量反审核成功');
+    ElMessage.success('批量取消审核成功');
     await fetchTableData();
     return;
   }
   ElMessage.info(`${action}功能待接入`);
+};
+
+const handleDelete = async (row: PurchaseInboundRow) => {
+  try {
+    await ElMessageBox.confirm(`确认删除单据“${row.documentCode}”吗？`, '删除确认', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    });
+  } catch {
+    return;
+  }
+  await deletePurchaseInboundApi(row.id, resolveOrgId());
+  ElMessage.success('删除成功');
+  await fetchTableData();
 };
 
 const handleSelectionChange = (rows: PurchaseInboundRow[]) => {
@@ -186,11 +244,11 @@ const handleSelectionChange = (rows: PurchaseInboundRow[]) => {
 };
 
 const handleView = (row: PurchaseInboundRow) => {
-  ElMessage.info(`查看：${row.documentCode}`);
+  router.push(`/inventory/1/2/view/${row.id}`);
 };
 
 const handleEdit = (row: PurchaseInboundRow) => {
-  ElMessage.info(`编辑：${row.documentCode}`);
+  router.push(`/inventory/1/2/edit/${row.id}`);
 };
 
 const handlePageChange = async (page: number) => {
@@ -205,8 +263,17 @@ const handlePageSizeChange = async (size: number) => {
 };
 
 onMounted(async () => {
+  await loadPermission();
   await fetchTableData();
 });
+
+watch(
+  () => sessionStore.currentOrgId,
+  async () => {
+    await loadPermission();
+    await fetchTableData();
+  },
+);
 </script>
 
 <template>
@@ -321,9 +388,6 @@ onMounted(async () => {
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="被调过价">
-        <el-checkbox v-model="query.adjustedPrice" />
-      </el-form-item>
       <el-form-item label="质检次数">
         <el-input v-model="query.inspectionCount" placeholder="请输入质检次数" clearable style="width: 120px" />
       </el-form-item>
@@ -353,7 +417,7 @@ onMounted(async () => {
     </CommonQuerySection>
 
     <div class="table-toolbar">
-      <el-button type="primary" @click="handleToolbarAction('新增')">
+      <el-button v-if="canCreate" type="primary" @click="handleToolbarAction('新增')">
         <el-icon><Plus /></el-icon>
         新增
       </el-button>
@@ -361,14 +425,12 @@ onMounted(async () => {
         <el-icon><Printer /></el-icon>
         批量打印
       </el-button>
-      <el-button @click="handleToolbarAction('批量删除')">
+      <el-button v-if="canDelete" @click="handleToolbarAction('批量删除')">
         <el-icon><Delete /></el-icon>
         批量删除
       </el-button>
-      <el-button @click="handleToolbarAction('批量审核')">批量审核</el-button>
-      <el-button @click="handleToolbarAction('批量反审核')">批量反审核</el-button>
-      <el-button @click="handleToolbarAction('批量复审')">批量复审</el-button>
-      <el-button @click="handleToolbarAction('批量取消复审')">批量取消复审</el-button>
+      <el-button v-if="canApprove" @click="handleToolbarAction('批量审核')">批量审核</el-button>
+      <el-button v-if="canUnapprove" @click="handleToolbarAction('批量取消审核')">批量取消审核</el-button>
       <el-button @click="handleToolbarAction('批量导出单据列表')">批量导出单据列表</el-button>
     </div>
 
@@ -400,10 +462,11 @@ onMounted(async () => {
       <el-table-column prop="createdAt" label="创建时间" min-width="170" show-overflow-tooltip />
       <el-table-column prop="creator" label="创建人" min-width="100" show-overflow-tooltip />
       <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
           <el-button text type="primary" @click="handleView(row)">查看</el-button>
-          <el-button text @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="canUpdate" text @click="handleEdit(row)">编辑</el-button>
+          <el-button v-if="canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>

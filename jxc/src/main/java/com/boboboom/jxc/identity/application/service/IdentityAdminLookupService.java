@@ -4,9 +4,11 @@ import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.domain.repository.GroupRepository;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
 import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
+import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
 import org.springframework.stereotype.Service;
@@ -22,15 +24,18 @@ public class IdentityAdminLookupService {
     private final UserAccountRepository userAccountRepository;
     private final GroupRepository groupRepository;
     private final RoleRepository roleRepository;
+    private final StoreRepository storeRepository;
     private final WarehouseRepository warehouseRepository;
 
     public IdentityAdminLookupService(UserAccountRepository userAccountRepository,
                                       GroupRepository groupRepository,
                                       RoleRepository roleRepository,
+                                      StoreRepository storeRepository,
                                       WarehouseRepository warehouseRepository) {
         this.userAccountRepository = userAccountRepository;
         this.groupRepository = groupRepository;
         this.roleRepository = roleRepository;
+        this.storeRepository = storeRepository;
         this.warehouseRepository = warehouseRepository;
     }
 
@@ -47,6 +52,11 @@ public class IdentityAdminLookupService {
     public RoleDO requireRoleByCode(String roleCode) {
         return roleRepository.findByRoleCode(roleCode)
                 .orElseThrow(() -> new BusinessException("角色不存在: " + roleCode));
+    }
+
+    public StoreDO requireStore(Long id) {
+        return storeRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("门店不存在"));
     }
 
     public WarehouseDO requireWarehouse(Long id) {

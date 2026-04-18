@@ -9,6 +9,7 @@ type BreadcrumbNav = {
 defineProps<{
   navs: BreadcrumbNav[];
   activeKey: string;
+  showActions?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -26,7 +27,7 @@ const emit = defineEmits<{
         <el-icon><ArrowLeft /></el-icon>
         返回列表
       </el-button>
-      <div class="form-actions-right">
+      <div v-if="showActions !== false" class="form-actions-right">
         <el-button @click="emit('save-draft')">保存草稿</el-button>
         <el-button type="primary" @click="emit('save')">保存</el-button>
       </div>

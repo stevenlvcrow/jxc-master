@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { RefreshRight, Search } from '@element-plus/icons-vue';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import { useSessionStore } from '@/stores/session';
+import { useStoreWarehouseTree, type WarehouseTreeNode } from '@/composables/useStoreWarehouseTree';
 
 type OpeningStatus = '全部' | '草稿' | '已提交' | '已完成';
 type OpeningRow = {
@@ -13,23 +15,9 @@ type OpeningRow = {
   status: Exclude<OpeningStatus, '全部'>;
   createdAt: string;
 };
-type TreeNode = {
-  value: string;
-  label: string;
-  children?: TreeNode[];
-};
 
-const warehouseTree: TreeNode[] = [
-  {
-    value: 'group-warehouse',
-    label: '仓库中心',
-    children: [
-      { value: 'central-finished', label: '中央成品仓' },
-      { value: 'north-raw', label: '北区原料仓' },
-      { value: 'south-pack', label: '南区包材仓' },
-    ],
-  },
-];
+const sessionStore = useSessionStore();
+const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 const statusOptions: OpeningStatus[] = ['全部', '草稿', '已提交', '已完成'];
 
 const query = reactive({
@@ -70,9 +58,20 @@ const tableData: OpeningRow[] = [
 const currentPage = ref(1);
 const pageSize = ref(10);
 
+onMounted(() => {
+  void loadWarehouseTree();
+});
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    void loadWarehouseTree();
+  },
+);
+
 const warehouseLabelMap = computed(() => {
   const map = new Map<string, string>();
-  const walk = (nodes: TreeNode[]) => {
+  const walk = (nodes: WarehouseTreeNode[]) => {
     nodes.forEach((node) => {
       map.set(node.value, node.label);
       if (node.children?.length) {
@@ -80,7 +79,7 @@ const warehouseLabelMap = computed(() => {
       }
     });
   };
-  walk(warehouseTree);
+  walk(warehouseTree.value);
   return map;
 });
 

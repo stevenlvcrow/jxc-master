@@ -47,6 +47,14 @@ const normalizeIcon = (icon?: string | null) => {
   return 'Document';
 };
 
+const normalizeRoutePath = (path?: string | null) => {
+  const raw = String(path ?? '').trim().replace(/\/+$/, '');
+  if (!raw) {
+    return '';
+  }
+  return raw.startsWith('/') ? raw : `/${raw}`;
+};
+
 const buildMenuTree = (rows: CurrentMenuItem[]): AppMenuItem[] => {
   const sorted = [...rows].sort((a, b) => {
     const left = a.sortNo ?? 0;
@@ -65,7 +73,7 @@ const buildMenuTree = (rows: CurrentMenuItem[]): AppMenuItem[] => {
     map.set(row.id, {
       key: `menu-${row.id}`,
       title: normalizedTitle,
-      path: row.routePath ?? undefined,
+      path: normalizeRoutePath(row.routePath) || undefined,
       icon: undefined,
       menuType: row.menuType,
       children: [],

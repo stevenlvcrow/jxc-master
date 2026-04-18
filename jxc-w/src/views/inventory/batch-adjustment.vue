@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ArrowDown, Delete, Download, Plus, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
+import { useSessionStore } from '@/stores/session';
 
 type DateType = '调整日期' | '创建时间';
 type DocumentStatus = '草稿' | '已提交' | '已审核';
-type TreeNode = {
-  value: string;
-  label: string;
-  children?: TreeNode[];
-};
 type BatchAdjustmentRow = {
   id: number;
   documentCode: string;
@@ -26,17 +23,8 @@ type BatchAdjustmentRow = {
 const dateTypeOptions: DateType[] = ['调整日期', '创建时间'];
 const documentStatusOptions: DocumentStatus[] = ['草稿', '已提交', '已审核'];
 const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
-const warehouseTree: TreeNode[] = [
-  {
-    value: 'warehouse-root',
-    label: '仓库中心',
-    children: [
-      { value: '中央成品仓', label: '中央成品仓' },
-      { value: '北区原料仓', label: '北区原料仓' },
-      { value: '南区包材仓', label: '南区包材仓' },
-    ],
-  },
-];
+const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
+const sessionStore = useSessionStore();
 
 const query = reactive({
   dateType: '调整日期' as DateType,
@@ -160,6 +148,15 @@ const handlePageSizeChange = (size: number) => {
   pageSize.value = size;
   currentPage.value = 1;
 };
+
+onMounted(loadWarehouseTree);
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    loadWarehouseTree();
+  },
+);
 </script>
 
 <template>

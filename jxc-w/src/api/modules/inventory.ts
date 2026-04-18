@@ -35,7 +35,6 @@ export type PurchaseInboundListParams = {
   splitStatus?: string;
   upstreamCode?: string;
   invoiceStatus?: string;
-  adjustedPrice?: boolean;
   inspectionCount?: string;
   printStatus?: string;
   remark?: string;
@@ -60,9 +59,33 @@ export type CreatePurchaseInboundPayload = {
   inboundDate: string;
   warehouse: string;
   supplier: string;
+  salesmanUserId?: number;
+  salesmanName?: string;
   upstreamCode?: string;
   remark?: string;
   items: PurchaseInboundLinePayload[];
+};
+
+export type PurchaseInboundDetail = {
+  id: number;
+  documentCode: string;
+  status: string;
+  inboundDate: string;
+  warehouse: string;
+  supplier: string;
+  salesmanUserId: number | null;
+  salesmanName: string;
+  upstreamCode: string;
+  remark: string;
+  items: PurchaseInboundLinePayload[];
+};
+
+export type PurchaseInboundPermission = {
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  canApprove: boolean;
+  canUnapprove: boolean;
 };
 
 const withOrgParams = <T extends Record<string, unknown>>(params?: T, orgId?: string) => ({
@@ -79,6 +102,32 @@ export const createPurchaseInboundApi = (payload: CreatePurchaseInboundPayload, 
     payload,
     { params: withOrgParams(undefined, orgId) },
   );
+
+export const fetchPurchaseInboundDetailApi = (id: number, orgId?: string) =>
+  apiClient.get<PurchaseInboundDetail>(`/api/inventory/purchase-inbound/${id}`, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const fetchPurchaseInboundPermissionApi = (orgId?: string) =>
+  apiClient.get<PurchaseInboundPermission>('/api/inventory/purchase-inbound/permissions', {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const updatePurchaseInboundApi = (id: number, payload: CreatePurchaseInboundPayload, orgId?: string) =>
+  apiClient.put<void>(`/api/inventory/purchase-inbound/${id}`, payload, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const deletePurchaseInboundApi = (id: number, orgId?: string) =>
+  apiClient.delete<void>(`/api/inventory/purchase-inbound/${id}`, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const batchDeletePurchaseInboundApi = (ids: number[], orgId?: string) =>
+  apiClient.delete<void>('/api/inventory/purchase-inbound', {
+    params: withOrgParams(undefined, orgId),
+    data: { ids },
+  });
 
 export const batchApprovePurchaseInboundApi = (ids: number[], orgId?: string) =>
   apiClient.post<void>(

@@ -6,7 +6,9 @@ import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemStatistic
 import com.boboboom.jxc.item.infrastructure.persistence.mapper.ItemStatisticsTypeMapper;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public class ItemStatisticsTypeRepositoryImpl implements ItemStatisticsTypeRepository {
@@ -18,6 +20,31 @@ public class ItemStatisticsTypeRepositoryImpl implements ItemStatisticsTypeRepos
 
     public ItemStatisticsTypeRepositoryImpl(ItemStatisticsTypeMapper itemStatisticsTypeMapper) {
         this.itemStatisticsTypeMapper = itemStatisticsTypeMapper;
+    }
+
+    @Override
+    public List<ItemStatisticsTypeDO> findByScopeOrdered(String scopeType, Long scopeId) {
+        return itemStatisticsTypeMapper.selectList(new LambdaQueryWrapper<ItemStatisticsTypeDO>()
+                .eq(ItemStatisticsTypeDO::getScopeType, scopeType)
+                .eq(ItemStatisticsTypeDO::getScopeId, scopeId)
+                .orderByDesc(ItemStatisticsTypeDO::getCode)
+                .orderByDesc(ItemStatisticsTypeDO::getId));
+    }
+
+    @Override
+    public List<ItemStatisticsTypeDO> findByScopeAndIds(String scopeType, Long scopeId, List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return itemStatisticsTypeMapper.selectList(new LambdaQueryWrapper<ItemStatisticsTypeDO>()
+                .eq(ItemStatisticsTypeDO::getScopeType, scopeType)
+                .eq(ItemStatisticsTypeDO::getScopeId, scopeId)
+                .in(ItemStatisticsTypeDO::getId, ids));
+    }
+
+    @Override
+    public Optional<ItemStatisticsTypeDO> findById(Long id) {
+        return Optional.ofNullable(itemStatisticsTypeMapper.selectById(id));
     }
 
     @Override
@@ -40,5 +67,10 @@ public class ItemStatisticsTypeRepositoryImpl implements ItemStatisticsTypeRepos
     @Override
     public void save(ItemStatisticsTypeDO itemStatisticsType) {
         itemStatisticsTypeMapper.insert(itemStatisticsType);
+    }
+
+    @Override
+    public void update(ItemStatisticsTypeDO itemStatisticsType) {
+        itemStatisticsTypeMapper.updateById(itemStatisticsType);
     }
 }

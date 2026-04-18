@@ -15,6 +15,7 @@ export type OrgNode = {
 };
 
 const STORAGE_LOGIN_KEY = 'jxc-login';
+const STORAGE_LOGIN_ACCOUNT_KEY = 'jxc-login-account';
 const STORAGE_ORG_KEY = 'jxc-current-org';
 const STORAGE_PLATFORM_ADMIN_MODE_KEY = 'jxc-platform-admin-mode';
 
@@ -124,6 +125,7 @@ export const useSessionStore = defineStore('session', () => {
   const useRealAuthApi = import.meta.env.VITE_USE_REAL_AUTH_API === '1';
   const accessToken = ref(authStorage.getAccessToken());
   const refreshToken = ref(authStorage.getRefreshToken());
+  const loginAccount = ref((localStorage.getItem(STORAGE_LOGIN_ACCOUNT_KEY) ?? '').trim());
   const isLoggedIn = ref(
     useRealAuthApi ? Boolean(accessToken.value) : localStorage.getItem(STORAGE_LOGIN_KEY) === '1',
   );
@@ -161,6 +163,7 @@ export const useSessionStore = defineStore('session', () => {
   const login = (name = '李智杰', account = '', options: LoginOptions = {}) => {
     isLoggedIn.value = true;
     userName.value = name;
+    loginAccount.value = String(account ?? '').trim();
     platformAdminMode.value = Boolean(options.platformAdminMode);
     if (platformAdminMode.value) {
       currentOrgId.value = '';
@@ -168,6 +171,11 @@ export const useSessionStore = defineStore('session', () => {
     }
     persistPlatformAdminMode();
     persistLogin();
+    if (loginAccount.value) {
+      localStorage.setItem(STORAGE_LOGIN_ACCOUNT_KEY, loginAccount.value);
+    } else {
+      localStorage.removeItem(STORAGE_LOGIN_ACCOUNT_KEY);
+    }
   };
 
   const setAuth = (tokens: { accessToken: string; refreshToken?: string }) => {
@@ -185,6 +193,7 @@ export const useSessionStore = defineStore('session', () => {
     persistLogin();
     persistOrg();
     persistPlatformAdminMode();
+    localStorage.removeItem(STORAGE_LOGIN_ACCOUNT_KEY);
     authStorage.clearTokens();
   };
 
@@ -222,6 +231,7 @@ export const useSessionStore = defineStore('session', () => {
     platformAdminMode,
     accessToken,
     refreshToken,
+    loginAccount,
     login,
     setAuth,
     logout,

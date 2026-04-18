@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { Download, Lock, RefreshRight, Search, Unlock } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import { useSessionStore } from '@/stores/session';
+import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 
 type TreeNode = {
   value: string;
@@ -28,17 +30,8 @@ type StockLockRow = {
   remark: string;
 };
 
-const warehouseTree: TreeNode[] = [
-  {
-    value: 'warehouse-root',
-    label: '仓库中心',
-    children: [
-      { value: 'WH-001', label: '中央成品仓' },
-      { value: 'WH-002', label: '北区原料仓' },
-      { value: 'WH-003', label: '南区包材仓' },
-    ],
-  },
-];
+const sessionStore = useSessionStore();
+const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
 const reasonTree: TreeNode[] = [
   {
@@ -117,6 +110,17 @@ const tableData: StockLockRow[] = [
     remark: '稽核冻结',
   },
 ];
+
+onMounted(() => {
+  void loadWarehouseTree();
+});
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    void loadWarehouseTree();
+  },
+);
 
 const currentPage = ref(1);
 const pageSize = ref(10);

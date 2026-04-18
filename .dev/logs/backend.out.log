@@ -1,0 +1,295 @@
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------------< com.boboboom:jxc >--------------------------
+[INFO] Building jxc 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:4.0.5:run (default-cli) > test-compile @ jxc >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ jxc ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 18 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.14.1:compile (default-compile) @ jxc ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 241 source files with javac [debug parameters release 21] to target\classes
+[INFO] /C:/Users/Administrator/IdeaProjects/jxc-master/jxc/src/main/java/com/boboboom/jxc/identity/infrastructure/persistence/repository/MenuRepositoryImpl.java: C:\Users\Administrator\IdeaProjects\jxc-master\jxc\src\main\java\com\boboboom\jxc\identity\infrastructure\persistence\repository\MenuRepositoryImpl.java使用或覆盖了已过时的 API。
+[INFO] /C:/Users/Administrator/IdeaProjects/jxc-master/jxc/src/main/java/com/boboboom/jxc/identity/infrastructure/persistence/repository/MenuRepositoryImpl.java: 有关详细信息, 请使用 -Xlint:deprecation 重新编译。
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ jxc ---
+[INFO] skip non existing resourceDirectory C:\Users\Administrator\IdeaProjects\jxc-master\jxc\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.14.1:testCompile (default-testCompile) @ jxc ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] 
+[INFO] <<< spring-boot:4.0.5:run (default-cli) < test-compile @ jxc <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:4.0.5:run (default-cli) @ jxc ---
+[INFO] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.0.5)
+
+2026-04-17T17:56:30.809+08:00  INFO 28324 --- [jxc] [           main] com.boboboom.jxc.JxcApplication          : Starting JxcApplication using Java 21.0.9 with PID 28324 (C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes started by Administrator in C:\Users\Administrator\IdeaProjects\jxc-master\jxc)
+2026-04-17T17:56:30.811+08:00  INFO 28324 --- [jxc] [           main] com.boboboom.jxc.JxcApplication          : No active profile set, falling back to 1 default profile: "default"
+2026-04-17T17:56:31.901+08:00  INFO 28324 --- [jxc] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2026-04-17T17:56:31.910+08:00  INFO 28324 --- [jxc] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2026-04-17T17:56:31.974+08:00  INFO 28324 --- [jxc] [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 45 ms. Found 0 Redis repository interfaces.
+2026-04-17T17:56:32.092+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\infrastructure\persistence\mapper\PostgresMetadataMapper.class]
+2026-04-17T17:56:32.093+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\AccountImportBatchMapper.class]
+2026-04-17T17:56:32.093+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\AccountImportRecordMapper.class]
+2026-04-17T17:56:32.093+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\AuditLogMapper.class]
+2026-04-17T17:56:32.093+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\GroupMapper.class]
+2026-04-17T17:56:32.094+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\LoginLogMapper.class]
+2026-04-17T17:56:32.095+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\MenuMapper.class]
+2026-04-17T17:56:32.095+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\RoleMapper.class]
+2026-04-17T17:56:32.095+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\RoleMenuRelMapper.class]
+2026-04-17T17:56:32.095+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\StoreAdminRelMapper.class]
+2026-04-17T17:56:32.096+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\StoreMapper.class]
+2026-04-17T17:56:32.096+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\UnitMapper.class]
+2026-04-17T17:56:32.096+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\UserAccountMapper.class]
+2026-04-17T17:56:32.097+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\UserPasswordLogMapper.class]
+2026-04-17T17:56:32.097+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\UserRoleRelMapper.class]
+2026-04-17T17:56:32.097+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\WarehouseItemRuleCategoryMapper.class]
+2026-04-17T17:56:32.098+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\WarehouseItemRuleItemMapper.class]
+2026-04-17T17:56:32.098+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\WarehouseItemRuleMapper.class]
+2026-04-17T17:56:32.098+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\WarehouseItemRuleWarehouseMapper.class]
+2026-04-17T17:56:32.098+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\WarehouseMapper.class]
+2026-04-17T17:56:32.100+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\DishCategoryMapper.class]
+2026-04-17T17:56:32.100+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\DishProfileMapper.class]
+2026-04-17T17:56:32.100+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\ItemCategoryMapper.class]
+2026-04-17T17:56:32.101+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\ItemProfileMapper.class]
+2026-04-17T17:56:32.101+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\ItemStatisticsTypeMapper.class]
+2026-04-17T17:56:32.101+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\ItemTagMapper.class]
+2026-04-17T17:56:32.101+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\SupplierCategoryMapper.class]
+2026-04-17T17:56:32.102+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\SupplierContractMapper.class]
+2026-04-17T17:56:32.102+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\SupplierFinanceAccountMapper.class]
+2026-04-17T17:56:32.102+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\SupplierProfileMapper.class]
+2026-04-17T17:56:32.102+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\item\infrastructure\persistence\mapper\SupplierQualificationMapper.class]
+2026-04-17T17:56:32.103+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\inventory\infrastructure\persistence\mapper\InventoryBalanceMapper.class]
+2026-04-17T17:56:32.103+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\inventory\infrastructure\persistence\mapper\InventoryTransactionMapper.class]
+2026-04-17T17:56:32.104+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\inventory\infrastructure\persistence\mapper\PurchaseInboundLineMapper.class]
+2026-04-17T17:56:32.104+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\inventory\infrastructure\persistence\mapper\PurchaseInboundMapper.class]
+2026-04-17T17:56:32.106+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\workflow\infrastructure\persistence\mapper\WorkflowDefinitionConfigMapper.class]
+2026-04-17T17:56:32.106+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\workflow\infrastructure\persistence\mapper\WorkflowProcessRegistryMapper.class]
+2026-04-17T17:56:32.106+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\workflow\infrastructure\persistence\mapper\WorkflowProcessStoreBindingMapper.class]
+2026-04-17T17:56:32.107+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Identified candidate component class: file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\system\infrastructure\persistence\mapper\UserMapper.class]
+2026-04-17T17:56:32.108+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'postgresMetadataMapper' and 'com.boboboom.jxc.infrastructure.persistence.mapper.PostgresMetadataMapper' mapperInterface
+2026-04-17T17:56:32.111+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'postgresMetadataMapper'.
+2026-04-17T17:56:32.112+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'accountImportBatchMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.AccountImportBatchMapper' mapperInterface
+2026-04-17T17:56:32.114+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'accountImportBatchMapper'.
+2026-04-17T17:56:32.114+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'accountImportRecordMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.AccountImportRecordMapper' mapperInterface
+2026-04-17T17:56:32.115+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'accountImportRecordMapper'.
+2026-04-17T17:56:32.116+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'auditLogMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.AuditLogMapper' mapperInterface
+2026-04-17T17:56:32.116+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'auditLogMapper'.
+2026-04-17T17:56:32.116+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'groupMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.GroupMapper' mapperInterface
+2026-04-17T17:56:32.117+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'groupMapper'.
+2026-04-17T17:56:32.118+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'loginLogMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.LoginLogMapper' mapperInterface
+2026-04-17T17:56:32.118+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'loginLogMapper'.
+2026-04-17T17:56:32.118+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'menuMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.MenuMapper' mapperInterface
+2026-04-17T17:56:32.119+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'menuMapper'.
+2026-04-17T17:56:32.119+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'roleMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper' mapperInterface
+2026-04-17T17:56:32.120+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'roleMapper'.
+2026-04-17T17:56:32.120+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'roleMenuRelMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMenuRelMapper' mapperInterface
+2026-04-17T17:56:32.120+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'roleMenuRelMapper'.
+2026-04-17T17:56:32.120+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'storeAdminRelMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreAdminRelMapper' mapperInterface
+2026-04-17T17:56:32.121+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'storeAdminRelMapper'.
+2026-04-17T17:56:32.121+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'storeMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper' mapperInterface
+2026-04-17T17:56:32.122+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'storeMapper'.
+2026-04-17T17:56:32.122+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'unitMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.UnitMapper' mapperInterface
+2026-04-17T17:56:32.123+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'unitMapper'.
+2026-04-17T17:56:32.123+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'userAccountMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserAccountMapper' mapperInterface
+2026-04-17T17:56:32.123+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'userAccountMapper'.
+2026-04-17T17:56:32.124+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'userPasswordLogMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserPasswordLogMapper' mapperInterface
+2026-04-17T17:56:32.125+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'userPasswordLogMapper'.
+2026-04-17T17:56:32.125+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'userRoleRelMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserRoleRelMapper' mapperInterface
+2026-04-17T17:56:32.126+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'userRoleRelMapper'.
+2026-04-17T17:56:32.126+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'warehouseItemRuleCategoryMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleCategoryMapper' mapperInterface
+2026-04-17T17:56:32.127+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'warehouseItemRuleCategoryMapper'.
+2026-04-17T17:56:32.127+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'warehouseItemRuleItemMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleItemMapper' mapperInterface
+2026-04-17T17:56:32.128+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'warehouseItemRuleItemMapper'.
+2026-04-17T17:56:32.128+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'warehouseItemRuleMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleMapper' mapperInterface
+2026-04-17T17:56:32.129+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'warehouseItemRuleMapper'.
+2026-04-17T17:56:32.129+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'warehouseItemRuleWarehouseMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleWarehouseMapper' mapperInterface
+2026-04-17T17:56:32.130+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'warehouseItemRuleWarehouseMapper'.
+2026-04-17T17:56:32.130+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'warehouseMapper' and 'com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseMapper' mapperInterface
+2026-04-17T17:56:32.131+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'warehouseMapper'.
+2026-04-17T17:56:32.131+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'dishCategoryMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.DishCategoryMapper' mapperInterface
+2026-04-17T17:56:32.132+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'dishCategoryMapper'.
+2026-04-17T17:56:32.132+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'dishProfileMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.DishProfileMapper' mapperInterface
+2026-04-17T17:56:32.133+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'dishProfileMapper'.
+2026-04-17T17:56:32.134+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'itemCategoryMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.ItemCategoryMapper' mapperInterface
+2026-04-17T17:56:32.135+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'itemCategoryMapper'.
+2026-04-17T17:56:32.136+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'itemProfileMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.ItemProfileMapper' mapperInterface
+2026-04-17T17:56:32.136+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'itemProfileMapper'.
+2026-04-17T17:56:32.137+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'itemStatisticsTypeMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.ItemStatisticsTypeMapper' mapperInterface
+2026-04-17T17:56:32.137+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'itemStatisticsTypeMapper'.
+2026-04-17T17:56:32.137+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'itemTagMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.ItemTagMapper' mapperInterface
+2026-04-17T17:56:32.138+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'itemTagMapper'.
+2026-04-17T17:56:32.138+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'supplierCategoryMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.SupplierCategoryMapper' mapperInterface
+2026-04-17T17:56:32.139+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'supplierCategoryMapper'.
+2026-04-17T17:56:32.139+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'supplierContractMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.SupplierContractMapper' mapperInterface
+2026-04-17T17:56:32.140+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'supplierContractMapper'.
+2026-04-17T17:56:32.140+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'supplierFinanceAccountMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.SupplierFinanceAccountMapper' mapperInterface
+2026-04-17T17:56:32.141+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'supplierFinanceAccountMapper'.
+2026-04-17T17:56:32.141+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'supplierProfileMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.SupplierProfileMapper' mapperInterface
+2026-04-17T17:56:32.142+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'supplierProfileMapper'.
+2026-04-17T17:56:32.142+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'supplierQualificationMapper' and 'com.boboboom.jxc.item.infrastructure.persistence.mapper.SupplierQualificationMapper' mapperInterface
+2026-04-17T17:56:32.143+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'supplierQualificationMapper'.
+2026-04-17T17:56:32.143+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'inventoryBalanceMapper' and 'com.boboboom.jxc.inventory.infrastructure.persistence.mapper.InventoryBalanceMapper' mapperInterface
+2026-04-17T17:56:32.144+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'inventoryBalanceMapper'.
+2026-04-17T17:56:32.144+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'inventoryTransactionMapper' and 'com.boboboom.jxc.inventory.infrastructure.persistence.mapper.InventoryTransactionMapper' mapperInterface
+2026-04-17T17:56:32.144+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'inventoryTransactionMapper'.
+2026-04-17T17:56:32.146+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'purchaseInboundLineMapper' and 'com.boboboom.jxc.inventory.infrastructure.persistence.mapper.PurchaseInboundLineMapper' mapperInterface
+2026-04-17T17:56:32.147+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'purchaseInboundLineMapper'.
+2026-04-17T17:56:32.147+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'purchaseInboundMapper' and 'com.boboboom.jxc.inventory.infrastructure.persistence.mapper.PurchaseInboundMapper' mapperInterface
+2026-04-17T17:56:32.147+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'purchaseInboundMapper'.
+2026-04-17T17:56:32.148+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'workflowDefinitionConfigMapper' and 'com.boboboom.jxc.workflow.infrastructure.persistence.mapper.WorkflowDefinitionConfigMapper' mapperInterface
+2026-04-17T17:56:32.148+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'workflowDefinitionConfigMapper'.
+2026-04-17T17:56:32.149+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'workflowProcessRegistryMapper' and 'com.boboboom.jxc.workflow.infrastructure.persistence.mapper.WorkflowProcessRegistryMapper' mapperInterface
+2026-04-17T17:56:32.149+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'workflowProcessRegistryMapper'.
+2026-04-17T17:56:32.150+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'workflowProcessStoreBindingMapper' and 'com.boboboom.jxc.workflow.infrastructure.persistence.mapper.WorkflowProcessStoreBindingMapper' mapperInterface
+2026-04-17T17:56:32.151+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'workflowProcessStoreBindingMapper'.
+2026-04-17T17:56:32.151+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Creating MapperFactoryBean with name 'userMapper' and 'com.boboboom.jxc.system.infrastructure.persistence.mapper.UserMapper' mapperInterface
+2026-04-17T17:56:32.152+08:00 DEBUG 28324 --- [jxc] [           main] o.m.s.mapper.ClassPathMapperScanner      : Enabling autowire by type for MapperFactoryBean with name 'userMapper'.
+2026-04-17T17:56:32.845+08:00  INFO 28324 --- [jxc] [           main] o.s.boot.tomcat.TomcatWebServer          : Tomcat initialized with port 8080 (http)
+2026-04-17T17:56:32.868+08:00  INFO 28324 --- [jxc] [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-04-17T17:56:32.869+08:00  INFO 28324 --- [jxc] [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/11.0.20]
+2026-04-17T17:56:33.010+08:00  INFO 28324 --- [jxc] [           main] b.w.c.s.WebApplicationContextInitializer : Root WebApplicationContext: initialization completed in 2144 ms
+2026-04-17T17:56:33.590+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.core.spi.CompatibleHelper          : Load compatibleSet: com.baomidou.mybatisplus.extension.spi.SpringCompatibleSet@51af8049
+Logging initialized using 'class org.apache.ibatis.logging.stdout.StdOutImpl' adapter.
+2026-04-17T17:56:33.966+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\AccountImportBatchMapper.xml]'
+2026-04-17T17:56:34.057+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\AccountImportRecordMapper.xml]'
+2026-04-17T17:56:34.091+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\AuditLogMapper.xml]'
+2026-04-17T17:56:34.139+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\GroupMapper.xml]'
+2026-04-17T17:56:34.187+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\LoginLogMapper.xml]'
+2026-04-17T17:56:34.223+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\MenuMapper.xml]'
+2026-04-17T17:56:34.265+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\RoleMapper.xml]'
+2026-04-17T17:56:34.302+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\RoleMenuRelMapper.xml]'
+2026-04-17T17:56:34.337+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\StoreAdminRelMapper.xml]'
+2026-04-17T17:56:34.361+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\StoreMapper.xml]'
+2026-04-17T17:56:34.399+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\UserAccountMapper.xml]'
+2026-04-17T17:56:34.433+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\UserPasswordLogMapper.xml]'
+2026-04-17T17:56:34.454+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\UserRoleRelMapper.xml]'
+2026-04-17T17:56:34.476+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\identity\WarehouseMapper.xml]'
+2026-04-17T17:56:34.483+08:00 DEBUG 28324 --- [jxc] [           main] c.b.m.e.s.MybatisSqlSessionFactoryBean   : Parsed mapper file: 'file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\mapper\infrastructure\PostgresMetadataMapper.xml]'
+Get /192.168.88.105 network interface 
+Get network interface info: name:wireless_32768 (Intel(R) Wi-Fi 6 AX201 160MHz)
+Initialization Sequence datacenterId:16 workerId:10
+2026-04-17T17:56:34.516+08:00  INFO 28324 --- [jxc] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2026-04-17T17:56:34.877+08:00  INFO 28324 --- [jxc] [           main] com.zaxxer.hikari.pool.HikariPool        : HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@738a39cc
+2026-04-17T17:56:34.882+08:00  INFO 28324 --- [jxc] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2026-04-17T17:56:35.676+08:00  WARN 28324 --- [jxc] [           main] ConfigServletWebServerApplicationContext : Exception encountered during context initialization - cancelling refresh attempt: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'orgScopeService' defined in file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\application\auth\OrgScopeService.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'roleMapper' defined in file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\RoleMapper.class]: Unsatisfied dependency expressed through bean property 'sqlSessionTemplate': Error creating bean with name 'sqlSessionTemplate' defined in class path resource [com/baomidou/mybatisplus/autoconfigure/MybatisPlusAutoConfiguration.class]: Failed to initialize dependency 'dataSourceScriptDatabaseInitializer' of SqlSessionTemplate bean 'sqlSessionTemplate': Error creating bean with name 'dataSourceScriptDatabaseInitializer' defined in class path resource [org/springframework/boot/jdbc/autoconfigure/DataSourceInitializationAutoConfiguration.class]: Failed to execute SQL script statement #349 of class path resource [schema.sql]: COMMENT ON COLUMN inventory_purchase_inbound.salesman_user_id IS '业务员用户ID'
+2026-04-17T17:56:35.677+08:00  INFO 28324 --- [jxc] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-04-17T17:56:35.768+08:00  INFO 28324 --- [jxc] [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+2026-04-17T17:56:35.797+08:00  INFO 28324 --- [jxc] [           main] o.apache.catalina.core.StandardService   : Stopping service [Tomcat]
+2026-04-17T17:56:35.806+08:00  INFO 28324 --- [jxc] [           main] .s.b.a.l.ConditionEvaluationReportLogger : 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-04-17T17:56:35.820+08:00 ERROR 28324 --- [jxc] [           main] o.s.boot.SpringApplication               : Application run failed
+
+org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'orgScopeService' defined in file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\application\auth\OrgScopeService.class]: Unsatisfied dependency expressed through constructor parameter 0: Error creating bean with name 'roleMapper' defined in file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\RoleMapper.class]: Unsatisfied dependency expressed through bean property 'sqlSessionTemplate': Error creating bean with name 'sqlSessionTemplate' defined in class path resource [com/baomidou/mybatisplus/autoconfigure/MybatisPlusAutoConfiguration.class]: Failed to initialize dependency 'dataSourceScriptDatabaseInitializer' of SqlSessionTemplate bean 'sqlSessionTemplate': Error creating bean with name 'dataSourceScriptDatabaseInitializer' defined in class path resource [org/springframework/boot/jdbc/autoconfigure/DataSourceInitializationAutoConfiguration.class]: Failed to execute SQL script statement #349 of class path resource [schema.sql]: COMMENT ON COLUMN inventory_purchase_inbound.salesman_user_id IS '业务员用户ID'
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:804) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.ConstructorResolver.autowireConstructor(ConstructorResolver.java:240) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireConstructor(AbstractAutowireCapableBeanFactory.java:1382) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1221) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:565) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:196) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1218) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1184) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1121) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:994) ~[spring-context-7.0.6.jar:7.0.6]
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:621) ~[spring-context-7.0.6.jar:7.0.6]
+	at org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:143) ~[spring-boot-web-server-4.0.5.jar:4.0.5]
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:756) ~[spring-boot-4.0.5.jar:4.0.5]
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:445) ~[spring-boot-4.0.5.jar:4.0.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:321) ~[spring-boot-4.0.5.jar:4.0.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1365) ~[spring-boot-4.0.5.jar:4.0.5]
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:1354) ~[spring-boot-4.0.5.jar:4.0.5]
+	at com.boboboom.jxc.JxcApplication.main(JxcApplication.java:19) ~[classes/:na]
+Caused by: org.springframework.beans.factory.UnsatisfiedDependencyException: Error creating bean with name 'roleMapper' defined in file [C:\Users\Administrator\IdeaProjects\jxc-master\jxc\target\classes\com\boboboom\jxc\identity\infrastructure\persistence\mapper\RoleMapper.class]: Unsatisfied dependency expressed through bean property 'sqlSessionTemplate': Error creating bean with name 'sqlSessionTemplate' defined in class path resource [com/baomidou/mybatisplus/autoconfigure/MybatisPlusAutoConfiguration.class]: Failed to initialize dependency 'dataSourceScriptDatabaseInitializer' of SqlSessionTemplate bean 'sqlSessionTemplate': Error creating bean with name 'dataSourceScriptDatabaseInitializer' defined in class path resource [org/springframework/boot/jdbc/autoconfigure/DataSourceInitializationAutoConfiguration.class]: Failed to execute SQL script statement #349 of class path resource [schema.sql]: COMMENT ON COLUMN inventory_purchase_inbound.salesman_user_id IS '业务员用户ID'
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireByType(AbstractAutowireCapableBeanFactory.java:1543) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1437) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:602) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveBean(DefaultListableBeanFactory.java:1225) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1704) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1651) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.ConstructorResolver.resolveAutowiredArgument(ConstructorResolver.java:912) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.ConstructorResolver.createArgumentArray(ConstructorResolver.java:791) ~[spring-beans-7.0.6.jar:7.0.6]
+	... 21 common frames omitted
+Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'sqlSessionTemplate' defined in class path resource [com/baomidou/mybatisplus/autoconfigure/MybatisPlusAutoConfiguration.class]: Failed to initialize dependency 'dataSourceScriptDatabaseInitializer' of SqlSessionTemplate bean 'sqlSessionTemplate': Error creating bean with name 'dataSourceScriptDatabaseInitializer' defined in class path resource [org/springframework/boot/jdbc/autoconfigure/DataSourceInitializationAutoConfiguration.class]: Failed to execute SQL script statement #349 of class path resource [schema.sql]: COMMENT ON COLUMN inventory_purchase_inbound.salesman_user_id IS '业务员用户ID'
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:322) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:201) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:229) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1762) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1651) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.autowireByType(AbstractAutowireCapableBeanFactory.java:1528) ~[spring-beans-7.0.6.jar:7.0.6]
+	... 33 common frames omitted
+Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'dataSourceScriptDatabaseInitializer' defined in class path resource [org/springframework/boot/jdbc/autoconfigure/DataSourceInitializationAutoConfiguration.class]: Failed to execute SQL script statement #349 of class path resource [schema.sql]: COMMENT ON COLUMN inventory_purchase_inbound.salesman_user_id IS '业务员用户ID'
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1817) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:603) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:525) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:333) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:371) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:331) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:196) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:309) ~[spring-beans-7.0.6.jar:7.0.6]
+	... 38 common frames omitted
+Caused by: org.springframework.jdbc.datasource.init.ScriptStatementFailedException: Failed to execute SQL script statement #349 of class path resource [schema.sql]: COMMENT ON COLUMN inventory_purchase_inbound.salesman_user_id IS '业务员用户ID'
+	at org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(ScriptUtils.java:293) ~[spring-jdbc-7.0.6.jar:7.0.6]
+	at org.springframework.jdbc.datasource.init.ResourceDatabasePopulator.populate(ResourceDatabasePopulator.java:254) ~[spring-jdbc-7.0.6.jar:7.0.6]
+	at org.springframework.jdbc.datasource.init.DatabasePopulatorUtils.execute(DatabasePopulatorUtils.java:54) ~[spring-jdbc-7.0.6.jar:7.0.6]
+	at org.springframework.boot.jdbc.init.DataSourceScriptDatabaseInitializer.runScripts(DataSourceScriptDatabaseInitializer.java:87) ~[spring-boot-jdbc-4.0.5.jar:4.0.5]
+	at org.springframework.boot.sql.init.AbstractScriptDatabaseInitializer.runScripts(AbstractScriptDatabaseInitializer.java:159) ~[spring-boot-sql-4.0.5.jar:4.0.5]
+	at org.springframework.boot.sql.init.AbstractScriptDatabaseInitializer.applyScripts(AbstractScriptDatabaseInitializer.java:120) ~[spring-boot-sql-4.0.5.jar:4.0.5]
+	at org.springframework.boot.sql.init.AbstractScriptDatabaseInitializer.applySchemaScripts(AbstractScriptDatabaseInitializer.java:109) ~[spring-boot-sql-4.0.5.jar:4.0.5]
+	at org.springframework.boot.sql.init.AbstractScriptDatabaseInitializer.initializeDatabase(AbstractScriptDatabaseInitializer.java:87) ~[spring-boot-sql-4.0.5.jar:4.0.5]
+	at org.springframework.boot.sql.init.AbstractScriptDatabaseInitializer.afterPropertiesSet(AbstractScriptDatabaseInitializer.java:77) ~[spring-boot-sql-4.0.5.jar:4.0.5]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.invokeInitMethods(AbstractAutowireCapableBeanFactory.java:1864) ~[spring-beans-7.0.6.jar:7.0.6]
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1813) ~[spring-beans-7.0.6.jar:7.0.6]
+	... 45 common frames omitted
+Caused by: org.postgresql.util.PSQLException: 错误: 关系 "inventory_purchase_inbound" 的 "salesman_user_id" 字段不存在
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2875) ~[postgresql-42.7.10.jar:42.7.10]
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2560) ~[postgresql-42.7.10.jar:42.7.10]
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:429) ~[postgresql-42.7.10.jar:42.7.10]
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:526) ~[postgresql-42.7.10.jar:42.7.10]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:436) ~[postgresql-42.7.10.jar:42.7.10]
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:358) ~[postgresql-42.7.10.jar:42.7.10]
+	at org.postgresql.jdbc.PgStatement.executeCachedSql(PgStatement.java:343) ~[postgresql-42.7.10.jar:42.7.10]
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:319) ~[postgresql-42.7.10.jar:42.7.10]
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:314) ~[postgresql-42.7.10.jar:42.7.10]
+	at com.zaxxer.hikari.pool.ProxyStatement.execute(ProxyStatement.java:95) ~[HikariCP-7.0.2.jar:na]
+	at com.zaxxer.hikari.pool.HikariProxyStatement.execute(HikariProxyStatement.java) ~[HikariCP-7.0.2.jar:na]
+	at org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(ScriptUtils.java:261) ~[spring-jdbc-7.0.6.jar:7.0.6]
+	... 55 common frames omitted
+
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  38.410 s
+[INFO] Finished at: 2026-04-17T17:56:37+08:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.springframework.boot:spring-boot-maven-plugin:4.0.5:run (default-cli) on project jxc: Process terminated with exit code: 1 -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoExecutionException

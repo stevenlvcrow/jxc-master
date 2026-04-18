@@ -22,11 +22,15 @@ public interface UserRoleRelRepository {
 
     Long countByUserAndScopedRoles(Long userId, String status, Set<Long> groupIds, Set<Long> storeIds);
 
+    Long countByScopeTypeAndScopeId(String scopeType, Long scopeId);
+
     void save(UserRoleRelDO rel);
 
     void update(UserRoleRelDO rel);
 
     void deleteByUserId(Long userId);
+
+    void deleteByScopeTypeAndScopeId(String scopeType, Long scopeId);
 
     void deleteByUserIdAndGroupScopes(Long userId, Set<Long> groupIds);
 

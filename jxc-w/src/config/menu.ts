@@ -54,6 +54,14 @@ const buildKey = (indexes: number[]) => indexes.map((index) => `m${index}`).join
 
 const buildPath = (segment: string, indexes: number[]) => `/${segment}/${indexes.slice(1).join('/')}`;
 
+const normalizeRoutePath = (value?: string | null) => {
+  const raw = String(value ?? '').trim().replace(/\/+$/, '');
+  if (!raw) {
+    return '';
+  }
+  return raw.startsWith('/') ? raw : `/${raw}`;
+};
+
 const buildMenuItems = (
   nodes: RawMenuNode[],
   indexes: number[] = [],
@@ -71,7 +79,7 @@ const buildMenuItems = (
     key,
     title: node.text,
     icon: isTopLevel ? (iconMap[node.text] ?? 'Document') : undefined,
-    path: children ? undefined : buildPath(currentSegment, currentIndexes),
+    path: children ? undefined : normalizeRoutePath(buildPath(currentSegment, currentIndexes)),
     children,
   };
 });
