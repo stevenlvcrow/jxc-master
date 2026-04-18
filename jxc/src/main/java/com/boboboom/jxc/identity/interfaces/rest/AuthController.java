@@ -32,26 +32,27 @@ public class AuthController {
 
     @PostMapping("/login")
     public CodeDataResponse<AuthLoginResult> login(@Valid @RequestBody AuthLoginRequest request) {
-        return authApplicationService.login(request);
+        return CodeDataResponse.ok(authApplicationService.login(request));
     }
 
     @PostMapping("/refresh")
     public CodeDataResponse<AuthRefreshResult> refresh(@Valid @RequestBody RefreshTokenRequest request) {
-        return authApplicationService.refresh(request);
+        return CodeDataResponse.ok(authApplicationService.refresh(request));
     }
 
     @GetMapping("/me")
     public CodeDataResponse<CurrentUserResult> me() {
-        return authApplicationService.me();
+        return CodeDataResponse.ok(authApplicationService.me());
     }
 
     @GetMapping("/me/roles")
     public CodeDataResponse<List<CurrentUserRoleResult>> meRoles(@RequestParam(required = false) String orgId) {
-        return authApplicationService.meRoles(orgId);
+        return CodeDataResponse.ok(authApplicationService.meRoles(orgId));
     }
 
     @PostMapping("/logout")
     public CodeDataResponse<Void> logout() {
-        return authApplicationService.logout();
+        authApplicationService.logout();
+        return CodeDataResponse.ok();
     }
 }

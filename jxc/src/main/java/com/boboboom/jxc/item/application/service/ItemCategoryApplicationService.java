@@ -11,20 +11,9 @@ import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryBatchDeleteRequ
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryCreateRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryStatusUpdateRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryUpdateRequest;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import jakarta.validation.Valid;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -59,16 +48,13 @@ public class ItemCategoryApplicationService {
         this.orgScopeService = orgScopeService;
     }
 
-    @GetMapping
-    public CodeDataResponse<PageData<ItemCategoryRow>> list(
-            @RequestParam(defaultValue = "1") Integer pageNo,
-            @RequestParam(defaultValue = "10") Integer pageSize,
-            @RequestParam(required = false) String categoryInfo,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String treeNode,
-            @RequestParam(required = false) String sortBy,
-            @RequestParam(required = false) String orgId
-    ) {
+    public PageData<ItemCategoryRow> list(Integer pageNo,
+                                          Integer pageSize,
+                                          String categoryInfo,
+                                          String status,
+                                          String treeNode,
+                                          String sortBy,
+                                          String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
         int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
@@ -97,11 +83,10 @@ public class ItemCategoryApplicationService {
             ));
         }
 
-        return CodeDataResponse.ok(new PageData<>(list, total == null ? 0 : total, safePageNo, safePageSize));
+        return new PageData<>(list, total == null ? 0 : total, safePageNo, safePageSize);
     }
 
-    @GetMapping("/tree")
-    public CodeDataResponse<List<TreeNode>> tree(@RequestParam(required = false) String orgId) {
+    public List<TreeNode> tree(String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         List<ItemCategoryDO> categories = itemCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
 
@@ -121,13 +106,11 @@ public class ItemCategoryApplicationService {
             }
         }
 
-        return CodeDataResponse.ok(List.of(nodeMap.get(ROOT_CATEGORY)));
+        return List.of(nodeMap.get(ROOT_CATEGORY));
     }
 
-    @PostMapping
     @Transactional
-    public CodeDataResponse<IdPayload> create(@RequestParam(required = false) String orgId,
-                                              @Valid @RequestBody ItemCategoryCreateRequest request) {
+    public IdPayload create(String orgId, ItemCategoryCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         String categoryCode = generateCategoryCode(scope);
         String categoryName = trim(request.categoryName());
@@ -148,13 +131,11 @@ public class ItemCategoryApplicationService {
         toInsert.setRemark(remark);
         itemCategoryRepository.save(toInsert);
 
-        return CodeDataResponse.ok(new IdPayload(toInsert.getId()));
+        return new IdPayload(toInsert.getId());
     }
 
-    @PostMapping("/batch")
     @Transactional
-    public CodeDataResponse<BatchCreateResult> batchCreate(@RequestParam(required = false) String orgId,
-                                                           @Valid @RequestBody ItemCategoryBatchCreateRequest request) {
+    public BatchCreateResult batchCreate(String orgId, ItemCategoryBatchCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         String parentCategory = normalizeParentCategory(trim(request.parentCategory()));
         String normalizedStatus = normalizeStatus(request.status());
@@ -194,14 +175,11 @@ public class ItemCategoryApplicationService {
             createdCount++;
         }
 
-        return CodeDataResponse.ok(new BatchCreateResult(createdCount));
+        return new BatchCreateResult(createdCount);
     }
 
-    @PutMapping("/{id}")
     @Transactional
-    public CodeDataResponse<Void> update(@PathVariable Long id,
-                                         @RequestParam(required = false) String orgId,
-                                         @Valid @RequestBody ItemCategoryUpdateRequest request) {
+    public void update(Long id, String orgId, ItemCategoryUpdateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         ItemCategoryDO existing = requireCategory(id, scope);
 
@@ -225,25 +203,18 @@ public class ItemCategoryApplicationService {
         existing.setStatus(normalizedStatus);
         existing.setRemark(remark);
         itemCategoryRepository.update(existing);
-        return CodeDataResponse.ok();
     }
 
-    @PutMapping("/{id}/status")
     @Transactional
-    public CodeDataResponse<Void> updateStatus(@PathVariable Long id,
-                                               @RequestParam(required = false) String orgId,
-                                               @Valid @RequestBody ItemCategoryStatusUpdateRequest request) {
+    public void updateStatus(Long id, String orgId, ItemCategoryStatusUpdateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         ItemCategoryDO existing = requireCategory(id, scope);
         existing.setStatus(normalizeStatus(request.status()));
         itemCategoryRepository.update(existing);
-        return CodeDataResponse.ok();
     }
 
-    @DeleteMapping("/{id}")
     @Transactional
-    public CodeDataResponse<Void> delete(@PathVariable Long id,
-                                         @RequestParam(required = false) String orgId) {
+    public void delete(Long id, String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         ItemCategoryDO existing = requireCategory(id, scope);
         Long childCount = itemCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
@@ -253,13 +224,10 @@ public class ItemCategoryApplicationService {
             throw new BusinessException("当前类别存在下级类别，无法删除");
         }
         itemCategoryRepository.deleteById(id);
-        return CodeDataResponse.ok();
     }
 
-    @PostMapping("/batch-delete")
     @Transactional
-    public CodeDataResponse<Void> batchDelete(@RequestParam(required = false) String orgId,
-                                              @Valid @RequestBody ItemCategoryBatchDeleteRequest request) {
+    public void batchDelete(String orgId, ItemCategoryBatchDeleteRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         Set<Long> deleteIdSet = new HashSet<>(request.ids());
         if (deleteIdSet.isEmpty()) {
@@ -292,7 +260,6 @@ public class ItemCategoryApplicationService {
         for (Long deleteId : deleteIdSet) {
             itemCategoryRepository.deleteById(deleteId);
         }
-        return CodeDataResponse.ok();
     }
 
     private Set<String> collectTreeScope(ItemScope scope, String treeNodeName) {
@@ -481,9 +448,13 @@ public class ItemCategoryApplicationService {
             return filtered.stream()
                     .sorted((a, b) -> {
                         int c1 = compareNullable(a.getParentCategory(), b.getParentCategory());
-                        if (c1 != 0) return c1;
+                        if (c1 != 0) {
+                            return c1;
+                        }
                         int c2 = compareNullable(a.getCategoryName(), b.getCategoryName());
-                        if (c2 != 0) return c2;
+                        if (c2 != 0) {
+                            return c2;
+                        }
                         return compareNullableDesc(a.getId(), b.getId());
                     })
                     .toList();
@@ -491,7 +462,9 @@ public class ItemCategoryApplicationService {
         return filtered.stream()
                 .sorted((a, b) -> {
                     int c1 = compareNullableDesc(a.getCreatedAt(), b.getCreatedAt());
-                    if (c1 != 0) return c1;
+                    if (c1 != 0) {
+                        return c1;
+                    }
                     return compareNullableDesc(a.getId(), b.getId());
                 })
                 .toList();

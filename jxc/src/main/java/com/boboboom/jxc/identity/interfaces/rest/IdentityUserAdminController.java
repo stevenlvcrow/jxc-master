@@ -13,6 +13,7 @@ import com.boboboom.jxc.identity.interfaces.rest.request.UserRoleAssignRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +33,9 @@ import java.util.Set;
 @Validated
 @RestController
 @RequestMapping("/api/identity/admin/users")
+/**
+ * 用户管理接口，负责用户查询、创建、编辑、状态控制以及角色分配。
+ */
 public class IdentityUserAdminController {
 
     private final IdentityAccessControlService identityAccessControlService;
@@ -41,6 +45,16 @@ public class IdentityUserAdminController {
     private final IdentityAdminSupport identityAdminSupport;
     private final OrgScopeService orgScopeService;
 
+    /**
+     * 构造用户管理接口。
+     *
+     * @param identityAccessControlService 组织权限控制服务
+     * @param userAdministrationService 用户管理服务
+     * @param userRoleAssignmentService 用户角色分配服务
+     * @param identityAdminLookupService 用户查询辅助服务
+     * @param identityAdminSupport 当前登录管理员辅助服务
+     * @param orgScopeService 组织范围解析服务
+     */
     public IdentityUserAdminController(IdentityAccessControlService identityAccessControlService,
                                        UserAdministrationService userAdministrationService,
                                        UserRoleAssignmentService userRoleAssignmentService,
@@ -56,6 +70,11 @@ public class IdentityUserAdminController {
     }
 
     @GetMapping
+    /**
+     * 查询用户列表。
+     *
+     * @return 用户列表响应
+     */
     public CodeDataResponse<List<UserAdminView>> listUsers() {
         Long operatorId = identityAdminSupport.currentOperatorId();
         List<UserAdminView> result = userAdministrationService
@@ -86,6 +105,12 @@ public class IdentityUserAdminController {
     }
 
     @GetMapping("/salesmen")
+    /**
+     * 查询可选销售员候选人。
+     *
+     * @param orgId 机构标识
+     * @return 销售员候选人列表响应
+     */
     public CodeDataResponse<List<SalesmanCandidateView>> listSalesmen(@org.springframework.web.bind.annotation.RequestParam String orgId) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, orgId);
@@ -103,6 +128,13 @@ public class IdentityUserAdminController {
     }
 
     @PostMapping
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 新建用户。
+     *
+     * @param request 用户新增请求
+     * @return 新建结果
+     */
     public CodeDataResponse<IdPayload> createUser(@Valid @RequestBody UserUpsertRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
@@ -115,6 +147,14 @@ public class IdentityUserAdminController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 更新用户信息。
+     *
+     * @param id 用户主键
+     * @param request 用户更新请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> updateUser(@PathVariable Long id,
                                              @Valid @RequestBody UserUpsertRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
@@ -127,6 +167,14 @@ public class IdentityUserAdminController {
     }
 
     @PutMapping("/{id}/status")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 更新用户状态。
+     *
+     * @param id 用户主键
+     * @param request 状态更新请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> updateUserStatus(@PathVariable Long id,
                                                    @Valid @RequestBody StatusUpdateRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
@@ -139,6 +187,13 @@ public class IdentityUserAdminController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 删除单个用户。
+     *
+     * @param id 用户主键
+     * @return 空响应
+     */
     public CodeDataResponse<Void> deleteUser(@PathVariable Long id) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
@@ -147,6 +202,13 @@ public class IdentityUserAdminController {
     }
 
     @DeleteMapping
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 批量删除用户。
+     *
+     * @param request 批量删除请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> batchDeleteUsers(@Valid @RequestBody UserBatchDeleteRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
@@ -155,6 +217,14 @@ public class IdentityUserAdminController {
     }
 
     @PutMapping("/{id}/roles")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 为用户分配角色。
+     *
+     * @param id 用户主键
+     * @param request 角色分配请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> assignUserRoles(@PathVariable Long id,
                                                   @Valid @RequestBody UserRoleAssignRequest request) {
         identityAdminLookupService.requireUser(id);

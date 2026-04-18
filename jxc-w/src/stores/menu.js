@@ -109,10 +109,10 @@ export const useMenuStore = defineStore('menu', () => {
     const rawMenus = ref([]);
     const menuItems = computed(() => buildMenuTree(rawMenus.value));
     const loadMenus = async (orgId) => {
-        const currentOrgId = orgId ?? '';
+        const currentOrgId = (orgId?.trim().toLowerCase() || 'platform');
         loading.value = true;
         try {
-            rawMenus.value = await fetchCurrentMenusApi(currentOrgId || undefined);
+            rawMenus.value = await fetchCurrentMenusApi(currentOrgId);
             loadedOrgId.value = currentOrgId;
         }
         finally {

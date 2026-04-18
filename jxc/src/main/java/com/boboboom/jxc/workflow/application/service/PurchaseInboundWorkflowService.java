@@ -1,13 +1,12 @@
 package com.boboboom.jxc.workflow.application.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
-import com.boboboom.jxc.inventory.infrastructure.persistence.mapper.PurchaseInboundMapper;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
-import com.boboboom.jxc.workflow.infrastructure.persistence.mapper.WorkflowDefinitionConfigMapper;
-import com.boboboom.jxc.workflow.infrastructure.persistence.mapper.WorkflowProcessRegistryMapper;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.TaskService;
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -38,28 +36,28 @@ public class PurchaseInboundWorkflowService {
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
 
-    private final WorkflowProcessRegistryMapper processRegistryMapper;
-    private final WorkflowDefinitionConfigMapper definitionConfigMapper;
+    private final WorkflowProcessRegistryRepository processRegistryRepository;
+    private final WorkflowDefinitionConfigRepository definitionConfigRepository;
     private final WorkflowActionService workflowActionService;
     private final RepositoryService repositoryService;
     private final RuntimeService runtimeService;
     private final TaskService taskService;
-    private final PurchaseInboundMapper purchaseInboundMapper;
+    private final PurchaseInboundRepository purchaseInboundRepository;
 
-    public PurchaseInboundWorkflowService(WorkflowProcessRegistryMapper processRegistryMapper,
-                                          WorkflowDefinitionConfigMapper definitionConfigMapper,
+    public PurchaseInboundWorkflowService(WorkflowProcessRegistryRepository processRegistryRepository,
+                                          WorkflowDefinitionConfigRepository definitionConfigRepository,
                                           WorkflowActionService workflowActionService,
                                           RepositoryService repositoryService,
                                           RuntimeService runtimeService,
                                           TaskService taskService,
-                                          PurchaseInboundMapper purchaseInboundMapper) {
-        this.processRegistryMapper = processRegistryMapper;
-        this.definitionConfigMapper = definitionConfigMapper;
+                                          PurchaseInboundRepository purchaseInboundRepository) {
+        this.processRegistryRepository = processRegistryRepository;
+        this.definitionConfigRepository = definitionConfigRepository;
         this.workflowActionService = workflowActionService;
         this.repositoryService = repositoryService;
         this.runtimeService = runtimeService;
         this.taskService = taskService;
-        this.purchaseInboundMapper = purchaseInboundMapper;
+        this.purchaseInboundRepository = purchaseInboundRepository;
     }
 
     public boolean hasBusinessOperationPermission(String scopeType, Long scopeId, Long groupId, Long operatorId, String action) {
@@ -85,7 +83,7 @@ public class PurchaseInboundWorkflowService {
             header.setWorkflowTaskName(null);
             header.setWorkflowStatus(WORKFLOW_STATUS_NONE);
             header.setPendingOperation(PENDING_OPERATION_NONE);
-            purchaseInboundMapper.updateById(header);
+            purchaseInboundRepository.update(header);
             return false;
         }
         WorkflowBinding binding = resolveBinding(scopeType, scopeId, groupId).orElse(null);
@@ -107,7 +105,7 @@ public class PurchaseInboundWorkflowService {
         header.setWorkflowStatus(WORKFLOW_STATUS_RUNNING);
         header.setPendingOperation(action);
         refreshCurrentTask(header, activeInstance.getId());
-        purchaseInboundMapper.updateById(header);
+        purchaseInboundRepository.update(header);
         return true;
     }
 
@@ -147,7 +145,7 @@ public class PurchaseInboundWorkflowService {
             header.setWorkflowInstanceId(activeInstance.getId());
             header.setWorkflowTaskId(null);
             header.setWorkflowTaskName(null);
-            purchaseInboundMapper.updateById(header);
+            purchaseInboundRepository.update(header);
             return ApprovalResult.workflowCompleted();
         }
 
@@ -155,7 +153,7 @@ public class PurchaseInboundWorkflowService {
         header.setWorkflowStatus(WORKFLOW_STATUS_RUNNING);
         header.setWorkflowInstanceId(nextInstance.getId());
         refreshCurrentTask(header, nextInstance.getId());
-        purchaseInboundMapper.updateById(header);
+        purchaseInboundRepository.update(header);
         return ApprovalResult.workflowPending();
     }
 
@@ -168,7 +166,7 @@ public class PurchaseInboundWorkflowService {
         header.setWorkflowTaskName(null);
         header.setWorkflowStatus(WORKFLOW_STATUS_REVOKED);
         header.setPendingOperation(PENDING_OPERATION_NONE);
-        purchaseInboundMapper.updateById(header);
+        purchaseInboundRepository.update(header);
     }
 
     public void cancelWorkflowInstanceIfRunning(PurchaseInboundDO header) {
@@ -213,7 +211,7 @@ public class PurchaseInboundWorkflowService {
             runtimeService.deleteProcessInstance(instance.getId(), "采购入库流程未配置审批节点");
             throw new BusinessException("采购入库流程未配置审批节点");
         }
-        purchaseInboundMapper.updateById(header);
+        purchaseInboundRepository.update(header);
     }
 
     private void refreshCurrentTask(PurchaseInboundDO header, String processInstanceId) {
@@ -249,11 +247,9 @@ public class PurchaseInboundWorkflowService {
             return Optional.empty();
         }
 
-        WorkflowProcessRegistryDO registry = processRegistryMapper.selectOne(new LambdaQueryWrapper<WorkflowProcessRegistryDO>()
-                .eq(WorkflowProcessRegistryDO::getScopeType, SCOPE_GROUP)
-                .eq(WorkflowProcessRegistryDO::getScopeId, groupId)
-                .eq(WorkflowProcessRegistryDO::getProcessCode, WORKFLOW_PROCESS_CODE)
-                .last("limit 1"));
+        WorkflowProcessRegistryDO registry = processRegistryRepository
+                .findByScopeAndProcessCode(SCOPE_GROUP, groupId, WORKFLOW_PROCESS_CODE)
+                .orElse(null);
         if (registry == null) {
             return Optional.empty();
         }
@@ -297,12 +293,12 @@ public class PurchaseInboundWorkflowService {
         if (!StringUtils.hasText(scopeType) || scopeId == null || !StringUtils.hasText(workflowCode)) {
             return null;
         }
-        return definitionConfigMapper.selectOne(new LambdaQueryWrapper<WorkflowDefinitionConfigDO>()
-                .eq(WorkflowDefinitionConfigDO::getScopeType, scopeType.toUpperCase(Locale.ROOT))
-                .eq(WorkflowDefinitionConfigDO::getScopeId, scopeId)
-                .eq(WorkflowDefinitionConfigDO::getBusinessCode, BUSINESS_CODE)
-                .eq(WorkflowDefinitionConfigDO::getWorkflowCode, workflowCode)
-                .last("limit 1"));
+        return definitionConfigRepository.findByScopeBusinessAndWorkflow(
+                scopeType.toUpperCase(),
+                scopeId,
+                BUSINESS_CODE,
+                workflowCode
+        ).orElse(null);
     }
 
     private String businessKey(Long purchaseInboundId) {

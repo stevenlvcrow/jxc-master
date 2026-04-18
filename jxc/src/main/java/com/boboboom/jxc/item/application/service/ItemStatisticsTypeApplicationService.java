@@ -4,7 +4,6 @@ import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.item.domain.repository.ItemStatisticsTypeRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemStatisticsTypeDO;
 import com.boboboom.jxc.item.interfaces.rest.request.StatisticsTypeBatchExportRequest;
@@ -39,7 +38,7 @@ public class ItemStatisticsTypeApplicationService {
         this.businessCodeGenerator = businessCodeGenerator;
     }
 
-    public CodeDataResponse<PageResult<StatisticsTypeListItem>> list(
+    public PageResult<StatisticsTypeListItem> list(
             long pageNo,
             long pageSize,
             String keyword,
@@ -65,19 +64,19 @@ public class ItemStatisticsTypeApplicationService {
         for (int i = 0; i < records.size(); i++) {
             list.add(toListItem(records.get(i), baseIndex + i + 1));
         }
-        return CodeDataResponse.ok(new PageResult<>(
+        return new PageResult<>(
                 list,
                 total,
                 normalizedPageNo,
                 normalizedPageSize
-        ));
+        );
     }
 
-    public CodeDataResponse<StatisticsTypeDetailItem> detail(Long id,
-                                                             String orgId) {
+    public StatisticsTypeDetailItem detail(Long id,
+                                           String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         ItemStatisticsTypeDO row = requireById(id, scope);
-        return CodeDataResponse.ok(new StatisticsTypeDetailItem(
+        return new StatisticsTypeDetailItem(
                 row.getId(),
                 row.getCode(),
                 row.getName(),
@@ -86,12 +85,12 @@ public class ItemStatisticsTypeApplicationService {
                 toModifiedTimeLabel(row),
                 row.getCreatedAt(),
                 row.getUpdatedAt()
-        ));
+        );
     }
 
     @Transactional
-    public CodeDataResponse<CreateResult> create(String orgId,
-                                                 StatisticsTypeCreateRequest request) {
+    public CreateResult create(String orgId,
+                               StatisticsTypeCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         String name = trim(request.getName());
         String statisticsCategory = trim(request.getStatisticsCategory());
@@ -112,11 +111,11 @@ public class ItemStatisticsTypeApplicationService {
         row.setCreateType(CREATE_TYPE_CUSTOM);
         itemStatisticsTypeRepository.save(row);
 
-        return CodeDataResponse.ok(new CreateResult(row.getId(), row.getCode()));
+        return new CreateResult(row.getId(), row.getCode());
     }
 
-    public CodeDataResponse<BatchExportResult> batchExport(String orgId,
-                                                           StatisticsTypeBatchExportRequest request) {
+    public BatchExportResult batchExport(String orgId,
+                                         StatisticsTypeBatchExportRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         List<Long> ids = request == null ? List.of() : request.getIds();
         List<ItemStatisticsTypeDO> rows;
@@ -146,7 +145,7 @@ public class ItemStatisticsTypeApplicationService {
                 .toList();
 
         String fileName = "statistics-types-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")) + ".csv";
-        return CodeDataResponse.ok(new BatchExportResult(fileName, exportedRows));
+        return new BatchExportResult(fileName, exportedRows);
     }
 
     private ItemStatisticsTypeDO requireById(Long id, ItemScope scope) {

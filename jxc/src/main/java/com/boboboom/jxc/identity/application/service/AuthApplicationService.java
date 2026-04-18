@@ -10,7 +10,6 @@ import com.boboboom.jxc.identity.application.auth.UnauthorizedException;
 import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.identity.interfaces.rest.response.AuthLoginResult;
 import com.boboboom.jxc.identity.interfaces.rest.response.AuthRefreshResult;
 import com.boboboom.jxc.identity.interfaces.rest.response.CurrentUserResult;
@@ -35,7 +34,7 @@ public class AuthApplicationService {
         this.orgScopeService = orgScopeService;
     }
 
-    public CodeDataResponse<AuthLoginResult> login(AuthLoginRequest request) {
+    public AuthLoginResult login(AuthLoginRequest request) {
         String account = normalizeAccount(request.getAccount());
         UserAccountDO user = userAccountRepository.findLoginUserByAccount(account).orElse(null);
         if (user == null || !PasswordCodec.matches(request.getPassword(), user.getPasswordHash())) {
@@ -51,10 +50,10 @@ public class AuthApplicationService {
         result.setRefreshToken(session.getRefreshToken());
         result.setUserName(user.getRealName());
         result.setPlatformAdmin(orgScopeService.isPlatformAdmin(user.getId()));
-        return CodeDataResponse.ok(result);
+        return result;
     }
 
-    public CodeDataResponse<AuthRefreshResult> refresh(RefreshTokenRequest request) {
+    public AuthRefreshResult refresh(RefreshTokenRequest request) {
         LoginSession oldSession = tokenService.getSessionByRefreshToken(request.getRefreshToken());
         if (oldSession == null) {
             throw new UnauthorizedException("登录已过期，请重新登录");
@@ -69,35 +68,34 @@ public class AuthApplicationService {
         AuthRefreshResult result = new AuthRefreshResult();
         result.setAccessToken(newSession.getToken());
         result.setRefreshToken(newSession.getRefreshToken());
-        return CodeDataResponse.ok(result);
+        return result;
     }
 
-    public CodeDataResponse<CurrentUserResult> me() {
+    public CurrentUserResult me() {
         LoginSession session = AuthContextHolder.require();
         CurrentUserResult result = new CurrentUserResult();
         result.setUserId(session.getUserId());
         result.setUserName(session.getRealName());
         result.setPhone(session.getPhone());
-        return CodeDataResponse.ok(result);
+        return result;
     }
 
-    public CodeDataResponse<List<CurrentUserRoleResult>> meRoles(String orgId) {
+    public List<CurrentUserRoleResult> meRoles(String orgId) {
         LoginSession session = AuthContextHolder.require();
         List<UserRoleView> allRoles = userAccountRepository.findUserRoles(session.getUserId());
         if (orgId == null || orgId.trim().isEmpty()) {
-            return CodeDataResponse.ok(mapRoles(allRoles));
+            return mapRoles(allRoles);
         }
         OrgScopeService.MenuScope scope = orgScopeService.resolveMenuScope(orgId);
         List<CurrentUserRoleResult> roles = mapRoles(allRoles.stream()
                 .filter(role -> matchesSelectedScope(role, scope))
                 .toList());
-        return CodeDataResponse.ok(roles);
+        return roles;
     }
 
-    public CodeDataResponse<Void> logout() {
+    public void logout() {
         LoginSession session = AuthContextHolder.require();
         tokenService.removeSession(session.getToken());
-        return CodeDataResponse.ok();
     }
 
     private String normalizeAccount(String account) {

@@ -419,7 +419,7 @@ watch(
     if (!isLoggedIn) {
       return;
     }
-    const targetOrgId = isPlatformAdminMode ? '' : orgId;
+    const targetOrgId = isPlatformAdminMode ? 'platform' : orgId;
     if (!targetOrgId && sessionStore.requiresOrgSelection) {
       return;
     }

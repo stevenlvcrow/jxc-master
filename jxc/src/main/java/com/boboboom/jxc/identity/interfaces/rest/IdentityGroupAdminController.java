@@ -12,6 +12,7 @@ import com.boboboom.jxc.identity.interfaces.rest.request.GroupUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,9 @@ import java.util.List;
 @Validated
 @RestController
 @RequestMapping("/api/identity/admin/groups")
+/**
+ * 组织分组管理接口，负责分组、门店以及分组管理员的维护。
+ */
 public class IdentityGroupAdminController {
 
     private final IdentityAccessControlService identityAccessControlService;
@@ -35,6 +39,15 @@ public class IdentityGroupAdminController {
     private final IdentityAdminLookupService identityAdminLookupService;
     private final IdentityAdminSupport identityAdminSupport;
 
+    /**
+     * 构造组织分组管理接口。
+     *
+     * @param identityAccessControlService 组织权限控制服务
+     * @param groupAdministrationService 分组管理服务
+     * @param storeSampleDataInitializationService 门店初始化服务
+     * @param identityAdminLookupService 组织管理查询服务
+     * @param identityAdminSupport 当前登录管理员辅助服务
+     */
     public IdentityGroupAdminController(IdentityAccessControlService identityAccessControlService,
                                         GroupAdministrationService groupAdministrationService,
                                         StoreSampleDataInitializationService storeSampleDataInitializationService,
@@ -48,6 +61,11 @@ public class IdentityGroupAdminController {
     }
 
     @GetMapping
+    /**
+     * 查询当前管理员可见的组织分组列表。
+     *
+     * @return 分组列表响应
+     */
     public CodeDataResponse<List<GroupAdminView>> listGroups() {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
@@ -65,6 +83,13 @@ public class IdentityGroupAdminController {
     }
 
     @PostMapping
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 新建组织分组。
+     *
+     * @param request 分组新增请求
+     * @return 新建结果
+     */
     public CodeDataResponse<IdPayload> createGroup(@Valid @RequestBody GroupUpsertRequest request) {
         identityAdminSupport.requirePlatformAdmin();
         GroupDO group = groupAdministrationService.createGroup(request, identityAdminSupport.currentOperatorId());
@@ -72,6 +97,14 @@ public class IdentityGroupAdminController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 修改组织分组信息。
+     *
+     * @param id 分组主键
+     * @param request 分组更新请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> updateGroup(@PathVariable Long id,
                                               @Valid @RequestBody GroupUpsertRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
@@ -83,6 +116,13 @@ public class IdentityGroupAdminController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 删除组织分组。
+     *
+     * @param id 分组主键
+     * @return 空响应
+     */
     public CodeDataResponse<Void> deleteGroup(@PathVariable Long id) {
         identityAdminSupport.requirePlatformAdmin();
         groupAdministrationService.deleteGroup(id);
@@ -90,6 +130,14 @@ public class IdentityGroupAdminController {
     }
 
     @PutMapping("/{id}/status")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 更新组织分组状态。
+     *
+     * @param id 分组主键
+     * @param request 状态更新请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> updateGroupStatus(@PathVariable Long id,
                                                     @Valid @RequestBody StatusUpdateRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
@@ -101,6 +149,14 @@ public class IdentityGroupAdminController {
     }
 
     @PostMapping("/{groupId}/bind-admin")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 为分组绑定管理员。
+     *
+     * @param groupId 分组主键
+     * @param request 绑定管理员请求
+     * @return 绑定结果
+     */
     public CodeDataResponse<BindGroupAdminResult> bindGroupAdmin(@PathVariable Long groupId,
                                                                  @Valid @RequestBody GroupAdminBindRequest request) {
         identityAdminSupport.requirePlatformAdmin();
@@ -125,6 +181,12 @@ public class IdentityGroupAdminController {
     }
 
     @GetMapping("/{groupId}/stores")
+    /**
+     * 查询分组下的门店列表。
+     *
+     * @param groupId 分组主键
+     * @return 门店列表响应
+     */
     public CodeDataResponse<List<StoreAdminView>> listGroupStores(@PathVariable Long groupId) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
         List<StoreAdminView> result = groupAdministrationService.listGroupStores(groupId).stream()
@@ -145,6 +207,12 @@ public class IdentityGroupAdminController {
     }
 
     @GetMapping("/{groupId}/admin-candidates")
+    /**
+     * 查询可绑定为分组管理员的候选人列表。
+     *
+     * @param groupId 分组主键
+     * @return 候选人列表响应
+     */
     public CodeDataResponse<List<GroupAdminCandidateView>> listGroupAdminCandidates(@PathVariable Long groupId) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
         List<GroupAdminCandidateView> result = groupAdministrationService.listGroupAdminCandidates(groupId).stream()
@@ -161,6 +229,14 @@ public class IdentityGroupAdminController {
     }
 
     @PostMapping("/{groupId}/stores")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 新增分组下的门店。
+     *
+     * @param groupId 分组主键
+     * @param request 门店新增请求
+     * @return 新建结果
+     */
     public CodeDataResponse<IdPayload> createGroupStore(@PathVariable Long groupId,
                                                         @Valid @RequestBody GroupStoreCreateRequest request) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
@@ -170,6 +246,15 @@ public class IdentityGroupAdminController {
     }
 
     @PutMapping("/{groupId}/stores/{storeId}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 更新分组下的门店。
+     *
+     * @param groupId 分组主键
+     * @param storeId 门店主键
+     * @param request 门店更新请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> updateGroupStore(@PathVariable Long groupId,
                                                    @PathVariable Long storeId,
                                                    @Valid @RequestBody GroupStoreCreateRequest request) {
@@ -179,6 +264,14 @@ public class IdentityGroupAdminController {
     }
 
     @DeleteMapping("/{groupId}/stores/{storeId}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 删除分组下的门店。
+     *
+     * @param groupId 分组主键
+     * @param storeId 门店主键
+     * @return 空响应
+     */
     public CodeDataResponse<Void> deleteGroupStore(@PathVariable Long groupId,
                                                    @PathVariable Long storeId) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);

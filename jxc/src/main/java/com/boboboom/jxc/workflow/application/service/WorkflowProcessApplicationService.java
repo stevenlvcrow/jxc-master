@@ -1,17 +1,16 @@
 package com.boboboom.jxc.workflow.application.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreMapper;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRepository;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessStoreBindingDO;
-import com.boboboom.jxc.workflow.infrastructure.persistence.mapper.WorkflowDefinitionConfigMapper;
-import com.boboboom.jxc.workflow.infrastructure.persistence.mapper.WorkflowProcessRegistryMapper;
-import com.boboboom.jxc.workflow.infrastructure.persistence.mapper.WorkflowProcessStoreBindingMapper;
 import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowProcessStoreBindRequest;
 import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowProcessUpsertRequest;
 import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowTemplateBindRequest;
@@ -22,11 +21,13 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -34,49 +35,44 @@ import java.util.stream.Collectors;
 public class WorkflowProcessApplicationService {
 
     private static final String SCOPE_GROUP = "GROUP";
+    private static final String SCOPE_STORE = "STORE";
+    private static final String ENABLED_STATUS = "ENABLED";
+    private static final String PUBLISHED_STATUS = "PUBLISHED";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
-    private final WorkflowProcessRegistryMapper processRegistryMapper;
-    private final WorkflowProcessStoreBindingMapper processStoreBindingMapper;
-    private final WorkflowDefinitionConfigMapper configMapper;
-    private final StoreMapper storeMapper;
+    private final WorkflowProcessRegistryRepository processRegistryRepository;
+    private final WorkflowProcessStoreBindingRepository processStoreBindingRepository;
+    private final WorkflowDefinitionConfigRepository configRepository;
+    private final StoreRepository storeRepository;
     private final OrgScopeService orgScopeService;
 
-    public WorkflowProcessApplicationService(WorkflowProcessRegistryMapper processRegistryMapper,
-                                             WorkflowProcessStoreBindingMapper processStoreBindingMapper,
-                                             WorkflowDefinitionConfigMapper configMapper,
-                                             StoreMapper storeMapper,
+    public WorkflowProcessApplicationService(WorkflowProcessRegistryRepository processRegistryRepository,
+                                             WorkflowProcessStoreBindingRepository processStoreBindingRepository,
+                                             WorkflowDefinitionConfigRepository configRepository,
+                                             StoreRepository storeRepository,
                                              OrgScopeService orgScopeService) {
-        this.processRegistryMapper = processRegistryMapper;
-        this.processStoreBindingMapper = processStoreBindingMapper;
-        this.configMapper = configMapper;
-        this.storeMapper = storeMapper;
+        this.processRegistryRepository = processRegistryRepository;
+        this.processStoreBindingRepository = processStoreBindingRepository;
+        this.configRepository = configRepository;
+        this.storeRepository = storeRepository;
         this.orgScopeService = orgScopeService;
     }
 
     public List<WorkflowProcessView> list(String orgId) {
         Long groupId = resolveGroupScope(orgId);
-        List<WorkflowProcessRegistryDO> processes = processRegistryMapper.selectList(new LambdaQueryWrapper<WorkflowProcessRegistryDO>()
-                .eq(WorkflowProcessRegistryDO::getScopeType, SCOPE_GROUP)
-                .eq(WorkflowProcessRegistryDO::getScopeId, groupId)
-                .orderByDesc(WorkflowProcessRegistryDO::getCreatedAt)
-                .orderByDesc(WorkflowProcessRegistryDO::getId));
+        List<WorkflowProcessRegistryDO> processes = processRegistryRepository.findByScopeOrdered(SCOPE_GROUP, groupId);
         if (processes.isEmpty()) {
             return List.of();
         }
 
         List<Long> processIds = processes.stream().map(WorkflowProcessRegistryDO::getId).toList();
-        List<WorkflowProcessStoreBindingDO> bindings = processStoreBindingMapper.selectList(new LambdaQueryWrapper<WorkflowProcessStoreBindingDO>()
-                .eq(WorkflowProcessStoreBindingDO::getGroupId, groupId)
-                .in(WorkflowProcessStoreBindingDO::getProcessRegistryId, processIds)
-                .orderByAsc(WorkflowProcessStoreBindingDO::getStoreId));
+        List<WorkflowProcessStoreBindingDO> bindings = processStoreBindingRepository.findByGroupAndProcessRegistryIds(groupId, processIds);
 
         Set<Long> storeIds = bindings.stream().map(WorkflowProcessStoreBindingDO::getStoreId).collect(Collectors.toCollection(LinkedHashSet::new));
         Map<Long, StoreDO> storeMap = storeIds.isEmpty()
                 ? Map.of()
-                : storeMapper.selectList(new LambdaQueryWrapper<StoreDO>()
-                .in(StoreDO::getId, storeIds))
-                .stream()
+                : storeRepository.findByGroupId(groupId).stream()
+                .filter(store -> storeIds.contains(store.getId()))
                 .collect(Collectors.toMap(StoreDO::getId, item -> item));
 
         Map<Long, List<Long>> processStoreIdsMap = new HashMap<>();
@@ -101,11 +97,9 @@ public class WorkflowProcessApplicationService {
 
     public List<StoreOptionView> listStores(String orgId) {
         Long groupId = resolveGroupScope(orgId);
-        return storeMapper.selectList(new LambdaQueryWrapper<StoreDO>()
-                        .eq(StoreDO::getGroupId, groupId)
-                        .eq(StoreDO::getStatus, "ENABLED")
-                        .orderByAsc(StoreDO::getId))
-                .stream()
+        return storeRepository.findByGroupId(groupId).stream()
+                .filter(item -> ENABLED_STATUS.equals(item.getStatus()))
+                .sorted(Comparator.comparing(StoreDO::getId))
                 .map(item -> new StoreOptionView(item.getId(), item.getStoreCode(), item.getStoreName()))
                 .toList();
     }
@@ -128,7 +122,7 @@ public class WorkflowProcessApplicationService {
         row.setTemplateId(templateId);
         row.setCreatedBy(operatorId);
         row.setUpdatedBy(operatorId);
-        processRegistryMapper.insert(row);
+        processRegistryRepository.save(row);
         return new IdPayload(row.getId());
     }
 
@@ -147,7 +141,7 @@ public class WorkflowProcessApplicationService {
         row.setBusinessName(businessName);
         row.setTemplateId(templateId);
         row.setUpdatedBy(operatorId);
-        processRegistryMapper.updateById(row);
+        processRegistryRepository.update(row);
     }
 
     @Transactional
@@ -159,7 +153,7 @@ public class WorkflowProcessApplicationService {
         ensureTemplatePublished(groupId, row.getProcessCode(), templateId);
         row.setTemplateId(templateId);
         row.setUpdatedBy(operatorId);
-        processRegistryMapper.updateById(row);
+        processRegistryRepository.update(row);
     }
 
     @Transactional
@@ -173,19 +167,15 @@ public class WorkflowProcessApplicationService {
                 .toList();
         validateStoreIds(groupId, storeIds);
 
-        processStoreBindingMapper.delete(new LambdaQueryWrapper<WorkflowProcessStoreBindingDO>()
-                .eq(WorkflowProcessStoreBindingDO::getGroupId, groupId)
-                .eq(WorkflowProcessStoreBindingDO::getProcessRegistryId, row.getId()));
-        if (!storeIds.isEmpty()) {
-            for (Long storeId : storeIds) {
-                WorkflowProcessStoreBindingDO binding = new WorkflowProcessStoreBindingDO();
-                binding.setGroupId(groupId);
-                binding.setProcessRegistryId(row.getId());
-                binding.setStoreId(storeId);
-                binding.setCreatedBy(operatorId);
-                binding.setUpdatedBy(operatorId);
-                processStoreBindingMapper.insert(binding);
-            }
+        processStoreBindingRepository.deleteByGroupAndProcessRegistryId(groupId, row.getId());
+        for (Long storeId : storeIds) {
+            WorkflowProcessStoreBindingDO binding = new WorkflowProcessStoreBindingDO();
+            binding.setGroupId(groupId);
+            binding.setProcessRegistryId(row.getId());
+            binding.setStoreId(storeId);
+            binding.setCreatedBy(operatorId);
+            binding.setUpdatedBy(operatorId);
+            processStoreBindingRepository.save(binding);
         }
     }
 
@@ -193,51 +183,35 @@ public class WorkflowProcessApplicationService {
     public void delete(Long id, String orgId) {
         Long groupId = resolveGroupScope(orgId);
         WorkflowProcessRegistryDO row = requireProcess(id, groupId);
-        processStoreBindingMapper.delete(new LambdaQueryWrapper<WorkflowProcessStoreBindingDO>()
-                .eq(WorkflowProcessStoreBindingDO::getGroupId, groupId)
-                .eq(WorkflowProcessStoreBindingDO::getProcessRegistryId, row.getId()));
-        processRegistryMapper.deleteById(row.getId());
+        processStoreBindingRepository.deleteByGroupAndProcessRegistryId(groupId, row.getId());
+        processRegistryRepository.deleteById(row.getId());
     }
 
     private void validateStoreIds(Long groupId, List<Long> storeIds) {
         if (storeIds == null || storeIds.isEmpty()) {
             return;
         }
-        List<Long> existingStoreIds = storeMapper.selectList(new LambdaQueryWrapper<StoreDO>()
-                        .select(StoreDO::getId)
-                        .eq(StoreDO::getGroupId, groupId)
-                        .eq(StoreDO::getStatus, "ENABLED")
-                        .in(StoreDO::getId, storeIds))
-                .stream()
+        Set<Long> existingStoreIds = storeRepository.findByGroupId(groupId).stream()
+                .filter(store -> ENABLED_STATUS.equals(store.getStatus()))
                 .map(StoreDO::getId)
-                .toList();
+                .filter(storeIds::contains)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         if (existingStoreIds.size() != storeIds.size()) {
             throw new BusinessException("门店选择无效，请刷新后重试");
         }
     }
 
     private WorkflowProcessRegistryDO requireProcess(Long id, Long groupId) {
-        WorkflowProcessRegistryDO row = processRegistryMapper.selectOne(new LambdaQueryWrapper<WorkflowProcessRegistryDO>()
-                .eq(WorkflowProcessRegistryDO::getId, id)
-                .eq(WorkflowProcessRegistryDO::getScopeType, SCOPE_GROUP)
-                .eq(WorkflowProcessRegistryDO::getScopeId, groupId)
-                .last("limit 1"));
-        if (row == null) {
+        WorkflowProcessRegistryDO row = processRegistryRepository.findById(id).orElse(null);
+        if (row == null || !SCOPE_GROUP.equals(row.getScopeType()) || !groupId.equals(row.getScopeId())) {
             throw new BusinessException("流程不存在");
         }
         return row;
     }
 
     private void ensureProcessCodeUnique(Long groupId, String processCode, Long currentId) {
-        LambdaQueryWrapper<WorkflowProcessRegistryDO> query = new LambdaQueryWrapper<WorkflowProcessRegistryDO>()
-                .eq(WorkflowProcessRegistryDO::getScopeType, SCOPE_GROUP)
-                .eq(WorkflowProcessRegistryDO::getScopeId, groupId)
-                .eq(WorkflowProcessRegistryDO::getProcessCode, processCode);
-        if (currentId != null) {
-            query.ne(WorkflowProcessRegistryDO::getId, currentId);
-        }
-        WorkflowProcessRegistryDO exists = processRegistryMapper.selectOne(query.last("limit 1"));
-        if (exists != null) {
+        Optional<WorkflowProcessRegistryDO> exists = processRegistryRepository.findByScopeAndProcessCode(SCOPE_GROUP, groupId, processCode);
+        if (exists.isPresent() && (currentId == null || !currentId.equals(exists.get().getId()))) {
             throw new BusinessException("流程ID已存在");
         }
     }
@@ -246,16 +220,11 @@ public class WorkflowProcessApplicationService {
         if (!StringUtils.hasText(templateId)) {
             return;
         }
-        WorkflowDefinitionConfigDO config = configMapper.selectOne(new LambdaQueryWrapper<WorkflowDefinitionConfigDO>()
-                .eq(WorkflowDefinitionConfigDO::getScopeType, SCOPE_GROUP)
-                .eq(WorkflowDefinitionConfigDO::getScopeId, groupId)
-                .eq(WorkflowDefinitionConfigDO::getBusinessCode, processCode)
-                .eq(WorkflowDefinitionConfigDO::getWorkflowCode, templateId)
-                .last("limit 1"));
+        WorkflowDefinitionConfigDO config = configRepository.findByScopeBusinessAndWorkflow(SCOPE_GROUP, groupId, processCode, templateId).orElse(null);
         if (config == null) {
             throw new BusinessException("流程版本不存在");
         }
-        if (!"PUBLISHED".equals(config.getStatus())) {
+        if (!PUBLISHED_STATUS.equals(config.getStatus())) {
             throw new BusinessException("未发布的流程版本不能使用，请先发布流程");
         }
     }
@@ -326,8 +295,8 @@ public class WorkflowProcessApplicationService {
     }
 
     public record StoreOptionView(Long storeId,
-                                 String storeCode,
-                                 String storeName) {
+                                  String storeCode,
+                                  String storeName) {
     }
 
     public record IdPayload(Long id) {

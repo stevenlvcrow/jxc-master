@@ -119,11 +119,7 @@ public class OrgScopeService {
     }
 
     public MenuScope resolveMenuScope(String orgId) {
-        String normalizedOrgId = trimToNull(orgId);
-        if (normalizedOrgId == null) {
-            return new MenuScope(SCOPE_PLATFORM, null);
-        }
-        ScopeRequest requested = parseRequiredGroupOrStoreScope(normalizedOrgId);
+        ScopeRequest requested = parseAccessibleScope(orgId);
         return new MenuScope(requested.scopeType(), requested.scopeId());
     }
 
@@ -159,6 +155,9 @@ public class OrgScopeService {
     private ScopeRequest parseAccessibleScope(String orgId) {
         String normalizedOrgId = trimToNull(orgId);
         if (normalizedOrgId == null) {
+            throw new BusinessException("请先选择机构");
+        }
+        if ("platform".equalsIgnoreCase(normalizedOrgId)) {
             return new ScopeRequest(SCOPE_PLATFORM, 0L);
         }
         return parseRequiredGroupOrStoreScope(normalizedOrgId);

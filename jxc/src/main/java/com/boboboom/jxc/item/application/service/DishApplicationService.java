@@ -1,14 +1,12 @@
 package com.boboboom.jxc.item.application.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.item.domain.repository.DishCategoryRepository;
+import com.boboboom.jxc.item.domain.repository.DishProfileRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.DishCategoryDO;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.DishProfileDO;
-import com.boboboom.jxc.item.infrastructure.persistence.mapper.DishCategoryMapper;
-import com.boboboom.jxc.item.infrastructure.persistence.mapper.DishProfileMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -31,25 +29,25 @@ public class DishApplicationService {
     private static final String ROOT_CATEGORY_ID = "all";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
-    private final DishProfileMapper dishProfileMapper;
-    private final DishCategoryMapper dishCategoryMapper;
+    private final DishProfileRepository dishProfileRepository;
+    private final DishCategoryRepository dishCategoryRepository;
     private final OrgScopeService orgScopeService;
 
-    public DishApplicationService(DishProfileMapper dishProfileMapper,
-                                  DishCategoryMapper dishCategoryMapper,
+    public DishApplicationService(DishProfileRepository dishProfileRepository,
+                                  DishCategoryRepository dishCategoryRepository,
                                   OrgScopeService orgScopeService) {
-        this.dishProfileMapper = dishProfileMapper;
-        this.dishCategoryMapper = dishCategoryMapper;
+        this.dishProfileRepository = dishProfileRepository;
+        this.dishCategoryRepository = dishCategoryRepository;
         this.orgScopeService = orgScopeService;
     }
 
-    public CodeDataResponse<PageData<DishListRow>> list(Integer pageNo,
-                                                        Integer pageSize,
-                                                        String keyword,
-                                                        String deleted,
-                                                        String categoryId,
-                                                        String dishType,
-                                                        String orgId) {
+    public PageData<DishListRow> list(Integer pageNo,
+                                      Integer pageSize,
+                                      String keyword,
+                                      String deleted,
+                                      String categoryId,
+                                      String dishType,
+                                      String orgId) {
         DishScope scope = resolveDishScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
         int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
@@ -60,15 +58,24 @@ public class DishApplicationService {
         String dishTypeValue = trimNullable(dishType);
         Set<Long> categoryIds = resolveCategoryFilter(scope, categoryId);
 
-        LambdaQueryWrapper<DishProfileDO> query = buildListQuery(scope, keywordValue, deletedValue, categoryIds, dishTypeValue);
-        Long total = dishProfileMapper.selectCount(query);
-
-        List<DishProfileDO> rows = dishProfileMapper.selectList(
-                buildListQuery(scope, keywordValue, deletedValue, categoryIds, dishTypeValue)
-                        .orderByDesc(DishProfileDO::getUpdatedAt)
-                        .orderByDesc(DishProfileDO::getId)
-                        .last("limit " + safePageSize + " offset " + offset)
-        );
+        List<DishProfileDO> rows = dishProfileRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
+                .filter(row -> matchDeleted(row.getDeleted(), deletedValue))
+                .filter(row -> categoryIds == null || categoryIds.isEmpty() || categoryIds.contains(row.getCategoryId()))
+                .filter(row -> StringUtils.hasText(keywordValue)
+                        ? containsKeyword(row, keywordValue)
+                        : true)
+                .filter(row -> !StringUtils.hasText(dishTypeValue) || Objects.equals(row.getDishType(), dishTypeValue))
+                .skip(offset)
+                .limit(safePageSize)
+                .toList();
+        long total = dishProfileRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
+                .filter(row -> matchDeleted(row.getDeleted(), deletedValue))
+                .filter(row -> categoryIds == null || categoryIds.isEmpty() || categoryIds.contains(row.getCategoryId()))
+                .filter(row -> StringUtils.hasText(keywordValue)
+                        ? containsKeyword(row, keywordValue)
+                        : true)
+                .filter(row -> !StringUtils.hasText(dishTypeValue) || Objects.equals(row.getDishType(), dishTypeValue))
+                .count();
 
         Map<Long, String> categoryNameMap = buildCategoryNameMap(scope);
         List<DishListRow> list = new ArrayList<>(rows.size());
@@ -91,16 +98,12 @@ public class DishApplicationService {
             ));
         }
 
-        return CodeDataResponse.ok(new PageData<>(list, total == null ? 0 : total, safePageNo, safePageSize));
+        return new PageData<>(list, total, safePageNo, safePageSize);
     }
 
-    public CodeDataResponse<List<TreeNode>> categoryTree(String orgId) {
+    public List<TreeNode> categoryTree(String orgId) {
         DishScope scope = resolveDishScope(orgId);
-        List<DishCategoryDO> categories = dishCategoryMapper.selectList(
-                scopeQuery(scope)
-                        .orderByAsc(DishCategoryDO::getCreatedAt)
-                        .orderByAsc(DishCategoryDO::getId)
-        );
+        List<DishCategoryDO> categories = dishCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
 
         Map<String, TreeNode> nodeMap = new LinkedHashMap<>();
         nodeMap.put(ROOT_CATEGORY, new TreeNode(ROOT_CATEGORY_ID, ROOT_CATEGORY, new ArrayList<>()));
@@ -117,30 +120,7 @@ public class DishApplicationService {
                 parentNode.children().add(childNode);
             }
         }
-        return CodeDataResponse.ok(List.of(nodeMap.get(ROOT_CATEGORY)));
-    }
-
-    private LambdaQueryWrapper<DishProfileDO> buildListQuery(DishScope scope,
-                                                             String keyword,
-                                                             String deleted,
-                                                             Set<Long> categoryIds,
-                                                             String dishType) {
-        LambdaQueryWrapper<DishProfileDO> query = profileScopeQuery(scope);
-        if (StringUtils.hasText(keyword)) {
-            query.and(w -> w.like(DishProfileDO::getSpuCode, keyword)
-                    .or().like(DishProfileDO::getDishName, keyword)
-                    .or().like(DishProfileDO::getSpec, keyword));
-        }
-        if (StringUtils.hasText(deleted)) {
-            query.eq(DishProfileDO::getDeleted, deleted);
-        }
-        if (categoryIds != null && !categoryIds.isEmpty()) {
-            query.in(DishProfileDO::getCategoryId, categoryIds);
-        }
-        if (StringUtils.hasText(dishType)) {
-            query.eq(DishProfileDO::getDishType, dishType);
-        }
-        return query;
+        return List.of(nodeMap.get(ROOT_CATEGORY));
     }
 
     private Set<Long> resolveCategoryFilter(DishScope scope, String categoryId) {
@@ -156,10 +136,7 @@ public class DishApplicationService {
             throw new BusinessException("菜品分类参数非法");
         }
 
-        List<DishCategoryDO> categories = dishCategoryMapper.selectList(
-                scopeQuery(scope)
-                        .orderByAsc(DishCategoryDO::getId)
-        );
+        List<DishCategoryDO> categories = dishCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
         Map<Long, DishCategoryDO> categoryById = categories.stream()
                 .collect(Collectors.toMap(DishCategoryDO::getId, item -> item));
         DishCategoryDO rootCategory = categoryById.get(rootId);
@@ -191,7 +168,7 @@ public class DishApplicationService {
     }
 
     private Map<Long, String> buildCategoryNameMap(DishScope scope) {
-        List<DishCategoryDO> categories = dishCategoryMapper.selectList(scopeQuery(scope));
+        List<DishCategoryDO> categories = dishCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
         Map<Long, String> map = new LinkedHashMap<>();
         for (DishCategoryDO category : categories) {
             map.put(category.getId(), category.getCategoryName());
@@ -236,21 +213,28 @@ public class DishApplicationService {
         return DATETIME_FORMATTER.format(dateTime);
     }
 
-    private LambdaQueryWrapper<DishCategoryDO> scopeQuery(DishScope scope) {
-        return new LambdaQueryWrapper<DishCategoryDO>()
-                .eq(DishCategoryDO::getScopeType, scope.scopeType())
-                .eq(DishCategoryDO::getScopeId, scope.scopeId());
-    }
-
-    private LambdaQueryWrapper<DishProfileDO> profileScopeQuery(DishScope scope) {
-        return new LambdaQueryWrapper<DishProfileDO>()
-                .eq(DishProfileDO::getScopeType, scope.scopeType())
-                .eq(DishProfileDO::getScopeId, scope.scopeId());
-    }
-
     private DishScope resolveDishScope(String orgId) {
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScopeAllowAnonymous(AuthContextHolder.userIdOr(null), orgId);
         return new DishScope(scope.scopeType(), scope.scopeId());
+    }
+
+    private boolean matchDeleted(String rowValue, String queryValue) {
+        if (!StringUtils.hasText(queryValue)) {
+            return true;
+        }
+        return Objects.equals(rowValue, queryValue);
+    }
+
+    private boolean containsKeyword(DishProfileDO row, String keyword) {
+        String joined = String.join(" ",
+                nullToEmpty(row.getSpuCode()),
+                nullToEmpty(row.getDishName()),
+                nullToEmpty(row.getSpec()));
+        return joined.toLowerCase(Locale.ROOT).contains(keyword.toLowerCase(Locale.ROOT));
+    }
+
+    private String nullToEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     public record PageData<T>(List<T> list,

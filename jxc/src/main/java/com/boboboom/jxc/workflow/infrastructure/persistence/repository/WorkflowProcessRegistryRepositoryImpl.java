@@ -6,6 +6,7 @@ import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowP
 import com.boboboom.jxc.workflow.infrastructure.persistence.mapper.WorkflowProcessRegistryMapper;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -18,6 +19,11 @@ public class WorkflowProcessRegistryRepositoryImpl implements WorkflowProcessReg
     }
 
     @Override
+    public Optional<WorkflowProcessRegistryDO> findById(Long id) {
+        return Optional.ofNullable(workflowProcessRegistryMapper.selectById(id));
+    }
+
+    @Override
     public Optional<WorkflowProcessRegistryDO> findByScopeAndProcessCode(String scopeType, Long scopeId, String processCode) {
         if (scopeType == null || scopeId == null || processCode == null) {
             return Optional.empty();
@@ -27,5 +33,32 @@ public class WorkflowProcessRegistryRepositoryImpl implements WorkflowProcessReg
                 .eq(WorkflowProcessRegistryDO::getScopeId, scopeId)
                 .eq(WorkflowProcessRegistryDO::getProcessCode, processCode)
                 .last("limit 1")));
+    }
+
+    @Override
+    public List<WorkflowProcessRegistryDO> findByScopeOrdered(String scopeType, Long scopeId) {
+        if (scopeType == null || scopeId == null) {
+            return List.of();
+        }
+        return workflowProcessRegistryMapper.selectList(new LambdaQueryWrapper<WorkflowProcessRegistryDO>()
+                .eq(WorkflowProcessRegistryDO::getScopeType, scopeType)
+                .eq(WorkflowProcessRegistryDO::getScopeId, scopeId)
+                .orderByDesc(WorkflowProcessRegistryDO::getCreatedAt)
+                .orderByDesc(WorkflowProcessRegistryDO::getId));
+    }
+
+    @Override
+    public void save(WorkflowProcessRegistryDO row) {
+        workflowProcessRegistryMapper.insert(row);
+    }
+
+    @Override
+    public void update(WorkflowProcessRegistryDO row) {
+        workflowProcessRegistryMapper.updateById(row);
+    }
+
+    @Override
+    public void deleteById(Long id) {
+        workflowProcessRegistryMapper.deleteById(id);
     }
 }

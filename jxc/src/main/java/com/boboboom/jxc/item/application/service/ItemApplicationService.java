@@ -1,15 +1,11 @@
 package com.boboboom.jxc.item.application.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.BusinessCodeGenerator;
+import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.item.domain.repository.ItemProfileRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemProfileDO;
-import com.boboboom.jxc.item.infrastructure.persistence.mapper.ItemProfileMapper;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemBatchDeleteRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemBatchStatusUpdateRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCreateRequest;
@@ -34,9 +30,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
 
 @Service
 public class ItemApplicationService {
@@ -50,24 +43,23 @@ public class ItemApplicationService {
     private static final String PLACEHOLDER = "-";
     private static final String ITEM_CODE_PREFIX = "WPBM";
 
-    private final ItemProfileMapper itemProfileMapper;
+    private final ItemProfileRepository itemProfileRepository;
     private final ObjectMapper objectMapper;
     private final BusinessCodeGenerator businessCodeGenerator;
     private final OrgScopeService orgScopeService;
 
-    public ItemApplicationService(ItemProfileMapper itemProfileMapper,
+    public ItemApplicationService(ItemProfileRepository itemProfileRepository,
                                  ObjectMapper objectMapper,
                                  BusinessCodeGenerator businessCodeGenerator,
                                  OrgScopeService orgScopeService) {
-        this.itemProfileMapper = itemProfileMapper;
+        this.itemProfileRepository = itemProfileRepository;
         this.objectMapper = objectMapper;
         this.businessCodeGenerator = businessCodeGenerator;
         this.orgScopeService = orgScopeService;
     }
 
     @Transactional
-    public CodeDataResponse<IdPayload> create(@RequestParam(required = false) String orgId,
-                                              @Valid @RequestBody ItemCreateRequest request) {
+    public IdPayload create(String orgId, ItemCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         String itemCode = generateItemCode(scope);
         validateRequest(request);
@@ -79,13 +71,12 @@ public class ItemApplicationService {
         entity.setItemCode(itemCode);
         entity.setDetailJson(writeRequestJson(copyWithCode(request, itemCode)));
         entity.setDraft(Boolean.FALSE);
-        itemProfileMapper.insert(entity);
-        return CodeDataResponse.ok(new IdPayload(entity.getItemId()));
+        itemProfileRepository.save(entity);
+        return new IdPayload(entity.getItemId());
     }
 
     @Transactional
-    public CodeDataResponse<IdPayload> saveDraft(@RequestParam(required = false) String orgId,
-                                                 @RequestBody ItemCreateRequest request) {
+    public IdPayload saveDraft(String orgId, ItemCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         String itemCode = generateItemCode(scope);
 
@@ -96,21 +87,18 @@ public class ItemApplicationService {
         entity.setItemCode(itemCode);
         entity.setDetailJson(writeRequestJson(copyWithCode(request, itemCode)));
         entity.setDraft(Boolean.TRUE);
-        itemProfileMapper.insert(entity);
-        return CodeDataResponse.ok(new IdPayload(entity.getItemId()));
+        itemProfileRepository.save(entity);
+        return new IdPayload(entity.getItemId());
     }
 
-    public CodeDataResponse<ItemCreateRequest> detail(@PathVariable String id,
-                                                      @RequestParam(required = false) String orgId) {
+    public ItemCreateRequest detail(String id, String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         ItemProfileDO entity = requireItem(id, scope, true);
-        return CodeDataResponse.ok(parseRequestJson(entity.getDetailJson()));
+        return parseRequestJson(entity.getDetailJson());
     }
 
     @Transactional
-    public CodeDataResponse<Void> update(@PathVariable String id,
-                                         @RequestParam(required = false) String orgId,
-                                         @Valid @RequestBody ItemCreateRequest request) {
+    public void update(String id, String orgId, ItemCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         ItemProfileDO entity = requireItem(id, scope, true);
         validateRequest(request);
@@ -120,20 +108,19 @@ public class ItemApplicationService {
             entity.setItemCode(itemCode);
         }
         entity.setDetailJson(writeRequestJson(copyWithCode(request, itemCode)));
-        itemProfileMapper.updateById(entity);
-        return CodeDataResponse.ok();
+        itemProfileRepository.update(entity);
     }
 
-    public CodeDataResponse<PageData<ItemListRow>> list(@RequestParam(defaultValue = "1") Integer pageNo,
-                                                        @RequestParam(defaultValue = "10") Integer pageSize,
-                                                        @RequestParam(required = false) String keyword,
-                                                        @RequestParam(required = false) String category,
-                                                        @RequestParam(required = false) String status,
-                                                        @RequestParam(required = false) String itemType,
-                                                        @RequestParam(required = false) String statType,
-                                                        @RequestParam(required = false) String storageMode,
-                                                        @RequestParam(required = false) String tag,
-                                                        @RequestParam(required = false) String orgId) {
+    public PageData<ItemListRow> list(Integer pageNo,
+                                      Integer pageSize,
+                                      String keyword,
+                                      String category,
+                                      String status,
+                                      String itemType,
+                                      String statType,
+                                      String storageMode,
+                                      String tag,
+                                      String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
         int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
@@ -146,17 +133,8 @@ public class ItemApplicationService {
         String storageModeValue = trimNullable(storageMode);
         String tagValue = trimNullable(tag);
 
-        // 使用 MyBatis-Plus IPage 数据库分页，仅查询当前页数据
-        IPage<ItemProfileDO> pageResult = itemProfileMapper.selectPage(
-                new Page<>(safePageNo, safePageSize),
-                scopeQuery(scope)
-                        .eq(ItemProfileDO::getDraft, Boolean.FALSE)
-                        .orderByDesc(ItemProfileDO::getCreatedAt)
-                        .orderByDesc(ItemProfileDO::getId)
-        );
-
-        // 仅对当前页数据进行投影和内存过滤（detailJson字段无法下推SQL）
-        List<ItemListRow> filtered = pageResult.getRecords().stream()
+        List<ItemListRow> filtered = itemProfileRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
+                .filter(item -> Boolean.FALSE.equals(item.getDraft()))
                 .map(this::toListProjection)
                 .filter(row -> matchKeyword(row, keywordValue))
                 .filter(row -> matchCategory(row.category(), categorySet))
@@ -167,12 +145,18 @@ public class ItemApplicationService {
                 .filter(row -> matchTag(row.tag(), tagValue))
                 .toList();
 
-        return CodeDataResponse.ok(new PageData<>(filtered, pageResult.getTotal(), safePageNo, safePageSize));
+        long total = filtered.size();
+        long baseIndex = (long) (safePageNo - 1) * safePageSize;
+        List<ItemListRow> pageRows = filtered.stream()
+                .skip(baseIndex)
+                .limit(safePageSize)
+                .toList();
+
+        return new PageData<>(pageRows, total, safePageNo, safePageSize);
     }
 
     @Transactional
-    public CodeDataResponse<Void> batchUpdateStatus(@RequestParam(required = false) String orgId,
-                                                    @Valid @RequestBody ItemBatchStatusUpdateRequest request) {
+    public void batchUpdateStatus(String orgId, ItemBatchStatusUpdateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         String nextStatus = normalizeStatus(request.status());
         Set<String> idSet = sanitizeAndValidateIds(request.ids());
@@ -180,43 +164,34 @@ public class ItemApplicationService {
         for (ItemProfileDO item : items) {
             ItemCreateRequest detail = parseRequestJson(item.getDetailJson());
             item.setDetailJson(writeRequestJson(copyWithStatus(detail, nextStatus)));
-            itemProfileMapper.updateById(item);
+            itemProfileRepository.update(item);
         }
-        return CodeDataResponse.ok();
     }
 
     @Transactional
-    public CodeDataResponse<Void> batchDelete(@RequestParam(required = false) String orgId,
-                                              @Valid @RequestBody ItemBatchDeleteRequest request) {
+    public void batchDelete(String orgId, ItemBatchDeleteRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         Set<String> idSet = sanitizeAndValidateIds(request.ids());
         requireItems(scope, idSet);
-        itemProfileMapper.delete(scopeQuery(scope)
-                .eq(ItemProfileDO::getDraft, Boolean.FALSE)
-                .in(ItemProfileDO::getItemId, idSet));
-        return CodeDataResponse.ok();
+        itemProfileRepository.deleteByScopeAndItemIds(scope.scopeType(), scope.scopeId(), new java.util.ArrayList<>(idSet));
     }
 
     private ItemProfileDO requireItem(String itemId, ItemScope scope, boolean includeDraft) {
-        LambdaQueryWrapper<ItemProfileDO> query = scopeQuery(scope)
-                .eq(ItemProfileDO::getItemId, requiredTrim(itemId, "物品ID不能为空"))
-                .last("limit 1");
-        if (!includeDraft) {
-            query.eq(ItemProfileDO::getDraft, Boolean.FALSE);
-        }
-        ItemProfileDO entity = itemProfileMapper.selectOne(query);
+        ItemProfileDO entity = itemProfileRepository.findByItemId(requiredTrim(itemId, "物品ID不能为空")).orElse(null);
         if (entity == null) {
+            throw new BusinessException("物品不存在");
+        }
+        if (!Objects.equals(entity.getScopeType(), scope.scopeType()) || !Objects.equals(entity.getScopeId(), scope.scopeId())) {
+            throw new BusinessException("物品不存在");
+        }
+        if (!includeDraft && !Boolean.FALSE.equals(entity.getDraft())) {
             throw new BusinessException("物品不存在");
         }
         return entity;
     }
 
     private List<ItemProfileDO> requireItems(ItemScope scope, Set<String> itemIds) {
-        List<ItemProfileDO> items = itemProfileMapper.selectList(
-                scopeQuery(scope)
-                        .eq(ItemProfileDO::getDraft, Boolean.FALSE)
-                        .in(ItemProfileDO::getItemId, itemIds)
-        );
+        List<ItemProfileDO> items = itemProfileRepository.findByScopeAndItemIds(scope.scopeType(), scope.scopeId(), new java.util.ArrayList<>(itemIds));
         if (items.size() != itemIds.size()) {
             throw new BusinessException("存在无效的物品ID");
         }
@@ -224,17 +199,11 @@ public class ItemApplicationService {
     }
 
     private void ensureCodeUnique(ItemScope scope, String itemCode, String excludeItemId, boolean includeDraft) {
-        LambdaQueryWrapper<ItemProfileDO> query = scopeQuery(scope)
-                .eq(ItemProfileDO::getItemCode, itemCode)
-                .last("limit 1");
-        if (!includeDraft) {
-            query.eq(ItemProfileDO::getDraft, Boolean.FALSE);
-        }
-        if (excludeItemId != null) {
-            query.ne(ItemProfileDO::getItemId, excludeItemId);
-        }
-        ItemProfileDO existing = itemProfileMapper.selectOne(query);
-        if (existing != null) {
+        boolean existing = itemProfileRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
+                .anyMatch(item -> Objects.equals(item.getItemCode(), itemCode)
+                        && (includeDraft || Boolean.FALSE.equals(item.getDraft()))
+                        && (excludeItemId == null || !Objects.equals(item.getItemId(), excludeItemId)));
+        if (existing) {
             throw new BusinessException("物品编码已存在");
         }
     }
@@ -530,20 +499,12 @@ public class ItemApplicationService {
     }
 
     private String generateItemCode(ItemScope scope) {
-        List<ItemProfileDO> exists = itemProfileMapper.selectList(
-                scopeQuery(scope).select(ItemProfileDO::getItemCode)
-        );
+        List<ItemProfileDO> exists = itemProfileRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
         List<String> codes = exists.stream()
                 .map(ItemProfileDO::getItemCode)
                 .filter(StringUtils::hasText)
                 .toList();
         return businessCodeGenerator.nextCode(ITEM_CODE_PREFIX, codes);
-    }
-
-    private LambdaQueryWrapper<ItemProfileDO> scopeQuery(ItemScope scope) {
-        return new LambdaQueryWrapper<ItemProfileDO>()
-                .eq(ItemProfileDO::getScopeType, scope.scopeType())
-                .eq(ItemProfileDO::getScopeId, scope.scopeId());
     }
 
     private ItemScope resolveItemScope(String orgId) {
