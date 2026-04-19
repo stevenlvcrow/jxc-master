@@ -1,6 +1,7 @@
 package com.boboboom.jxc.workflow.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.inventory.application.service.InventoryDocumentType;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
@@ -38,6 +39,9 @@ public class WorkflowProcessApplicationService {
     private static final String SCOPE_STORE = "STORE";
     private static final String ENABLED_STATUS = "ENABLED";
     private static final String PUBLISHED_STATUS = "PUBLISHED";
+    private static final Set<String> PROTECTED_PROCESS_CODES = InventoryDocumentType.workflowTypes().stream()
+            .map(InventoryDocumentType::getBusinessCode)
+            .collect(Collectors.toUnmodifiableSet());
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
     private final WorkflowProcessRegistryRepository processRegistryRepository;
@@ -45,26 +49,21 @@ public class WorkflowProcessApplicationService {
     private final WorkflowDefinitionConfigRepository configRepository;
     private final StoreRepository storeRepository;
     private final OrgScopeService orgScopeService;
-    private final InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService;
 
     public WorkflowProcessApplicationService(WorkflowProcessRegistryRepository processRegistryRepository,
                                              WorkflowProcessStoreBindingRepository processStoreBindingRepository,
                                              WorkflowDefinitionConfigRepository configRepository,
                                              StoreRepository storeRepository,
-                                             OrgScopeService orgScopeService,
-                                             InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService) {
+                                             OrgScopeService orgScopeService) {
         this.processRegistryRepository = processRegistryRepository;
         this.processStoreBindingRepository = processStoreBindingRepository;
         this.configRepository = configRepository;
         this.storeRepository = storeRepository;
         this.orgScopeService = orgScopeService;
-        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapService;
     }
 
     public List<WorkflowProcessView> list(String orgId) {
         Long groupId = resolveGroupScope(orgId);
-        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryWorkflowBootstrapService.ensureDefaults(groupId, operatorId);
         List<WorkflowProcessRegistryDO> processes = processRegistryRepository.findByScopeOrdered(SCOPE_GROUP, groupId);
         if (processes.isEmpty()) {
             return List.of();
@@ -89,7 +88,7 @@ public class WorkflowProcessApplicationService {
                 continue;
             }
             processStoreNamesMap.computeIfAbsent(binding.getProcessRegistryId(), key -> new ArrayList<>())
-                    .add((store.getStoreName() == null ? "" : store.getStoreName()) + "（" + store.getStoreCode() + "）");
+                    .add((store.getStoreName() == null ? "" : store.getStoreName()) + "(" + store.getStoreCode() + ")");
         }
 
         return processes.stream()
@@ -113,7 +112,7 @@ public class WorkflowProcessApplicationService {
     public IdPayload create(String orgId, WorkflowProcessUpsertRequest request) {
         Long groupId = resolveGroupScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        String processCode = normalizeCode(request.processCode(), "流程ID不能为空");
+        String processCode = normalizeCode(request.process_code(), "业务编码不能为空");
         String businessName = normalizeName(request.businessName(), "业务名称不能为空");
         String templateId = trimNullable(request.templateId());
         ensureTemplatePublished(groupId, processCode, templateId);
@@ -136,7 +135,7 @@ public class WorkflowProcessApplicationService {
         Long groupId = resolveGroupScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         WorkflowProcessRegistryDO row = requireProcess(id, groupId);
-        String processCode = normalizeCode(request.processCode(), "流程ID不能为空");
+        String processCode = normalizeCode(request.process_code(), "业务编码不能为空");
         String businessName = normalizeName(request.businessName(), "业务名称不能为空");
         String templateId = trimNullable(request.templateId());
         ensureTemplatePublished(groupId, processCode, templateId);
@@ -188,6 +187,9 @@ public class WorkflowProcessApplicationService {
     public void delete(Long id, String orgId) {
         Long groupId = resolveGroupScope(orgId);
         WorkflowProcessRegistryDO row = requireProcess(id, groupId);
+        if (PROTECTED_PROCESS_CODES.contains(row.getProcessCode())) {
+            throw new BusinessException("内置流程业务不允许删除");
+        }
         processStoreBindingRepository.deleteByGroupAndProcessRegistryId(groupId, row.getId());
         processRegistryRepository.deleteById(row.getId());
     }
@@ -202,14 +204,14 @@ public class WorkflowProcessApplicationService {
                 .filter(storeIds::contains)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (existingStoreIds.size() != storeIds.size()) {
-            throw new BusinessException("门店选择无效，请刷新后重试");
+            throw new BusinessException("存在无效的门店ID");
         }
     }
 
     private WorkflowProcessRegistryDO requireProcess(Long id, Long groupId) {
         WorkflowProcessRegistryDO row = processRegistryRepository.findById(id).orElse(null);
         if (row == null || !SCOPE_GROUP.equals(row.getScopeType()) || !groupId.equals(row.getScopeId())) {
-            throw new BusinessException("流程不存在");
+            throw new BusinessException("业务不存在");
         }
         return row;
     }
@@ -217,7 +219,7 @@ public class WorkflowProcessApplicationService {
     private void ensureProcessCodeUnique(Long groupId, String processCode, Long currentId) {
         Optional<WorkflowProcessRegistryDO> exists = processRegistryRepository.findByScopeAndProcessCode(SCOPE_GROUP, groupId, processCode);
         if (exists.isPresent() && (currentId == null || !currentId.equals(exists.get().getId()))) {
-            throw new BusinessException("流程ID已存在");
+            throw new BusinessException("业务编码已存在");
         }
     }
 
@@ -227,10 +229,10 @@ public class WorkflowProcessApplicationService {
         }
         WorkflowDefinitionConfigDO config = configRepository.findByScopeBusinessAndWorkflow(SCOPE_GROUP, groupId, processCode, templateId).orElse(null);
         if (config == null) {
-            throw new BusinessException("流程版本不存在");
+            throw new BusinessException("流程模板不存在");
         }
         if (!PUBLISHED_STATUS.equals(config.getStatus())) {
-            throw new BusinessException("未发布的流程版本不能使用，请先发布流程");
+            throw new BusinessException("未发布的流程模板不能使用，请先发布流程");
         }
     }
 
@@ -256,7 +258,7 @@ public class WorkflowProcessApplicationService {
     private String normalizeCode(String value, String message) {
         String normalized = requiredTrim(value, message).toUpperCase(Locale.ROOT);
         if (!normalized.matches("[A-Z0-9_\\-]+")) {
-            throw new BusinessException("编码仅支持字母、数字、下划线和中划线");
+            throw new BusinessException("缂傚倹鐗滈悥婊勭閸涱喗鏆滈柟闀愮閻⊙冃掑鍐ｅ亾娴ｈ娈堕悗娑欍仠閳ь兛妞掔粭鍛村礆閹烘柨娈犻柛婊冨閼垫垿宕氶幒鏂挎疇");
         }
         return normalized;
     }
@@ -288,7 +290,7 @@ public class WorkflowProcessApplicationService {
     }
 
     public record WorkflowProcessView(Long id,
-                                      String processCode,
+                                      String process_code,
                                       String businessName,
                                       String templateId,
                                       String templateWorkflowName,
@@ -307,3 +309,5 @@ public class WorkflowProcessApplicationService {
     public record IdPayload(Long id) {
     }
 }
+
+

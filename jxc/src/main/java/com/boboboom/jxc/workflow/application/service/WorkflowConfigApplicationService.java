@@ -105,7 +105,6 @@ public class WorkflowConfigApplicationService {
         } else {
             configRepository.update(config);
         }
-        publishConfig(scope, config, nodes, operatorId);
     }
 
     @Transactional

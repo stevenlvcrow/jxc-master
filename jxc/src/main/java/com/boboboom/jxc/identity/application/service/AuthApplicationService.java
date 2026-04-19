@@ -18,6 +18,7 @@ import com.boboboom.jxc.identity.interfaces.rest.request.RefreshTokenRequest;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class AuthApplicationService {
@@ -86,7 +87,7 @@ public class AuthApplicationService {
         if (orgId == null || orgId.trim().isEmpty()) {
             return mapRoles(allRoles);
         }
-        OrgScopeService.MenuScope scope = orgScopeService.resolveMenuScope(orgId);
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(session.getUserId(), orgId);
         List<CurrentUserRoleResult> roles = mapRoles(allRoles.stream()
                 .filter(role -> matchesSelectedScope(role, scope))
                 .toList());
@@ -114,19 +115,28 @@ public class AuthApplicationService {
                 .toList();
     }
 
-    private boolean matchesSelectedScope(UserRoleView role, OrgScopeService.MenuScope scope) {
+    private boolean matchesSelectedScope(UserRoleView role, OrgScopeService.AccessibleScope scope) {
         if (role == null || scope == null) {
             return false;
         }
         String roleScopeType = role.getScopeType();
         Long roleScopeId = role.getScopeId();
-        if (roleScopeType == null || roleScopeId == null) {
+        if (roleScopeType == null) {
             return false;
         }
-        if (!roleScopeType.equalsIgnoreCase(scope.scopeType())) {
-            return false;
+        if ("PLATFORM".equalsIgnoreCase(scope.scopeType())) {
+            return "PLATFORM".equalsIgnoreCase(roleScopeType);
         }
-        return roleScopeId.equals(scope.scopeId());
+        if ("GROUP".equalsIgnoreCase(scope.scopeType())) {
+            return "PLATFORM".equalsIgnoreCase(roleScopeType)
+                    || ("GROUP".equalsIgnoreCase(roleScopeType) && Objects.equals(roleScopeId, scope.scopeId()));
+        }
+        if ("STORE".equalsIgnoreCase(scope.scopeType())) {
+            return "PLATFORM".equalsIgnoreCase(roleScopeType)
+                    || ("STORE".equalsIgnoreCase(roleScopeType) && Objects.equals(roleScopeId, scope.scopeId()))
+                    || ("GROUP".equalsIgnoreCase(roleScopeType) && Objects.equals(roleScopeId, scope.groupId()));
+        }
+        return false;
     }
 
     public record CurrentUserRoleResult(String roleCode,

@@ -101,7 +101,7 @@ VALUES ('PLATFORM', 0, 'U002', '箱', 'AUXILIARY', 'ENABLED', '初始化数据�
 ON CONFLICT (scope_type, scope_id, unit_code) DO NOTHING;
 
 INSERT INTO sys_unit (scope_type, scope_id, unit_code, unit_name, unit_type, status, remark)
-VALUES ('PLATFORM', 0, 'U003', '袋', 'AUXILIARY', 'DISABLED', '初始化数据：前端静态数据迁移')
+VALUES ('PLATFORM', 0, 'U003', '袋', 'AUXILIARY', 'ENABLED', '初始化数据：前端静态数据迁移')
 ON CONFLICT (scope_type, scope_id, unit_code) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS sys_user
@@ -114,6 +114,8 @@ CREATE TABLE IF NOT EXISTS sys_user
     password_salt            VARCHAR(128),
     status                   VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',
     source_type              VARCHAR(32)  NOT NULL DEFAULT 'EXTERNAL_PUSH',
+    created_scope_type       VARCHAR(16)  NOT NULL DEFAULT 'PLATFORM',
+    created_scope_id         BIGINT       NOT NULL DEFAULT 0,
     first_login_changed_pwd  BOOLEAN      NOT NULL DEFAULT FALSE,
     last_login_at            TIMESTAMP,
     last_login_ip            VARCHAR(64),
@@ -121,11 +123,12 @@ CREATE TABLE IF NOT EXISTS sys_user
     updated_at               TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_sys_user_phone UNIQUE (phone),
     CONSTRAINT ck_sys_user_status CHECK (status IN ('ENABLED', 'DISABLED')),
-    CONSTRAINT ck_sys_user_source_type CHECK (source_type IN ('EXTERNAL_PUSH', 'MANUAL', 'SYSTEM_INIT'))
+    CONSTRAINT ck_sys_user_source_type CHECK (source_type IN ('EXTERNAL_PUSH', 'MANUAL', 'SYSTEM_INIT')),
+    CONSTRAINT ck_sys_user_created_scope_type CHECK (created_scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
 );
 
 COMMENT ON TABLE sys_user IS '统一账号表';
-COMMENT ON COLUMN sys_user.username IS '登录账号，当前等于手机号';
+COMMENT ON COLUMN sys_user.username IS '登录账号/用户编码，默认按姓名助记码+手机号后4位生成（小写）';
 COMMENT ON COLUMN sys_user.real_name IS '姓名';
 COMMENT ON COLUMN sys_user.phone IS '手机号，全局唯一';
 COMMENT ON COLUMN sys_user.password_hash IS '密码密文';
@@ -137,6 +140,42 @@ COMMENT ON COLUMN sys_user.last_login_at IS '最后登录时间';
 COMMENT ON COLUMN sys_user.last_login_ip IS '最后登录IP';
 COMMENT ON COLUMN sys_user.created_at IS '创建时间';
 COMMENT ON COLUMN sys_user.updated_at IS '更新时间';
+
+ALTER TABLE sys_user
+    ADD COLUMN IF NOT EXISTS created_scope_type VARCHAR(16);
+
+ALTER TABLE sys_user
+    ADD COLUMN IF NOT EXISTS created_scope_id BIGINT;
+
+COMMENT ON COLUMN sys_user.created_scope_type IS '创建归属范围：PLATFORM/GROUP/STORE';
+
+COMMENT ON COLUMN sys_user.created_scope_id IS '创建归属范围ID，PLATFORM 固定为 0';
+
+UPDATE sys_user
+SET created_scope_type = 'PLATFORM'
+WHERE created_scope_type IS NULL;
+
+UPDATE sys_user
+SET created_scope_id = 0
+WHERE created_scope_id IS NULL;
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_type SET DEFAULT 'PLATFORM';
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_type SET NOT NULL;
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_id SET DEFAULT 0;
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_id SET NOT NULL;
+
+ALTER TABLE sys_user
+    DROP CONSTRAINT IF EXISTS ck_sys_user_created_scope_type;
+
+ALTER TABLE sys_user
+    ADD CONSTRAINT ck_sys_user_created_scope_type CHECK (created_scope_type IN ('PLATFORM', 'GROUP', 'STORE'));
 
 CREATE TABLE IF NOT EXISTS sys_user_password_log
 (
@@ -515,13 +554,13 @@ COMMENT ON COLUMN sys_audit_log.created_at IS '创建时间';
 -- 默认密码：123654
 -- 当前以 SHA-256 十六进制串初始化，后续接入正式认证时可替换为统一密码编码方案。
 INSERT INTO sys_group (group_code, group_name, status, remark)
-VALUES ('DEFAULT_GROUP', '默认集团', 'ENABLED', '系统初始化集团')
+VALUES ('GP00001', '默认集团', 'ENABLED', '系统初始化集团')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_store (group_id, store_code, store_name, status, contact_name, contact_phone, address, remark)
 VALUES (
-    (SELECT id FROM sys_group WHERE group_code = 'DEFAULT_GROUP'),
-    'MD73592041',
+    (SELECT id FROM sys_group WHERE group_code = 'GP00001'),
+    'MD00001',
     '默认门店',
     'ENABLED',
     '门店联系人',
@@ -532,11 +571,191 @@ VALUES (
 ON CONFLICT DO NOTHING;
 
 UPDATE sys_store
-SET store_code = 'MD73592041'
+SET store_code = 'MD00001'
 WHERE store_code = 'DEFAULT_STORE'
   AND NOT EXISTS (
-    SELECT 1 FROM sys_store s WHERE s.store_code = 'MD73592041'
+    SELECT 1 FROM sys_store s WHERE s.store_code = 'MD00001'
 );
+
+-- ITEM_MASTER_SEED_START
+WITH item_scope_seed AS (
+    SELECT 'PLATFORM'::VARCHAR(16) AS scope_type, 0::BIGINT AS scope_id
+    UNION ALL
+    SELECT 'GROUP'::VARCHAR(16), g.id
+    FROM sys_group g
+    UNION ALL
+    SELECT 'STORE'::VARCHAR(16), s.id
+    FROM sys_store s
+),
+unit_seed(unit_code, unit_name, unit_type, status, remark) AS (
+    VALUES
+        ('U001', '件', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U002', '箱', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U003', '袋', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U004', '个', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U005', '斤', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U006', '公斤', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U007', '克', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U008', '千克', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U009', '瓶', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U010', '包', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U011', '盒', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U012', '桶', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U013', '罐', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U014', '听', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U015', '板', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U016', '提', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U017', '卷', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U018', '张', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U019', '只', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U020', '根', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U021', '把', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U022', '支', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U023', '套', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U024', '双', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U025', '台', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U026', '米', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U027', '厘米', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U028', '升', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U029', '毫升', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U030', 'L', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U031', 'mL', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U032', '次', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U033', '杯', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U034', '串', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U035', '捆', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U036', '条', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U037', '块', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U038', '本', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U039', '组', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U040', '坛', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U041', 'kg', 'STANDARD', 'ENABLED', '系统初始化业务默认单位')
+)
+INSERT INTO sys_unit (scope_type, scope_id, unit_code, unit_name, unit_type, status, remark)
+SELECT scope.scope_type,
+       scope.scope_id,
+       unit.unit_code,
+       unit.unit_name,
+       unit.unit_type,
+       unit.status,
+       unit.remark
+FROM item_scope_seed scope
+         CROSS JOIN unit_seed unit
+ON CONFLICT DO NOTHING;
+
+WITH item_scope_seed AS (
+    SELECT 'PLATFORM'::VARCHAR(16) AS scope_type, 0::BIGINT AS scope_id
+    UNION ALL
+    SELECT 'GROUP'::VARCHAR(16), g.id
+    FROM sys_group g
+    UNION ALL
+    SELECT 'STORE'::VARCHAR(16), s.id
+    FROM sys_store s
+),
+category_seed(category_code, category_name, parent_category, status, remark) AS (
+    VALUES
+        ('WPLB000001', '生鲜食材', '物品类别', '启用', '系统初始化业务默认类别'),
+        ('WPLB000002', '蔬菜', '生鲜食材', '启用', '系统初始化业务默认类别'),
+        ('WPLB000003', '水果', '生鲜食材', '启用', '系统初始化业务默认类别'),
+        ('WPLB000004', '肉类', '生鲜食材', '启用', '系统初始化业务默认类别'),
+        ('WPLB000005', '水产', '生鲜食材', '启用', '系统初始化业务默认类别'),
+        ('WPLB000006', '冻品半成品', '物品类别', '启用', '系统初始化业务默认类别'),
+        ('WPLB000007', '冻品', '冻品半成品', '启用', '系统初始化业务默认类别'),
+        ('WPLB000008', '半成品', '冻品半成品', '启用', '系统初始化业务默认类别'),
+        ('WPLB000009', '预制菜', '冻品半成品', '启用', '系统初始化业务默认类别'),
+        ('WPLB000010', '米面主食', '物品类别', '启用', '系统初始化业务默认类别'),
+        ('WPLB000011', '河粉', '米面主食', '启用', '系统初始化业务默认类别'),
+        ('WPLB000012', '面食', '米面主食', '启用', '系统初始化业务默认类别'),
+        ('WPLB000013', '面点', '米面主食', '启用', '系统初始化业务默认类别'),
+        ('WPLB000014', '酒水饮品', '物品类别', '启用', '系统初始化业务默认类别'),
+        ('WPLB000015', '酒水', '酒水饮品', '启用', '系统初始化业务默认类别'),
+        ('WPLB000016', '奶茶', '酒水饮品', '启用', '系统初始化业务默认类别'),
+        ('WPLB000017', '干货调料', '物品类别', '启用', '系统初始化业务默认类别'),
+        ('WPLB000018', '调料', '干货调料', '启用', '系统初始化业务默认类别'),
+        ('WPLB000019', '豆制品', '干货调料', '启用', '系统初始化业务默认类别'),
+        ('WPLB000020', '熟食卤味', '物品类别', '启用', '系统初始化业务默认类别'),
+        ('WPLB000021', '熟食', '熟食卤味', '启用', '系统初始化业务默认类别'),
+        ('WPLB000022', '日杂包材', '物品类别', '启用', '系统初始化业务默认类别'),
+        ('WPLB000023', '一次性用品', '日杂包材', '启用', '系统初始化业务默认类别'),
+        ('WPLB000024', '前厅类', '日杂包材', '启用', '系统初始化业务默认类别'),
+        ('WPLB000025', '日用百货', '日杂包材', '启用', '系统初始化业务默认类别')
+)
+INSERT INTO item_category (scope_type, scope_id, category_code, category_name, parent_category, status, remark)
+SELECT scope.scope_type,
+       scope.scope_id,
+       category.category_code,
+       category.category_name,
+       category.parent_category,
+       category.status,
+       category.remark
+FROM item_scope_seed scope
+         CROSS JOIN category_seed category
+ON CONFLICT DO NOTHING;
+
+WITH item_scope_seed AS (
+    SELECT 'PLATFORM'::VARCHAR(16) AS scope_type, 0::BIGINT AS scope_id
+    UNION ALL
+    SELECT 'GROUP'::VARCHAR(16), g.id
+    FROM sys_group g
+    UNION ALL
+    SELECT 'STORE'::VARCHAR(16), s.id
+    FROM sys_store s
+),
+statistics_type_seed(code, name, statistics_category, create_type) AS (
+    VALUES
+        ('TJLX000001', '原料类', '成本类', 'SYSTEM_BUILTIN'),
+        ('TJLX000002', '酒水类', '成本类', 'SYSTEM_BUILTIN'),
+        ('TJLX000003', '调料类', '成本类', 'SYSTEM_BUILTIN'),
+        ('TJLX000004', '半成品类', '成本类', 'SYSTEM_BUILTIN'),
+        ('TJLX000005', '成品类', '成本类', 'SYSTEM_BUILTIN'),
+        ('TJLX000006', '包材类', '费用类', 'SYSTEM_BUILTIN'),
+        ('TJLX000007', '低值易耗品类', '费用类', 'SYSTEM_BUILTIN'),
+        ('TJLX000008', '固定资产类', '费用类', 'SYSTEM_BUILTIN')
+)
+INSERT INTO item_statistics_type (scope_type, scope_id, code, name, statistics_category, create_type)
+SELECT scope.scope_type,
+       scope.scope_id,
+       statistics_type.code,
+       statistics_type.name,
+       statistics_type.statistics_category,
+       statistics_type.create_type
+FROM item_scope_seed scope
+         CROSS JOIN statistics_type_seed statistics_type
+ON CONFLICT DO NOTHING;
+
+WITH item_scope_seed AS (
+    SELECT 'PLATFORM'::VARCHAR(16) AS scope_type, 0::BIGINT AS scope_id
+    UNION ALL
+    SELECT 'GROUP'::VARCHAR(16), g.id
+    FROM sys_group g
+    UNION ALL
+    SELECT 'STORE'::VARCHAR(16), s.id
+    FROM sys_store s
+),
+tag_seed(tag_code, tag_name, status, remark) AS (
+    VALUES
+        ('BQBM000001', '生鲜', '启用', CAST(NULL AS VARCHAR(500))),
+        ('BQBM000002', '冻品', '启用', CAST(NULL AS VARCHAR(500))),
+        ('BQBM000003', '称重', '启用', CAST(NULL AS VARCHAR(500))),
+        ('BQBM000004', '散装', '启用', CAST(NULL AS VARCHAR(500))),
+        ('BQBM000005', '高值', '启用', CAST(NULL AS VARCHAR(500))),
+        ('BQBM000006', '易耗', '启用', CAST(NULL AS VARCHAR(500))),
+        ('BQBM000007', '易损', '启用', CAST(NULL AS VARCHAR(500))),
+        ('BQBM000008', '促销', '启用', CAST(NULL AS VARCHAR(500))),
+        ('BQBM000009', '赠品', '启用', CAST(NULL AS VARCHAR(500))),
+        ('BQBM000010', '自制', '启用', CAST(NULL AS VARCHAR(500)))
+)
+INSERT INTO item_tag (scope_type, scope_id, tag_code, tag_name, status, remark)
+SELECT scope.scope_type,
+       scope.scope_id,
+       tag.tag_code,
+       tag.tag_name,
+       tag.status,
+       tag.remark
+FROM item_scope_seed scope
+         CROSS JOIN tag_seed tag
+ON CONFLICT DO NOTHING;
+-- ITEM_MASTER_SEED_END
 
 INSERT INTO sys_role (role_code, role_name, role_type, data_scope_type, description, status)
 VALUES ('PLATFORM_SUPER_ADMIN', '平台超级管理员', 'PLATFORM', 'ALL', '系统初始化平台管理员角色', 'ENABLED')
@@ -802,16 +1021,16 @@ WHERE phone = '13800000000'
 );
 
 INSERT INTO sys_user (username, real_name, phone, password_hash, password_salt, status, source_type, first_login_changed_pwd)
-VALUES ('13800000001', '默认集团管理员', '13800000001', '6460662e217c7a9f899208dd70a2c28abdea42f128666a9b78e6c0c064846493', NULL, 'ENABLED', 'SYSTEM_INIT', FALSE)
+VALUES ('mrjtgly0001', '默认集团管理员', '13800000001', '6460662e217c7a9f899208dd70a2c28abdea42f128666a9b78e6c0c064846493', NULL, 'ENABLED', 'SYSTEM_INIT', FALSE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_user (username, real_name, phone, password_hash, password_salt, status, source_type, first_login_changed_pwd)
-VALUES ('13800000002', '默认门店管理员', '13800000002', '6460662e217c7a9f899208dd70a2c28abdea42f128666a9b78e6c0c064846493', NULL, 'ENABLED', 'SYSTEM_INIT', FALSE)
+VALUES ('mrmdgly0002', '默认门店管理员', '13800000002', '6460662e217c7a9f899208dd70a2c28abdea42f128666a9b78e6c0c064846493', NULL, 'ENABLED', 'SYSTEM_INIT', FALSE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_store_admin_rel (store_id, user_id, assigned_by, status)
 VALUES (
-    (SELECT id FROM sys_store WHERE store_code = 'MD73592041'),
+    (SELECT id FROM sys_store WHERE store_code = 'MD00001'),
     (SELECT id FROM sys_user WHERE phone = '13800000002'),
     (SELECT id FROM sys_user WHERE phone = '13800000000'),
     'ENABLED'
@@ -4846,6 +5065,33 @@ CREATE INDEX IF NOT EXISTS idx_workflow_process_scope ON workflow_process_regist
 COMMENT ON TABLE workflow_process_registry IS '流程管理主表（集团级）';
 COMMENT ON COLUMN workflow_process_registry.process_code IS '流程ID';
 COMMENT ON COLUMN workflow_process_registry.template_id IS '绑定模板ID';
+
+WITH workflow_process_seed(process_code, business_name) AS (
+    VALUES
+        ('PURCHASE_INBOUND', '采购入库流程'),
+        ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
+        ('DEPARTMENT_PICKING', '部门领料流程'),
+        ('DEPARTMENT_RETURN', '部门退料流程'),
+        ('STOCK_TRANSFER', '移库单流程'),
+        ('STOCK_TRANSFER_INBOUND', '移库入库流程'),
+        ('DEPARTMENT_TRANSFER', '部门调拨流程'),
+        ('DAMAGE_OUTBOUND', '报损出库流程'),
+        ('OTHER_INBOUND', '其他入库流程'),
+        ('OTHER_OUTBOUND', '其他出库流程'),
+        ('PRODUCTION_INBOUND', '生产入库流程'),
+        ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
+        ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程')
+)
+INSERT INTO workflow_process_registry (scope_type, scope_id, process_code, business_name, created_by, updated_by)
+SELECT 'GROUP',
+       g.id,
+       seed.process_code,
+       seed.business_name,
+       NULL,
+       NULL
+FROM workflow_process_seed seed
+         CROSS JOIN (SELECT id FROM sys_group WHERE group_code = 'GP00001') g
+ON CONFLICT (scope_type, scope_id, process_code) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS workflow_approval_notification
 (

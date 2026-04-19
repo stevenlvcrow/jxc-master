@@ -13,6 +13,8 @@
         <result property="passwordSalt" column="password_salt"/>
         <result property="status" column="status"/>
         <result property="sourceType" column="source_type"/>
+        <result property="createdScopeType" column="created_scope_type"/>
+        <result property="createdScopeId" column="created_scope_id"/>
         <result property="firstLoginChangedPwd" column="first_login_changed_pwd"/>
         <result property="lastLoginAt" column="last_login_at"/>
         <result property="lastLoginIp" column="last_login_ip"/>
@@ -38,12 +40,57 @@
 
     <select id="selectLoginUserByAccount" resultMap="UserAccountDOResultMap">
         select id, username, real_name, phone, password_hash, password_salt, status, source_type,
+               created_scope_type, created_scope_id,
                first_login_changed_pwd, last_login_at, last_login_ip, created_at, updated_at
         from sys_user
         where username = #{account}
            or phone = #{account}
         order by case when username = #{account} then 0 else 1 end, id asc
         limit 1
+    </select>
+
+    <select id="selectRolelessUsersByCreatedScopes" resultMap="UserAccountDOResultMap">
+        select u.id,
+               u.username,
+               u.real_name,
+               u.phone,
+               u.password_hash,
+               u.password_salt,
+               u.status,
+               u.source_type,
+               u.created_scope_type,
+               u.created_scope_id,
+               u.first_login_changed_pwd,
+               u.last_login_at,
+               u.last_login_ip,
+               u.created_at,
+               u.updated_at
+        from sys_user u
+        where not exists (
+            select 1
+            from sys_user_role_rel urr
+            where urr.user_id = u.id
+              and urr.status = 'ENABLED'
+        )
+          and (
+            <trim suffixOverrides="or">
+                <if test="groupIds != null and groupIds.size() > 0">
+                    (u.created_scope_type = 'GROUP'
+                    and u.created_scope_id in
+                    <foreach collection="groupIds" item="groupId" open="(" separator="," close=")">
+                        #{groupId}
+                    </foreach>) or
+                </if>
+                <if test="storeIds != null and storeIds.size() > 0">
+                    (u.created_scope_type = 'STORE'
+                    and u.created_scope_id in
+                    <foreach collection="storeIds" item="storeId" open="(" separator="," close=")">
+                        #{storeId}
+                    </foreach>) or
+                </if>
+            </trim>
+        )
+        order by u.created_at desc, u.id desc
     </select>
 
     <select id="selectUserRoles" resultMap="UserRoleViewMap">

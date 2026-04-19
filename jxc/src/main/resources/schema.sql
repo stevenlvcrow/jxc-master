@@ -101,7 +101,7 @@ VALUES ('PLATFORM', 0, 'U002', '箱', 'AUXILIARY', 'ENABLED', '初始化数据�
 ON CONFLICT (scope_type, scope_id, unit_code) DO NOTHING;
 
 INSERT INTO sys_unit (scope_type, scope_id, unit_code, unit_name, unit_type, status, remark)
-VALUES ('PLATFORM', 0, 'U003', '袋', 'AUXILIARY', 'DISABLED', '初始化数据：前端静态数据迁移')
+VALUES ('PLATFORM', 0, 'U003', '袋', 'AUXILIARY', 'ENABLED', '初始化数据：前端静态数据迁移')
 ON CONFLICT (scope_type, scope_id, unit_code) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS sys_user
@@ -114,6 +114,8 @@ CREATE TABLE IF NOT EXISTS sys_user
     password_salt            VARCHAR(128),
     status                   VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',
     source_type              VARCHAR(32)  NOT NULL DEFAULT 'EXTERNAL_PUSH',
+    created_scope_type       VARCHAR(16)  NOT NULL DEFAULT 'PLATFORM',
+    created_scope_id         BIGINT       NOT NULL DEFAULT 0,
     first_login_changed_pwd  BOOLEAN      NOT NULL DEFAULT FALSE,
     last_login_at            TIMESTAMP,
     last_login_ip            VARCHAR(64),
@@ -121,11 +123,12 @@ CREATE TABLE IF NOT EXISTS sys_user
     updated_at               TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_sys_user_phone UNIQUE (phone),
     CONSTRAINT ck_sys_user_status CHECK (status IN ('ENABLED', 'DISABLED')),
-    CONSTRAINT ck_sys_user_source_type CHECK (source_type IN ('EXTERNAL_PUSH', 'MANUAL', 'SYSTEM_INIT'))
+    CONSTRAINT ck_sys_user_source_type CHECK (source_type IN ('EXTERNAL_PUSH', 'MANUAL', 'SYSTEM_INIT')),
+    CONSTRAINT ck_sys_user_created_scope_type CHECK (created_scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
 );
 
 COMMENT ON TABLE sys_user IS '统一账号表';
-COMMENT ON COLUMN sys_user.username IS '登录账号，当前等于手机号';
+COMMENT ON COLUMN sys_user.username IS '登录账号/用户编码，默认按姓名助记码+手机号后4位生成（小写）';
 COMMENT ON COLUMN sys_user.real_name IS '姓名';
 COMMENT ON COLUMN sys_user.phone IS '手机号，全局唯一';
 COMMENT ON COLUMN sys_user.password_hash IS '密码密文';
@@ -137,6 +140,42 @@ COMMENT ON COLUMN sys_user.last_login_at IS '最后登录时间';
 COMMENT ON COLUMN sys_user.last_login_ip IS '最后登录IP';
 COMMENT ON COLUMN sys_user.created_at IS '创建时间';
 COMMENT ON COLUMN sys_user.updated_at IS '更新时间';
+
+ALTER TABLE sys_user
+    ADD COLUMN IF NOT EXISTS created_scope_type VARCHAR(16);
+
+ALTER TABLE sys_user
+    ADD COLUMN IF NOT EXISTS created_scope_id BIGINT;
+
+COMMENT ON COLUMN sys_user.created_scope_type IS '创建归属范围：PLATFORM/GROUP/STORE';
+
+COMMENT ON COLUMN sys_user.created_scope_id IS '创建归属范围ID，PLATFORM 固定为 0';
+
+UPDATE sys_user
+SET created_scope_type = 'PLATFORM'
+WHERE created_scope_type IS NULL;
+
+UPDATE sys_user
+SET created_scope_id = 0
+WHERE created_scope_id IS NULL;
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_type SET DEFAULT 'PLATFORM';
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_type SET NOT NULL;
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_id SET DEFAULT 0;
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_id SET NOT NULL;
+
+ALTER TABLE sys_user
+    DROP CONSTRAINT IF EXISTS ck_sys_user_created_scope_type;
+
+ALTER TABLE sys_user
+    ADD CONSTRAINT ck_sys_user_created_scope_type CHECK (created_scope_type IN ('PLATFORM', 'GROUP', 'STORE'));
 
 CREATE TABLE IF NOT EXISTS sys_user_password_log
 (

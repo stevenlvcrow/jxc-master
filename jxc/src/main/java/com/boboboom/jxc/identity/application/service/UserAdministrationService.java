@@ -31,6 +31,8 @@ import java.util.stream.Collectors;
 public class UserAdministrationService {
 
     private static final String STATUS_ENABLED = "ENABLED";
+    private static final String SCOPE_GROUP = "GROUP";
+    private static final String SCOPE_STORE = "STORE";
 
     private final UserAccountRepository userAccountRepository;
     private final UserRoleRelRepository userRoleRelRepository;
@@ -43,6 +45,7 @@ public class UserAdministrationService {
     private final AuditLogRepository auditLogRepository;
     private final IdentityAccessControlService identityAccessControlService;
     private final IdentityAdminLookupService identityAdminLookupService;
+    private final UserCodeGenerator userCodeGenerator;
 
     public UserAdministrationService(UserAccountRepository userAccountRepository,
                                      UserRoleRelRepository userRoleRelRepository,
@@ -54,7 +57,8 @@ public class UserAdministrationService {
                                      LoginLogRepository loginLogRepository,
                                      AuditLogRepository auditLogRepository,
                                      IdentityAccessControlService identityAccessControlService,
-                                     IdentityAdminLookupService identityAdminLookupService) {
+                                     IdentityAdminLookupService identityAdminLookupService,
+                                     UserCodeGenerator userCodeGenerator) {
         this.userAccountRepository = userAccountRepository;
         this.userRoleRelRepository = userRoleRelRepository;
         this.storeRepository = storeRepository;
@@ -66,22 +70,29 @@ public class UserAdministrationService {
         this.auditLogRepository = auditLogRepository;
         this.identityAccessControlService = identityAccessControlService;
         this.identityAdminLookupService = identityAdminLookupService;
+        this.userCodeGenerator = userCodeGenerator;
     }
 
     @Transactional
-    public UserAccountDO createUser(UserUpsertRequest request, String phone) {
+    public UserAccountDO createUser(UserUpsertRequest request,
+                                    String phone,
+                                    String createdScopeType,
+                                    Long createdScopeId) {
         if (userAccountRepository.findByPhone(phone).isPresent()) {
             throw new com.boboboom.jxc.common.BusinessException("手机号已存在");
         }
 
+        String realName = identityAdminLookupService.trim(request.getRealName());
         UserAccountDO user = new UserAccountDO();
-        user.setUsername(phone);
-        user.setRealName(identityAdminLookupService.trim(request.getRealName()));
+        user.setUsername(userCodeGenerator.generate(realName, phone));
+        user.setRealName(realName);
         user.setPhone(phone);
         user.setPasswordHash(PasswordCodec.encode("123654"));
         user.setPasswordSalt(null);
         user.setStatus(identityAdminLookupService.normalizeStatus(request.getStatus()));
         user.setSourceType("MANUAL");
+        user.setCreatedScopeType(createdScopeType);
+        user.setCreatedScopeId(createdScopeId);
         user.setFirstLoginChangedPwd(Boolean.FALSE);
         userAccountRepository.save(user);
         return user;
@@ -99,6 +110,7 @@ public class UserAdministrationService {
     public UserAccountDO updateUser(Long id, UserUpsertRequest request) {
         UserAccountDO user = identityAdminLookupService.requireUser(id);
         String phone = identityAdminLookupService.normalizePhone(request.getPhone());
+        String realName = identityAdminLookupService.trim(request.getRealName());
         boolean phoneExists = userAccountRepository.findByPhone(phone)
                 .map(UserAccountDO::getId)
                 .filter(existingId -> !existingId.equals(id))
@@ -106,9 +118,9 @@ public class UserAdministrationService {
         if (phoneExists) {
             throw new com.boboboom.jxc.common.BusinessException("手机号已存在");
         }
-        user.setRealName(identityAdminLookupService.trim(request.getRealName()));
+        user.setRealName(realName);
         user.setPhone(phone);
-        user.setUsername(phone);
+        user.setUsername(userCodeGenerator.generate(realName, phone));
         user.setStatus(identityAdminLookupService.normalizeStatus(request.getStatus()));
         userAccountRepository.update(user);
         return user;
@@ -125,7 +137,7 @@ public class UserAdministrationService {
                 continue;
             }
             identityAdminLookupService.requireUser(userId);
-            if (!platformAdmin && hasEnabledRoleAssignments(userId)) {
+            if (!platformAdmin) {
                 ensureCanManageUser(userId, operatorId);
             }
             deleteUserRelations(userId);
@@ -163,7 +175,14 @@ public class UserAdministrationService {
                     .distinct()
                     .toList();
 
+            List<Long> rolelessUserIds = userAccountRepository.findRolelessUsersByCreatedScopes(managedGroupIds, managedStoreIds)
+                    .stream()
+                    .map(UserAccountDO::getId)
+                    .filter(Objects::nonNull)
+                    .toList();
+
             LinkedHashSet<Long> visibleUserIds = new LinkedHashSet<>(scopedUserIds);
+            visibleUserIds.addAll(rolelessUserIds);
             if (visibleUserIds.isEmpty()) {
                 return Collections.emptyList();
             }
@@ -228,6 +247,14 @@ public class UserAdministrationService {
         LinkedHashSet<Long> managedStoreIds = new LinkedHashSet<>(identityAccessControlService.listManagedStoreIds(managedGroupIds));
         if (managedGroupIds.isEmpty() && managedStoreIds.isEmpty()) {
             throw new com.boboboom.jxc.common.BusinessException("当前账号无可管理用户范围");
+        }
+
+        if (!hasEnabledRoleAssignments(targetUserId)) {
+            UserAccountDO user = identityAdminLookupService.requireUser(targetUserId);
+            if (matchesCreatedScope(user, managedGroupIds, managedStoreIds)) {
+                return;
+            }
+            throw new com.boboboom.jxc.common.BusinessException("当前账号无该用户操作权限");
         }
 
         Long matched = userRoleRelRepository.countByUserAndScopedRoles(
@@ -308,6 +335,25 @@ public class UserAdministrationService {
                     return "GROUP_ROLE_TEMPLATE".equals(description);
                 })
                 .orElse(false);
+    }
+
+    private boolean matchesCreatedScope(UserAccountDO user,
+                                        LinkedHashSet<Long> managedGroupIds,
+                                        LinkedHashSet<Long> managedStoreIds) {
+        if (user == null) {
+            return false;
+        }
+        Long scopeId = user.getCreatedScopeId();
+        if (scopeId == null) {
+            return false;
+        }
+        if (SCOPE_GROUP.equals(user.getCreatedScopeType())) {
+            return managedGroupIds.contains(scopeId);
+        }
+        if (SCOPE_STORE.equals(user.getCreatedScopeType())) {
+            return managedStoreIds.contains(scopeId);
+        }
+        return false;
     }
 
     private void deleteUserRelations(Long userId) {

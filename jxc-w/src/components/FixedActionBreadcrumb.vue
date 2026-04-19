@@ -6,11 +6,13 @@ type BreadcrumbNav = {
   label: string;
 };
 
-defineProps<{
+withDefaults(defineProps<{
   navs: BreadcrumbNav[];
   activeKey: string;
   showActions?: boolean;
-}>();
+}>(), {
+  showActions: true,
+});
 
 const emit = defineEmits<{
   (e: 'back'): void;

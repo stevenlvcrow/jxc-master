@@ -51,11 +51,11 @@ export type WorkflowPublishHistoryManageItem = {
 
 export type WorkflowProcessItem = {
   id: number;
-  processId: string;
+  process_code: string;
   businessName: string;
   templateId?: string;
   storeIds?: number[];
-  storeNames?: string;
+  storeNames?: string[];
   createdAt: string;
 };
 
@@ -72,7 +72,7 @@ export type WorkflowApprovalNotificationItem = {
   approverName: string;
   approverRole: string;
   auditedAt: string;
-  result: '待审核' | '通过' | '拒绝';
+  result: string;
   remark: string;
   routePath?: string;
   businessCode: string;
@@ -130,7 +130,7 @@ export const publishWorkflowConfigApi = (params: OrgParams) =>
     processDefinitionKey: string;
     version: number;
     deployedAt: string;
-  }>('/api/workflow/configs/publish', undefined, {
+  }>('/api/workflow/configs/current/publish', undefined, {
     params: withParams(params),
   });
 
@@ -159,13 +159,13 @@ export const fetchWorkflowProcessesApi = (orgId?: string) =>
 
 export const createWorkflowProcessApi = (payload: {
   orgId?: string;
-  processCode: string;
+  process_code: string;
   businessName: string;
   templateId?: string;
 }) => apiClient.post<{ id: number }>(
   '/api/workflow/processes',
   {
-    processCode: payload.processCode,
+    process_code: payload.process_code,
     businessName: payload.businessName,
     templateId: payload.templateId,
   },
@@ -174,13 +174,13 @@ export const createWorkflowProcessApi = (payload: {
 
 export const updateWorkflowProcessApi = (id: number, payload: {
   orgId?: string;
-  processCode: string;
+  process_code: string;
   businessName: string;
   templateId?: string;
 }) => apiClient.put<void>(
   `/api/workflow/processes/${id}`,
   {
-    processCode: payload.processCode,
+    process_code: payload.process_code,
     businessName: payload.businessName,
     templateId: payload.templateId,
   },

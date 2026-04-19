@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -144,14 +145,16 @@ public class IdentityUserAdminController {
      * @param request 用户新增请求
      * @return 新建结果
      */
-    public CodeDataResponse<IdPayload> createUser(@Valid @RequestBody UserUpsertRequest request) {
+    public CodeDataResponse<IdPayload> createUser(@Valid @RequestBody UserUpsertRequest request,
+                                                  @RequestParam(required = false) String orgId) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
         if (!platformAdmin && identityAccessControlService.listManagedGroupIds(operatorId).isEmpty()) {
             throw new BusinessException("当前账号无用户创建权限");
         }
+        OrgScopeService.AccessibleScope scope = resolveCreateUserScope(operatorId, platformAdmin, orgId);
         String phone = identityAdminLookupService.normalizePhone(request.getPhone());
-        UserAccountDO user = userAdministrationService.createUser(request, phone);
+        UserAccountDO user = userAdministrationService.createUser(request, phone, scope.scopeType(), scope.scopeId());
         return CodeDataResponse.ok(new IdPayload(user.getId()));
     }
 
@@ -265,5 +268,17 @@ public class IdentityUserAdminController {
         int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
         int toIndex = Math.min(fromIndex + safePageSize, rows.size());
         return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);
+    }
+
+    private OrgScopeService.AccessibleScope resolveCreateUserScope(Long operatorId,
+                                                                   boolean platformAdmin,
+                                                                   String orgId) {
+        if (StringUtils.hasText(orgId)) {
+            return orgScopeService.resolveAccessibleScope(operatorId, orgId);
+        }
+        if (platformAdmin) {
+            return new OrgScopeService.AccessibleScope(OrgScopeService.SCOPE_PLATFORM, 0L, 0L);
+        }
+        throw new BusinessException("请先选择机构");
     }
 }

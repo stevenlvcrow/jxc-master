@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
+import CommonSelectorDialog, { type SelectorColumn, type SelectorTreeNode } from '@/components/CommonSelectorDialog.vue';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
 import {
   createGenericInventoryDocumentApi,
@@ -11,6 +12,7 @@ import {
   type GenericInventoryDocumentLinePayload,
   type GenericInventoryDocumentSavePayload,
 } from '@/api/modules/inventory';
+import { fetchItemCategoryTreeApi, fetchItemsApi, type ItemCategoryTreeNode, type ItemVO } from '@/api/modules/item';
 import { fetchCurrentUserRolesApi } from '@/api/modules/auth';
 import { fetchStoreSalesmenApi, type SalesmanCandidateItem } from '@/api/modules/system-admin';
 import { fetchStoreWarehousesApi, type WarehouseRow } from '@/api/modules/warehouse';
@@ -31,6 +33,16 @@ type WarehouseOption = {
 type SalesmanOption = {
   userId: number;
   label: string;
+};
+
+type ItemCandidate = {
+  id: string;
+  code: string;
+  name: string;
+  spec: string;
+  category: string;
+  stockUnit: string;
+  status: string;
 };
 
 type DocumentItemRow = {
@@ -59,10 +71,30 @@ const detailStatus = ref('');
 const activeNav = ref('basic');
 const warehouses = ref<WarehouseOption[]>([]);
 const salesmen = ref<SalesmanOption[]>([]);
+const itemSelectorVisible = ref(false);
+const itemSelectorKeyword = ref('');
+const itemSelectorStatus = ref('启用');
+const activeItemTreeId = ref<string>('all');
+const itemSelectorCurrentPage = ref(1);
+const itemSelectorPageSize = ref(10);
+const itemSelectorLoading = ref(false);
+const itemSelectorTotal = ref(0);
+const selectingItemRowIndex = ref<number | null>(null);
+const selectedItemCandidates = ref<Array<Record<string, unknown>>>([]);
+const itemTreeData = ref<SelectorTreeNode[]>([]);
+const itemCandidateSource = ref<ItemCandidate[]>([]);
 const rowSeed = ref(1);
 const navs = [
   { key: 'basic', label: '基础信息' },
   { key: 'items', label: '物品信息' },
+];
+const itemTableColumns: SelectorColumn[] = [
+  { prop: 'code', label: '物品编码', minWidth: 130 },
+  { prop: 'name', label: '物品名称', minWidth: 130 },
+  { prop: 'spec', label: '规格型号', minWidth: 120 },
+  { prop: 'category', label: '物品类别', minWidth: 120 },
+  { prop: 'stockUnit', label: '库存单位', minWidth: 100 },
+  { prop: 'status', label: '状态', minWidth: 80 },
 ];
 
 const documentId = computed(() => {
@@ -134,6 +166,119 @@ const syncRowAmount = (row: DocumentItemRow) => {
   const quantity = Number(row.quantity ?? 0);
   const unitPrice = Number(row.unitPrice ?? 0);
   row.amount = Number.isFinite(quantity * unitPrice) ? Number((quantity * unitPrice).toFixed(2)) : 0;
+};
+
+const normalizeItemTreeNodes = (nodes: ItemCategoryTreeNode[]): SelectorTreeNode[] => nodes.map((node) => ({
+  id: String(node.label ?? 'all'),
+  label: String(node.label ?? ''),
+  children: Array.isArray(node.children) ? normalizeItemTreeNodes(node.children) : undefined,
+}));
+
+const loadItemTree = async () => {
+  if (!currentOrgId.value) {
+    itemTreeData.value = [{ id: 'all', label: '全部' }];
+    return;
+  }
+  const tree = await fetchItemCategoryTreeApi(currentOrgId.value);
+  if (!Array.isArray(tree) || !tree.length) {
+    itemTreeData.value = [{ id: 'all', label: '全部' }];
+    return;
+  }
+  itemTreeData.value = [{ id: 'all', label: '全部', children: normalizeItemTreeNodes(tree) }];
+};
+
+const mapItemCandidate = (row: ItemVO): ItemCandidate => ({
+  id: row.id || row.code,
+  code: row.code,
+  name: row.name,
+  spec: row.spec,
+  category: row.category,
+  stockUnit: row.stockUnit,
+  status: row.status,
+});
+
+const loadItemCandidates = async () => {
+  if (!currentOrgId.value) {
+    itemCandidateSource.value = [];
+    itemSelectorTotal.value = 0;
+    return;
+  }
+  itemSelectorLoading.value = true;
+  try {
+    const page = await fetchItemsApi({
+      pageNo: itemSelectorCurrentPage.value,
+      pageSize: itemSelectorPageSize.value,
+      keyword: itemSelectorKeyword.value.trim() || undefined,
+      category: activeItemTreeId.value === 'all' ? undefined : activeItemTreeId.value,
+      status: itemSelectorStatus.value || undefined,
+    }, currentOrgId.value);
+    itemCandidateSource.value = Array.isArray(page.list) ? page.list.map(mapItemCandidate) : [];
+    itemSelectorTotal.value = Number(page.total ?? 0);
+  } finally {
+    itemSelectorLoading.value = false;
+  }
+};
+
+const openItemSelector = async (index: number) => {
+  if (isReadonlyMode.value) {
+    return;
+  }
+  selectingItemRowIndex.value = index;
+  selectedItemCandidates.value = [];
+  if (!itemTreeData.value.length) {
+    await loadItemTree();
+  }
+  await loadItemCandidates();
+  itemSelectorVisible.value = true;
+};
+
+const handleItemSelectorSearch = (payload: { keyword: string; status: string }) => {
+  itemSelectorKeyword.value = payload.keyword;
+  itemSelectorStatus.value = payload.status;
+  itemSelectorCurrentPage.value = 1;
+  void loadItemCandidates();
+};
+
+const handleItemNodeChange = (node: SelectorTreeNode | null) => {
+  activeItemTreeId.value = String(node?.id ?? 'all');
+  itemSelectorCurrentPage.value = 1;
+  void loadItemCandidates();
+};
+
+const handleItemSelectionChange = (selectedRows: Array<Record<string, unknown>>) => {
+  selectedItemCandidates.value = selectedRows;
+};
+
+const handleItemClear = () => {
+  selectedItemCandidates.value = [];
+};
+
+const applyItemToRow = (row: DocumentItemRow, item: ItemCandidate) => {
+  row.itemCode = item.code;
+  row.itemName = item.name;
+  row.spec = item.spec;
+  row.category = item.category;
+  row.unitName = item.stockUnit || '';
+};
+
+const handleItemSelectorConfirm = (selectedRows: Array<Record<string, unknown>>) => {
+  const picked = selectedRows as ItemCandidate[];
+  if (!picked.length) {
+    ElMessage.warning('请至少选择一个物品');
+    return;
+  }
+  if (picked.length > 1) {
+    ElMessage.warning('当前仅支持选择一个物品');
+    return;
+  }
+  const targetIndex = selectingItemRowIndex.value ?? 0;
+  const targetRow = rows.value[targetIndex];
+  if (!targetRow) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  applyItemToRow(targetRow, picked[0]);
+  itemSelectorVisible.value = false;
 };
 
 const loadWarehouses = async () => {
@@ -350,6 +495,17 @@ const updateSalesmanName = (userId?: number) => {
 const reloadPageContext = async () => {
   initExtraFields();
   rows.value = [createEmptyRow()];
+  itemSelectorVisible.value = false;
+  itemSelectorKeyword.value = '';
+  itemSelectorStatus.value = '启用';
+  activeItemTreeId.value = 'all';
+  itemSelectorCurrentPage.value = 1;
+  itemSelectorPageSize.value = 10;
+  itemSelectorTotal.value = 0;
+  selectingItemRowIndex.value = null;
+  selectedItemCandidates.value = [];
+  itemTreeData.value = [];
+  itemCandidateSource.value = [];
   await Promise.all([loadPermission(), loadWarehouses(), loadSalesmen()]);
   await fillDetail();
 };
@@ -510,23 +666,30 @@ onMounted(async () => {
       </template>
       <el-table :data="rows" border stripe class="erp-table" :fit="false">
         <el-table-column label="物品编码" min-width="130">
-          <template #default="{ row }">
-            <el-input v-model="row.itemCode" :disabled="isReadonlyMode" />
+          <template #default="{ row, $index }">
+            <el-input
+              :model-value="row.itemCode"
+              placeholder="点击选择物品"
+              readonly
+              :disabled="isReadonlyMode"
+              class="item-code-picker"
+              @click="openItemSelector($index)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="物品名称" min-width="140">
           <template #default="{ row }">
-            <el-input v-model="row.itemName" :disabled="isReadonlyMode" />
+            {{ row.itemName || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="规格" min-width="120">
+        <el-table-column label="规格型号" min-width="120">
           <template #default="{ row }">
-            <el-input v-model="row.spec" :disabled="isReadonlyMode" />
+            {{ row.spec || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="分类" min-width="120">
+        <el-table-column label="物品类别" min-width="120">
           <template #default="{ row }">
-            <el-input v-model="row.category" :disabled="isReadonlyMode" />
+            {{ row.category || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="单位" min-width="100">
@@ -571,6 +734,38 @@ onMounted(async () => {
         </el-table-column>
       </el-table>
     </el-card>
+
+    <CommonSelectorDialog
+      v-model="itemSelectorVisible"
+      title="选择物品"
+      :tree-data="itemTreeData"
+      :table-data="itemCandidateSource"
+      :loading="itemSelectorLoading"
+      :columns="itemTableColumns"
+      row-key="id"
+      selected-label-key="name"
+      :selected-rows="selectedItemCandidates"
+      :keyword-value="itemSelectorKeyword"
+      :status-value="itemSelectorStatus"
+      keyword-label="物品"
+      keyword-placeholder="支持按物品编码和名称查询..."
+      status-label="启用状态"
+      :status-options="[
+        { label: '全部', value: '' },
+        { label: '启用', value: '启用' },
+        { label: '停用', value: '停用' },
+      ]"
+      :total="itemSelectorTotal"
+      :current-page="itemSelectorCurrentPage"
+      :page-size="itemSelectorPageSize"
+      @search="handleItemSelectorSearch"
+      @node-change="handleItemNodeChange"
+      @selection-change="handleItemSelectionChange"
+      @clear-selection="handleItemClear"
+      @page-change="(page) => { itemSelectorCurrentPage = page; loadItemCandidates(); }"
+      @page-size-change="(size) => { itemSelectorPageSize = size; itemSelectorCurrentPage = 1; loadItemCandidates(); }"
+      @confirm="handleItemSelectorConfirm"
+    />
   </section>
 </template>
 
@@ -589,5 +784,9 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.item-code-picker {
+  cursor: pointer;
 }
 </style>

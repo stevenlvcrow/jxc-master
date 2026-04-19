@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
+import { buildMnemonicCode } from '@/utils/mnemonic';
 import {
   batchDeleteAdminUsersApi,
   assignAdminUserRolesApi,
@@ -95,6 +96,12 @@ const roleOptions = computed(() => roles.value.map((item) => ({
   label: `${item.roleName}（${item.roleCode}）`,
   value: item.id,
 })));
+const userCodePreview = computed(() => {
+  const mnemonic = buildMnemonicCode(createForm.realName).toLowerCase();
+  const phone = createForm.phone.trim();
+  const suffix = phone.length <= 4 ? phone : phone.slice(-4);
+  return `${mnemonic}${suffix}`;
+});
 const userDialogTitle = computed(() => (editingUser.value ? '编辑用户' : '新增用户'));
 const pagedUsers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
@@ -259,7 +266,7 @@ const submitUserForm = async () => {
       await updateAdminUserApi(editingUser.value.id, payload);
       ElMessage.success('用户更新成功');
     } else {
-      await createAdminUserApi(payload);
+      await createAdminUserApi(payload, currentOrgId.value);
       ElMessage.success('新增用户成功');
     }
     createDialogVisible.value = false;
@@ -723,6 +730,9 @@ watch(
         </el-form-item>
         <el-form-item label="手机号" required>
           <el-input v-model="createForm.phone" maxlength="20" />
+        </el-form-item>
+        <el-form-item label="用户编码">
+          <el-input :model-value="userCodePreview" disabled placeholder="根据姓名和手机号自动生成" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="createForm.status" style="width: 100%">

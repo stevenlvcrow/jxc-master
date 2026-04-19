@@ -11,6 +11,9 @@ public interface UserAccountMapper extends BaseMapper<UserAccountDO> {
 
     UserAccountDO selectLoginUserByAccount(@Param("account") String account);
 
+    List<UserAccountDO> selectRolelessUsersByCreatedScopes(@Param("groupIds") List<Long> groupIds,
+                                                           @Param("storeIds") List<Long> storeIds);
+
     List<UserRoleView> selectUserRoles(@Param("userId") Long userId);
 
     List<UserRoleView> selectUserRolesByUserIds(@Param("userIds") List<Long> userIds);

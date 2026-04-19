@@ -41,6 +41,21 @@ public class InventoryWorkflowBootstrapService {
         WorkflowProcessRegistryDO sourceRegistry = workflowProcessRegistryRepository
                 .findByScopeAndProcessCode(SCOPE_GROUP, groupId, SOURCE_BUSINESS_CODE)
                 .orElse(null);
+        if (sourceRegistry == null) {
+            sourceRegistry = new WorkflowProcessRegistryDO();
+            sourceRegistry.setScopeType(SCOPE_GROUP);
+            sourceRegistry.setScopeId(groupId);
+            sourceRegistry.setProcessCode(SOURCE_BUSINESS_CODE);
+            sourceRegistry.setBusinessName(InventoryDocumentType.PURCHASE_INBOUND.getBusinessName() + "流程");
+            sourceRegistry.setTemplateId(null);
+            sourceRegistry.setCreatedBy(operatorId);
+            sourceRegistry.setUpdatedBy(operatorId);
+            workflowProcessRegistryRepository.save(sourceRegistry);
+        } else if (!StringUtils.hasText(sourceRegistry.getBusinessName())) {
+            sourceRegistry.setBusinessName(InventoryDocumentType.PURCHASE_INBOUND.getBusinessName() + "流程");
+            sourceRegistry.setUpdatedBy(operatorId);
+            workflowProcessRegistryRepository.update(sourceRegistry);
+        }
         String sourceTemplateId = sourceRegistry == null ? null : trimToNull(sourceRegistry.getTemplateId());
         WorkflowDefinitionConfigDO sourceConfig = null;
         if (StringUtils.hasText(sourceTemplateId)) {

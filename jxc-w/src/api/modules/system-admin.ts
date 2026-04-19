@@ -1,5 +1,43 @@
 import { apiClient } from '@/api/http-client';
 
+type AdminPageData<T> = {
+  list: T[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
+};
+
+const ADMIN_LIST_PAGE_SIZE = 200;
+
+const fetchAdminPagedList = async <T>(
+  url: string,
+  params?: Record<string, unknown>,
+) => {
+  const rows: T[] = [];
+  let pageNum = 1;
+  let total = 0;
+
+  do {
+    const page = await apiClient.get<AdminPageData<T>>(url, {
+      params: {
+        ...params,
+        pageNum,
+        pageSize: ADMIN_LIST_PAGE_SIZE,
+      },
+    });
+    const list = Array.isArray(page?.list) ? page.list : [];
+    rows.push(...list);
+    total = Number(page?.total ?? rows.length);
+
+    if (!list.length || Number(page?.pageSize ?? 0) <= 0) {
+      break;
+    }
+    pageNum += 1;
+  } while (rows.length < total);
+
+  return rows;
+};
+
 export type RoleAssignment = {
   roleId: number;
   roleCode: string;
@@ -95,12 +133,10 @@ export type RoleUpsertPayload = {
   menuIds?: number[];
 };
 
-export const fetchAdminUsersApi = () => apiClient.get<UserAdminItem[]>('/api/identity/admin/users');
+export const fetchAdminUsersApi = () => fetchAdminPagedList<UserAdminItem>('/api/identity/admin/users');
 export const fetchStoreSalesmenApi = (orgId: string) =>
-  apiClient.get<SalesmanCandidateItem[]>('/api/identity/admin/users/salesmen', {
-    params: { orgId },
-  });
-export const fetchAdminGroupsApi = () => apiClient.get<GroupAdminItem[]>('/api/identity/admin/groups');
+  fetchAdminPagedList<SalesmanCandidateItem>('/api/identity/admin/users/salesmen', { orgId });
+export const fetchAdminGroupsApi = () => fetchAdminPagedList<GroupAdminItem>('/api/identity/admin/groups');
 
 export const createAdminGroupApi = (payload: {
   groupCode?: string;
@@ -126,10 +162,10 @@ export const bindGroupAdminApi = (groupId: number, payload: { phone: string; rea
   apiClient.post<void>(`/api/identity/admin/groups/${groupId}/bind-admin`, payload);
 
 export const fetchGroupStoresApi = (groupId: number) =>
-  apiClient.get<GroupStoreItem[]>(`/api/identity/admin/groups/${groupId}/stores`);
+  fetchAdminPagedList<GroupStoreItem>(`/api/identity/admin/groups/${groupId}/stores`);
 
 export const fetchGroupAdminCandidatesApi = (groupId: number) =>
-  apiClient.get<GroupAdminCandidateItem[]>(`/api/identity/admin/groups/${groupId}/admin-candidates`);
+  fetchAdminPagedList<GroupAdminCandidateItem>(`/api/identity/admin/groups/${groupId}/admin-candidates`);
 
 export const createGroupStoreApi = (groupId: number, payload: {
   storeCode?: string;
@@ -153,8 +189,12 @@ export const updateGroupStoreApi = (groupId: number, storeId: number, payload: {
 export const deleteGroupStoreApi = (groupId: number, storeId: number) =>
   apiClient.delete<void>(`/api/identity/admin/groups/${groupId}/stores/${storeId}`);
 
-export const createAdminUserApi = (payload: { realName: string; phone: string; status?: string }) =>
-  apiClient.post<{ id: number }>('/api/identity/admin/users', payload);
+export const createAdminUserApi = (
+  payload: { realName: string; phone: string; status?: string },
+  orgId?: string,
+) => apiClient.post<{ id: number }>('/api/identity/admin/users', payload, {
+  params: orgId ? { orgId } : undefined,
+});
 
 export const updateAdminUserApi = (id: number, payload: { realName: string; phone: string; status?: string }) =>
   apiClient.put<void>(`/api/identity/admin/users/${id}`, payload);
@@ -174,7 +214,7 @@ export const assignAdminUserRolesApi = (
 ) => apiClient.put<void>(`/api/identity/admin/users/${id}/roles`, { assignments });
 
 export const fetchAdminRolesApi = (orgId?: string) =>
-  apiClient.get<RoleAdminItem[]>('/api/identity/admin/roles', { params: orgId ? { orgId } : undefined });
+  fetchAdminPagedList<RoleAdminItem>('/api/identity/admin/roles', orgId ? { orgId } : undefined);
 
 export const createAdminRoleApi = (payload: RoleUpsertPayload, orgId?: string) =>
   apiClient.post<{ id: number }>('/api/identity/admin/roles', payload, {
@@ -190,7 +230,7 @@ export const updateAdminRoleStatusApi = (id: number, status: 'ENABLED' | 'DISABL
   apiClient.put<void>(`/api/identity/admin/roles/${id}/status`, { status });
 
 export const fetchAdminMenusApi = (orgId?: string) =>
-  apiClient.get<MenuAdminItem[]>('/api/identity/admin/menus', { params: orgId ? { orgId } : undefined });
+  fetchAdminPagedList<MenuAdminItem>('/api/identity/admin/menus', orgId ? { orgId } : undefined);
 
 export const assignAdminRoleMenusApi = (id: number, menuIds: number[]) =>
   apiClient.put<void>(`/api/identity/admin/roles/${id}/menus`, { menuIds });

@@ -3,7 +3,6 @@ package com.boboboom.jxc.identity.interfaces.rest;
 import com.boboboom.jxc.identity.application.service.GroupAdministrationService;
 import com.boboboom.jxc.identity.application.service.IdentityAccessControlService;
 import com.boboboom.jxc.identity.application.service.IdentityAdminLookupService;
-import com.boboboom.jxc.identity.application.service.StoreSampleDataInitializationService;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupAdminBindRequest;
@@ -36,7 +35,6 @@ public class IdentityGroupAdminController {
 
     private final IdentityAccessControlService identityAccessControlService;
     private final GroupAdministrationService groupAdministrationService;
-    private final StoreSampleDataInitializationService storeSampleDataInitializationService;
     private final IdentityAdminLookupService identityAdminLookupService;
     private final IdentityAdminSupport identityAdminSupport;
 
@@ -45,18 +43,15 @@ public class IdentityGroupAdminController {
      *
      * @param identityAccessControlService 组织权限控制服务
      * @param groupAdministrationService 分组管理服务
-     * @param storeSampleDataInitializationService 门店初始化服务
      * @param identityAdminLookupService 组织管理查询服务
      * @param identityAdminSupport 当前登录管理员辅助服务
      */
     public IdentityGroupAdminController(IdentityAccessControlService identityAccessControlService,
                                         GroupAdministrationService groupAdministrationService,
-                                        StoreSampleDataInitializationService storeSampleDataInitializationService,
                                         IdentityAdminLookupService identityAdminLookupService,
                                         IdentityAdminSupport identityAdminSupport) {
         this.identityAccessControlService = identityAccessControlService;
         this.groupAdministrationService = groupAdministrationService;
-        this.storeSampleDataInitializationService = storeSampleDataInitializationService;
         this.identityAdminLookupService = identityAdminLookupService;
         this.identityAdminSupport = identityAdminSupport;
     }
@@ -254,7 +249,6 @@ public class IdentityGroupAdminController {
                                                         @Valid @RequestBody GroupStoreCreateRequest request) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
         StoreDO store = groupAdministrationService.createGroupStore(groupId, request);
-        storeSampleDataInitializationService.initializeStoreSampleData(store.getId());
         return CodeDataResponse.ok(new IdPayload(store.getId()));
     }
 
