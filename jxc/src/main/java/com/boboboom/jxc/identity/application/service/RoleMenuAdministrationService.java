@@ -31,17 +31,15 @@ public class RoleMenuAdministrationService {
     private static final String STORE_ROLE_TYPE = "STORE";
     private static final String GROUP_MENU_PREFIX = "GROUP_";
     private static final String STORE_MENU_PREFIX = "STORE_BIZ_";
+    // Platform roles can see platform admin menus plus the template archive pages,
+    // but not the item management page itself.
     private static final LinkedHashSet<String> PLATFORM_ROLE_MENU_CODES = new LinkedHashSet<>(List.of(
             "SYS_MGMT",
             "GROUP_MGMT_ADMIN",
             "ROLE_MGMT",
             "USER_MGMT",
-            "MENU_PERMISSION_MGMT"
-    ));
-    private static final LinkedHashSet<String> PLATFORM_TEMPLATE_MENU_CODES = new LinkedHashSet<>(List.of(
             "STORE_BIZ_MOD_08",
             "STORE_BIZ_GRP_08_01",
-            "STORE_BIZ_MENU_08_01_01",
             "STORE_BIZ_MENU_08_01_02",
             "STORE_BIZ_MENU_08_01_03",
             "STORE_BIZ_MENU_08_01_04",
@@ -177,23 +175,14 @@ public class RoleMenuAdministrationService {
             ensureRoleMenuRel(groupAdminRole.getId(), userMgmt.getId());
             ensureRoleMenuRel(groupAdminRole.getId(), roleMgmt.getId());
             ensureRoleMenuRel(groupAdminRole.getId(), menuPermMgmt.getId());
-            ensureRoleMenuRel(groupAdminRole.getId(), archiveRoot.getId());
-            ensureRoleMenuRel(groupAdminRole.getId(), archiveGroup.getId());
-            ensureRoleMenuRel(groupAdminRole.getId(), archiveItem.getId());
-            ensureRoleMenuRel(groupAdminRole.getId(), archiveCategory.getId());
-            ensureRoleMenuRel(groupAdminRole.getId(), archiveUnit.getId());
-            ensureRoleMenuRel(groupAdminRole.getId(), archiveStatistics.getId());
-            ensureRoleMenuRel(groupAdminRole.getId(), archiveTag.getId());
         }
         if (platformSuperAdminRole != null) {
-            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveRoot.getId());
-            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveGroup.getId());
-            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveItem.getId());
             ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveCategory.getId());
             ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveUnit.getId());
             ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveStatistics.getId());
             ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveTag.getId());
         }
+        cleanupPlatformItemManagementMenu(archiveItem.getId());
     }
 
     public List<MenuAssignmentOption> listAssignableMenus(Long operatorId,
@@ -344,7 +333,7 @@ public class RoleMenuAdministrationService {
             return PLATFORM_ROLE_MENU_CODES.contains(normalizedMenuCode);
         }
         if (GROUP_ROLE_TYPE.equals(normalizedRoleType)) {
-            return normalizedMenuCode.startsWith(GROUP_MENU_PREFIX) || PLATFORM_TEMPLATE_MENU_CODES.contains(normalizedMenuCode);
+            return normalizedMenuCode.startsWith(GROUP_MENU_PREFIX);
         }
         if (STORE_ROLE_TYPE.equals(normalizedRoleType)) {
             return normalizedMenuCode.startsWith(STORE_MENU_PREFIX);
@@ -363,10 +352,10 @@ public class RoleMenuAdministrationService {
     private String buildRoleMenuValidationMessage(String roleType) {
         String normalizedRoleType = trimToNull(roleType);
         if (PLATFORM_ROLE_TYPE.equals(normalizedRoleType)) {
-            return "平台角色仅可分配平台菜单";
+            return "平台角色仅可分配平台菜单和基础模板菜单";
         }
         if (GROUP_ROLE_TYPE.equals(normalizedRoleType)) {
-            return "集团角色仅可分配集团菜单和基础模板菜单";
+            return "集团角色仅可分配集团菜单";
         }
         if (STORE_ROLE_TYPE.equals(normalizedRoleType)) {
             return "门店角色仅可分配门店菜单";
@@ -397,6 +386,18 @@ public class RoleMenuAdministrationService {
             throw new BusinessException("请先选择集团机构");
         }
         return scope.groupId();
+    }
+
+    private void cleanupPlatformItemManagementMenu(Long itemManagementMenuId) {
+        if (itemManagementMenuId == null) {
+            return;
+        }
+        List<RoleDO> platformRoles = roleRepository.findByTenantGroupId(0L).stream()
+                .filter(role -> PLATFORM_ROLE_TYPE.equals(role.getRoleType()))
+                .toList();
+        for (RoleDO role : platformRoles) {
+            roleMenuRelRepository.deleteByRoleIdAndMenuId(role.getId(), itemManagementMenuId);
+        }
     }
 
     private String trimToNull(String value) {

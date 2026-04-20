@@ -7,7 +7,6 @@ import com.boboboom.jxc.identity.domain.repository.StoreAdminRelRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupStoreCreateRequest;
@@ -61,10 +60,8 @@ public class GroupAdministrationService {
         if (platformAdmin) {
             return groupRepository.findAllOrdered();
         }
-        RoleDO groupAdminRole = identityAdminLookupService.requireRoleByCode("GROUP_ADMIN");
         List<Long> groupIds = userRoleRelRepository.findByUserIdAndStatus(operatorId, STATUS_ENABLED)
                 .stream()
-                .filter(rel -> groupAdminRole.getId().equals(rel.getRoleId()))
                 .filter(rel -> "GROUP".equals(rel.getScopeType()))
                 .map(UserRoleRelDO::getScopeId)
                 .filter(Objects::nonNull)

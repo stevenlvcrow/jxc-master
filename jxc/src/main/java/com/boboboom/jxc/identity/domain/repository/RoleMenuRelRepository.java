@@ -15,5 +15,7 @@ public interface RoleMenuRelRepository {
 
     void deleteByRoleId(Long roleId);
 
+    void deleteByRoleIdAndMenuId(Long roleId, Long menuId);
+
     void save(RoleMenuRelDO rel);
 }

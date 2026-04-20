@@ -127,14 +127,22 @@ public class RoleAdministrationService {
 
     @Transactional
     public RoleDO createRole(RoleUpsertRequest request, Long operatorId, boolean platformAdmin, String orgId) {
+        boolean builtin = normalizeBuiltin(request.getBuiltin());
         String roleType = trim(request.getRoleType());
         Long tenantGroupId;
         if (platformAdmin) {
-            if (!PLATFORM_ROLE_TYPE.equals(roleType) && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
-                throw new BusinessException("平台账号仅可创建平台/集团/门店模板角色");
+            if (builtin) {
+                if (!PLATFORM_ROLE_TYPE.equals(roleType) && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
+                    throw new BusinessException("平台模板角色仅支持平台/集团/门店类型");
+                }
+            } else if (!PLATFORM_ROLE_TYPE.equals(roleType)) {
+                throw new BusinessException("平台真实角色仅可创建平台角色");
             }
             tenantGroupId = 0L;
         } else {
+            if (builtin) {
+                throw new BusinessException("集团仅可创建真实角色");
+            }
             if (!"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
                 throw new BusinessException("集团账号仅可创建集团/门店角色");
             }
@@ -151,6 +159,7 @@ public class RoleAdministrationService {
         role.setTenantGroupId(tenantGroupId);
         role.setRoleCode(roleCode);
         role.setRoleName(trim(request.getRoleName()));
+        role.setBuiltin(builtin);
         role.setRoleType(roleType);
         role.setDataScopeType(trim(request.getDataScopeType()));
         role.setDescription(trimNullable(request.getDescription()));
@@ -173,15 +182,27 @@ public class RoleAdministrationService {
         identityAccessControlService.ensureCanManageRole(operatorId, role);
         ensureRoleMutable(role);
 
+        boolean builtin = normalizeBuiltin(request.getBuiltin());
         String roleType = trim(request.getRoleType());
         if (platformAdmin) {
-            if (!PLATFORM_ROLE_TYPE.equals(roleType) && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
-                throw new BusinessException("平台账号仅可设置平台/集团/门店模板角色");
+            if (builtin) {
+                if (!PLATFORM_ROLE_TYPE.equals(roleType) && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
+                    throw new BusinessException("平台模板角色仅支持平台/集团/门店类型");
+                }
+            } else if (!PLATFORM_ROLE_TYPE.equals(roleType)) {
+                throw new BusinessException("平台真实角色仅可设置为平台角色");
             }
-        } else if (!"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
-            throw new BusinessException("集团账号仅可设置集团/门店角色");
+        } else {
+            boolean currentBuiltin = isRoleBuiltin(role);
+            if (builtin != currentBuiltin) {
+                throw new BusinessException("集团不可修改角色属性");
+            }
+            if (!"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
+                throw new BusinessException("集团账号仅可设置集团/门店角色");
+            }
         }
         role.setRoleName(trim(request.getRoleName()));
+        role.setBuiltin(builtin);
         role.setRoleType(roleType);
         role.setDataScopeType(trim(request.getDataScopeType()));
         role.setDescription(trimNullable(request.getDescription()));
@@ -231,12 +252,12 @@ public class RoleAdministrationService {
         if (PROTECTED_ROLE_CODES.contains(role.getRoleCode())) {
             return true;
         }
+        if (role.getBuiltin() != null) {
+            return Boolean.TRUE.equals(role.getBuiltin());
+        }
         String roleCode = trimNullable(role.getRoleCode());
         if (roleCode == null) {
             return false;
-        }
-        if (PLATFORM_ROLE_TYPE.equals(role.getRoleType()) && role.getTenantGroupId() != null && role.getTenantGroupId() == 0L) {
-            return true;
         }
         return !roleCode.startsWith(ROLE_CODE_PREFIX);
     }
@@ -262,16 +283,18 @@ public class RoleAdministrationService {
         for (RoleDO template : templateRoles) {
             RoleDO existing = roleRepository.findByTenantGroupIdAndRoleCode(groupId, template.getRoleCode()).orElse(null);
             if (existing != null) {
+                existing.setBuiltin(Boolean.TRUE);
                 if (!STATUS_ENABLED.equals(existing.getStatus())) {
                     existing.setStatus(STATUS_ENABLED);
-                    roleRepository.update(existing);
                 }
+                roleRepository.update(existing);
                 continue;
             }
             RoleDO role = new RoleDO();
             role.setTenantGroupId(groupId);
             role.setRoleCode(template.getRoleCode());
             role.setRoleName(template.getRoleName());
+            role.setBuiltin(Boolean.TRUE);
             role.setRoleType(template.getRoleType());
             role.setDataScopeType(template.getDataScopeType());
             role.setDescription(template.getDescription());
@@ -309,6 +332,10 @@ public class RoleAdministrationService {
             throw new BusinessException("状态仅支持 ENABLED 或 DISABLED");
         }
         return status;
+    }
+
+    private boolean normalizeBuiltin(Boolean builtin) {
+        return Boolean.TRUE.equals(builtin);
     }
 
     private String trim(String value) {

@@ -7,10 +7,8 @@ import ItemPaginationSection from '@/views/items/components/ItemPaginationSectio
 import {
   createGroupStoreApi,
   deleteGroupStoreApi,
-  fetchAdminGroupsApi,
   fetchGroupStoresApi,
   updateGroupStoreApi,
-  type GroupAdminItem,
   type GroupStoreItem,
 } from '@/api/modules/system-admin';
 import { useSessionStore, type OrgNode } from '@/stores/session';
@@ -22,7 +20,6 @@ const createDialogVisible = ref(false);
 const dialogTitle = ref('新增门店');
 const isEdit = ref(false);
 const editingStoreId = ref<number | null>(null);
-const groups = ref<GroupAdminItem[]>([]);
 const stores = ref<GroupStoreItem[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
@@ -80,25 +77,17 @@ const resetCreateForm = () => {
   dialogTitle.value = '新增门店';
 };
 
-const loadGroups = async () => {
-  groups.value = await fetchAdminGroupsApi();
-  if (!groups.value.length) {
-    selectedGroupId.value = undefined;
-    stores.value = [];
-    return;
-  }
+const resolveSelectedGroupId = () => {
   const currentGroup = resolveParentGroup(sessionStore.currentOrg);
-  if (!selectedGroupId.value) {
-    if (currentGroup?.id.startsWith('group-')) {
-      const currentId = Number(currentGroup.id.slice('group-'.length));
-      if (!Number.isNaN(currentId) && groups.value.some((item) => item.id === currentId)) {
-        selectedGroupId.value = currentId;
-      }
-    }
-    if (!selectedGroupId.value) {
-      selectedGroupId.value = groups.value[0].id;
+  if (currentGroup?.id.startsWith('group-')) {
+    const currentId = Number(currentGroup.id.slice('group-'.length));
+    if (Number.isFinite(currentId) && currentId > 0) {
+      selectedGroupId.value = currentId;
+      return;
     }
   }
+  selectedGroupId.value = undefined;
+  stores.value = [];
 };
 
 const loadStores = async () => {
@@ -115,13 +104,8 @@ const loadStores = async () => {
 };
 
 const refresh = async () => {
-  loading.value = true;
-  try {
-    await loadGroups();
-    await loadStores();
-  } finally {
-    loading.value = false;
-  }
+  resolveSelectedGroupId();
+  await loadStores();
 };
 
 const handleToolbarAction = (key: string) => {
@@ -234,16 +218,6 @@ onMounted(() => {
   <div class="page-grid single">
     <section class="panel item-main-panel">
       <CommonQuerySection :model="query">
-        <el-form-item label="集团">
-          <el-select v-model="selectedGroupId" style="width: 260px" filterable>
-            <el-option
-              v-for="group in groups"
-              :key="group.id"
-              :label="`${group.groupName}（${group.groupCode}）`"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
         <el-form-item label="关键字">
           <el-input v-model="query.keyword" placeholder="门店编码/名称/联系方式" clearable style="width: 260px" />
         </el-form-item>

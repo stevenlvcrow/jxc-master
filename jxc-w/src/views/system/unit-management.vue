@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { createUnitApi, deleteUnitApi, fetchUnitsApi, updateUnitApi, type UnitItem } from '@/api/modules/unit';
+import {
+  createUnitApi,
+  deleteUnitApi,
+  fetchUnitsApi,
+  updateUnitApi,
+  type UnitItem,
+} from '@/api/modules/unit';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import { useSessionStore } from '@/stores/session';
 import { resolveArchiveOrgId } from '@/views/items/org';
@@ -42,6 +48,7 @@ const emptyText = computed(() => {
 });
 
 const tableData = ref<UnitRecord[]>([]);
+const total = ref(0);
 const loading = ref(false);
 
 const dialogVisible = ref(false);
@@ -73,8 +80,7 @@ const filteredData = computed(() => {
   return tableData.value;
 });
 const pagedData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  return filteredData.value.slice(start, start + pageSize.value);
+  return filteredData.value;
 });
 
 const statusLabel = (status: UnitStatus) => (status === 'ENABLED' ? '启用' : '停用');
@@ -115,11 +121,13 @@ const loadUnits = async () => {
       return;
     }
     const data = await fetchUnitsApi({
+      pageNum: currentPage.value,
+      pageSize: pageSize.value,
       keyword: query.keyword.trim() || undefined,
       status: query.status,
       unitType: query.unitType,
     }, orgId);
-    tableData.value = data.map((item: UnitItem) => ({
+    tableData.value = data.list.map((item: UnitItem) => ({
       id: item.id,
       code: item.code,
       name: item.name,
@@ -127,6 +135,10 @@ const loadUnits = async () => {
       status: item.status,
       createdAt: item.createdAt,
     }));
+    total.value = data.total;
+  } catch {
+    tableData.value = [];
+    total.value = 0;
   } finally {
     loading.value = false;
   }
@@ -144,10 +156,12 @@ const handleReset = () => {
 };
 const handlePageChange = (page: number) => {
   currentPage.value = page;
+  void loadUnits();
 };
 const handlePageSizeChange = (size: number) => {
   pageSize.value = size;
   currentPage.value = 1;
+  void loadUnits();
 };
 
 const handleDelete = async (row: UnitRecord) => {
@@ -160,7 +174,7 @@ const handleDelete = async (row: UnitRecord) => {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
   });
-  await deleteUnitApi(row.id, sessionStore.currentOrgId || undefined);
+  await deleteUnitApi(row.id, archiveOrgId.value);
   ElMessage.success('删除成功');
   await loadUnits();
 };
@@ -281,7 +295,7 @@ watch(
         :selected-count="0"
         :current-page="currentPage"
         :page-size="pageSize"
-        :total="filteredData.length"
+        :total="total"
         @update:current-page="handlePageChange"
         @update:page-size="handlePageSizeChange"
       />

@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS sys_role
     tenant_group_id   BIGINT       NOT NULL DEFAULT 0,
     role_code         VARCHAR(64)  NOT NULL,
     role_name         VARCHAR(128) NOT NULL,
+    builtin           BOOLEAN      NOT NULL DEFAULT FALSE,
     role_type         VARCHAR(16)  NOT NULL,
     data_scope_type   VARCHAR(32)  NOT NULL DEFAULT 'SELF',
     description       VARCHAR(500),
@@ -224,6 +225,7 @@ COMMENT ON COLUMN sys_role.tenant_group_id IS '租户集团ID，0表示平台租
 COMMENT ON COLUMN sys_role.role_type IS '角色层级：平台/集团/门店';
 COMMENT ON COLUMN sys_role.role_code IS '角色编码';
 COMMENT ON COLUMN sys_role.role_name IS '角色名称';
+COMMENT ON COLUMN sys_role.builtin IS '是否内置模板角色：TRUE=模板角色，FALSE=真实角色';
 COMMENT ON COLUMN sys_role.data_scope_type IS '数据权限范围：ALL/GROUP/STORE/SELF/CUSTOM';
 COMMENT ON COLUMN sys_role.description IS '角色说明';
 COMMENT ON COLUMN sys_role.status IS '状态：ENABLED/DISABLED';
@@ -233,6 +235,31 @@ COMMENT ON COLUMN sys_role.updated_at IS '更新时间';
 
 ALTER TABLE sys_role
 ADD COLUMN IF NOT EXISTS tenant_group_id BIGINT NOT NULL DEFAULT 0;
+
+ALTER TABLE sys_role
+ADD COLUMN IF NOT EXISTS builtin BOOLEAN NOT NULL DEFAULT FALSE;
+
+UPDATE sys_role
+SET builtin = TRUE
+WHERE role_code = 'PLATFORM_SUPER_ADMIN';
+
+UPDATE sys_role role
+SET builtin = TRUE
+WHERE role.tenant_group_id = 0
+  AND role.role_type IN ('GROUP', 'STORE');
+
+UPDATE sys_role role
+SET builtin = TRUE
+WHERE role.tenant_group_id > 0
+  AND role.role_type IN ('GROUP', 'STORE')
+  AND EXISTS (
+      SELECT 1
+      FROM sys_role template
+      WHERE template.tenant_group_id = 0
+        AND template.builtin = TRUE
+        AND template.role_code = role.role_code
+        AND template.role_type = role.role_type
+  );
 
 ALTER TABLE sys_role
 DROP CONSTRAINT IF EXISTS uk_sys_role_code;
@@ -935,70 +962,70 @@ WHERE menu_code = 'GROUP_WORKFLOW_CONFIG';
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'PLATFORM_SUPER_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'PLATFORM_SUPER_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'SYS_MGMT')
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'GROUP_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT')
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'GROUP_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_STORE_MGMT')
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'PLATFORM_SUPER_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'PLATFORM_SUPER_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'ROLE_MGMT')
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'PLATFORM_SUPER_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'PLATFORM_SUPER_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT_ADMIN')
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'PLATFORM_SUPER_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'PLATFORM_SUPER_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'USER_MGMT')
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'PLATFORM_SUPER_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'PLATFORM_SUPER_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'MENU_PERMISSION_MGMT')
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'GROUP_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_WORKBENCH')
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
-    (SELECT id FROM sys_role WHERE role_code = 'GROUP_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT')
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 SELECT
-    (SELECT id FROM sys_role WHERE role_code = 'GROUP_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_ADMIN'),
     m.id
 FROM sys_menu m
 WHERE m.menu_code IN (
@@ -4436,7 +4463,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 SELECT
-    (SELECT id FROM sys_role WHERE role_code = 'STORE_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'STORE_ADMIN'),
     m.id
 FROM sys_menu m
 WHERE m.menu_code LIKE 'STORE_BIZ_%'
@@ -4444,29 +4471,27 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 SELECT
-    (SELECT id FROM sys_role WHERE role_code = 'GROUP_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_ADMIN'),
     m.id
 FROM sys_menu m
 WHERE m.menu_code IN (
-    'STORE_BIZ_MOD_08',
-    'STORE_BIZ_GRP_08_01',
-    'STORE_BIZ_MENU_08_01_01',
-    'STORE_BIZ_MENU_08_01_02',
-    'STORE_BIZ_MENU_08_01_03',
-    'STORE_BIZ_MENU_08_01_04',
-    'STORE_BIZ_MENU_08_01_05'
+    'GROUP_INFO',
+    'GROUP_STORE_MGMT',
+    'GROUP_USER_ROLE_MGMT',
+    'GROUP_ROLE_MGMT',
+    'GROUP_MENU_PERMISSION_MGMT',
+    'GROUP_WORKFLOW_HISTORY_MGMT'
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 SELECT
-    (SELECT id FROM sys_role WHERE role_code = 'PLATFORM_SUPER_ADMIN'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'PLATFORM_SUPER_ADMIN'),
     m.id
 FROM sys_menu m
 WHERE m.menu_code IN (
     'STORE_BIZ_MOD_08',
     'STORE_BIZ_GRP_08_01',
-    'STORE_BIZ_MENU_08_01_01',
     'STORE_BIZ_MENU_08_01_02',
     'STORE_BIZ_MENU_08_01_03',
     'STORE_BIZ_MENU_08_01_04',

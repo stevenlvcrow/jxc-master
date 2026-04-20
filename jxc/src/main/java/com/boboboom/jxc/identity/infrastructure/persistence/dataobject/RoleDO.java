@@ -8,6 +8,7 @@ public class RoleDO extends BaseAuditDO {
     private Long tenantGroupId;
     private String roleCode;
     private String roleName;
+    private Boolean builtin;
     private String roleType;
     private String dataScopeType;
     private String description;
@@ -36,6 +37,14 @@ public class RoleDO extends BaseAuditDO {
 
     public void setRoleName(String roleName) {
         this.roleName = roleName;
+    }
+
+    public Boolean getBuiltin() {
+        return builtin;
+    }
+
+    public void setBuiltin(Boolean builtin) {
+        this.builtin = builtin;
     }
 
     public String getRoleType() {

@@ -117,6 +117,7 @@ export type MenuAdminItem = {
 export type RoleUpsertPayload = {
   roleCode?: string;
   roleName: string;
+  builtin?: boolean;
   roleType: string;
   dataScopeType: string;
   description?: string;

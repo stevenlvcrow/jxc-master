@@ -48,6 +48,16 @@ public class RoleMenuRelRepositoryImpl implements RoleMenuRelRepository {
     }
 
     @Override
+    public void deleteByRoleIdAndMenuId(Long roleId, Long menuId) {
+        if (roleId == null || menuId == null) {
+            return;
+        }
+        roleMenuRelMapper.delete(new LambdaQueryWrapper<RoleMenuRelDO>()
+                .eq(RoleMenuRelDO::getRoleId, roleId)
+                .eq(RoleMenuRelDO::getMenuId, menuId));
+    }
+
+    @Override
     public void save(RoleMenuRelDO rel) {
         roleMenuRelMapper.insert(rel);
     }

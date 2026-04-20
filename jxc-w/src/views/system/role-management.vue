@@ -33,6 +33,7 @@ const toolbarButtons = [{ key: 'create', label: '新增角色', type: 'primary' 
 const form = reactive<RoleUpsertPayload>({
   roleCode: '',
   roleName: '',
+  builtin: false,
   roleType: 'PLATFORM',
   dataScopeType: 'ALL',
   description: '',
@@ -42,10 +43,23 @@ const form = reactive<RoleUpsertPayload>({
 
 const roleTypeOptions = ['PLATFORM', 'GROUP', 'STORE'];
 const dataScopeOptions = ['ALL', 'GROUP', 'STORE', 'CUSTOM'];
+const builtinOptions = [
+  { label: '内置', value: true },
+  { label: '非内置', value: false },
+] as const;
 const isRoleEditable = (role: RoleAdminItem) => role.editable !== false;
 const isBuiltinRole = (role: RoleAdminItem) => role.builtin === true;
+const roleAttributeLabel = (builtin?: boolean) => (builtin ? '内置' : '非内置');
+const roleBuiltinSelectableOptions = computed(() => {
+  if (sessionStore.platformAdminMode) {
+    return builtinOptions;
+  }
+  return form.builtin ? [builtinOptions[0]] : [builtinOptions[1]];
+});
 const roleTypeSelectableOptions = computed(() => (
-  sessionStore.platformAdminMode ? ['PLATFORM', 'GROUP', 'STORE'] : ['GROUP', 'STORE']
+  sessionStore.platformAdminMode
+    ? (form.builtin ? ['PLATFORM', 'GROUP', 'STORE'] : ['PLATFORM'])
+    : ['GROUP', 'STORE']
 ));
 const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
 
@@ -72,8 +86,9 @@ const pagedRoles = computed(() => {
 const resetForm = () => {
   form.roleCode = '';
   form.roleName = '';
-  form.roleType = 'PLATFORM';
-  form.dataScopeType = 'ALL';
+  form.builtin = false;
+  form.roleType = sessionStore.platformAdminMode ? 'PLATFORM' : 'GROUP';
+  form.dataScopeType = sessionStore.platformAdminMode ? 'ALL' : 'GROUP';
   form.description = '';
   form.status = 'ENABLED';
   form.menuIds = [];
@@ -112,6 +127,7 @@ const loadRoles = async () => {
 const openCreate = () => {
   resetForm();
   if (!sessionStore.platformAdminMode) {
+    form.builtin = false;
     form.roleType = 'GROUP';
     form.dataScopeType = 'GROUP';
   }
@@ -122,6 +138,7 @@ const openEdit = (row: RoleAdminItem) => {
   editingRoleId.value = row.id;
   form.roleCode = row.roleCode;
   form.roleName = row.roleName;
+  form.builtin = Boolean(row.builtin);
   form.roleType = row.roleType;
   form.dataScopeType = row.dataScopeType;
   form.description = row.description ?? '';
@@ -145,6 +162,7 @@ const handleSave = async () => {
     const payload: RoleUpsertPayload = {
       roleCode,
       roleName: form.roleName.trim(),
+      builtin: Boolean(form.builtin),
       roleType: form.roleType ?? 'PLATFORM',
       dataScopeType: form.dataScopeType ?? 'ALL',
       description: form.description?.trim(),
@@ -202,6 +220,52 @@ watch(
     currentPage.value = 1;
   },
 );
+
+watch(
+  () => form.builtin,
+  (builtin) => {
+    if (!sessionStore.platformAdminMode) {
+      return;
+    }
+    if (builtin) {
+      if (!roleTypeOptions.includes(form.roleType)) {
+        form.roleType = 'PLATFORM';
+      }
+      if (!form.dataScopeType) {
+        form.dataScopeType = form.roleType === 'PLATFORM' ? 'ALL' : form.roleType;
+      }
+      return;
+    }
+    form.roleType = 'PLATFORM';
+    if (form.dataScopeType !== 'ALL' && form.dataScopeType !== 'CUSTOM') {
+      form.dataScopeType = 'ALL';
+    }
+  },
+  { immediate: true },
+);
+
+watch(
+  () => form.roleType,
+  (roleType) => {
+    if (!roleType) {
+      return;
+    }
+    if (roleType === 'PLATFORM') {
+      if (form.dataScopeType !== 'ALL' && form.dataScopeType !== 'CUSTOM') {
+        form.dataScopeType = 'ALL';
+      }
+      return;
+    }
+    if (roleType === 'GROUP' && form.dataScopeType === 'ALL') {
+      form.dataScopeType = 'GROUP';
+      return;
+    }
+    if (roleType === 'STORE' && (form.dataScopeType === 'ALL' || form.dataScopeType === 'GROUP')) {
+      form.dataScopeType = 'STORE';
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -245,8 +309,9 @@ watch(
         <el-table-column prop="roleType" label="角色类型" width="140" />
         <el-table-column label="属性" width="110">
           <template #default="{ row }">
-            <el-tag v-if="isBuiltinRole(row)" type="warning" size="small">内置</el-tag>
-            <span v-else>-</span>
+            <el-tag :type="isBuiltinRole(row) ? 'warning' : 'info'" size="small">
+              {{ roleAttributeLabel(row.builtin) }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
@@ -293,6 +358,16 @@ watch(
         </el-form-item>
         <el-form-item label="角色名称" required>
           <el-input v-model="form.roleName" />
+        </el-form-item>
+        <el-form-item label="角色属性">
+          <el-select v-model="form.builtin" style="width: 100%" :disabled="!sessionStore.platformAdminMode">
+            <el-option
+              v-for="item in roleBuiltinSelectableOptions"
+              :key="String(item.value)"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="角色类型">
           <el-select v-model="form.roleType" style="width: 100%">

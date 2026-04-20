@@ -12,6 +12,8 @@ public class RoleUpsertRequest {
     @NotBlank
     private String roleName;
 
+    private Boolean builtin;
+
     @NotBlank
     private String roleType;
 
@@ -38,6 +40,14 @@ public class RoleUpsertRequest {
 
     public void setRoleName(String roleName) {
         this.roleName = roleName;
+    }
+
+    public Boolean getBuiltin() {
+        return builtin;
+    }
+
+    public void setBuiltin(Boolean builtin) {
+        this.builtin = builtin;
     }
 
     public String getRoleType() {
