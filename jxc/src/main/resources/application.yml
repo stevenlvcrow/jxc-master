@@ -19,7 +19,6 @@ spring:
       schema-locations: classpath:schema.sql
       data-locations: classpath:seed-core.sql
 
-
 server:
   port: 8080
 
