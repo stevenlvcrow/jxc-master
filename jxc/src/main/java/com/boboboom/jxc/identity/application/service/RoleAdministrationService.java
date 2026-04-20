@@ -27,11 +27,12 @@ import java.util.stream.Collectors;
 @Service
 public class RoleAdministrationService {
 
+    private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
     private static final String STATUS_ENABLED = "ENABLED";
     private static final String STATUS_DISABLED = "DISABLED";
     private static final String PLATFORM_ROLE_TYPE = "PLATFORM";
     private static final String ROLE_CODE_PREFIX = "JSBM";
-    private static final Set<String> PROTECTED_ROLE_CODES = Set.of("PLATFORM_SUPER_ADMIN");
+    private static final Set<String> PROTECTED_ROLE_CODES = Set.of(PLATFORM_SUPER_ADMIN_ROLE_CODE);
     private static final Set<String> MANAGED_ROLE_TYPES = Set.of("GROUP", "STORE");
 
     private final RoleRepository roleRepository;
@@ -66,6 +67,7 @@ public class RoleAdministrationService {
         if (platformAdmin) {
             roles = sortRoles(roleRepository.findByTenantGroupId(0L).stream()
                     .filter(role -> PLATFORM_ROLE_TYPE.equals(role.getRoleType()))
+                    .filter(role -> !PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode()))
                     .toList());
         } else {
             Long tenantGroupId = resolveManagedGroupId(operatorId, orgId);

@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
 @Service
 public class UserAdministrationService {
 
+    private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
+    private static final String ADMIN_USERNAME = "admin";
     private static final String STATUS_ENABLED = "ENABLED";
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
@@ -101,6 +103,7 @@ public class UserAdministrationService {
     @Transactional
     public UserAccountDO updateUserStatus(Long id, StatusUpdateRequest request) {
         UserAccountDO user = identityAdminLookupService.requireUser(id);
+        ensureNotPlatformSuperAdminUser(user);
         user.setStatus(identityAdminLookupService.normalizeStatus(request.getStatus()));
         userAccountRepository.update(user);
         return user;
@@ -109,6 +112,7 @@ public class UserAdministrationService {
     @Transactional
     public UserAccountDO updateUser(Long id, UserUpsertRequest request) {
         UserAccountDO user = identityAdminLookupService.requireUser(id);
+        ensureNotPlatformSuperAdminUser(user);
         String phone = identityAdminLookupService.normalizePhone(request.getPhone());
         String realName = identityAdminLookupService.trim(request.getRealName());
         boolean phoneExists = userAccountRepository.findByPhone(phone)
@@ -136,7 +140,8 @@ public class UserAdministrationService {
             if (userId == null) {
                 continue;
             }
-            identityAdminLookupService.requireUser(userId);
+            UserAccountDO user = identityAdminLookupService.requireUser(userId);
+            ensureNotPlatformSuperAdminUser(user);
             if (!platformAdmin) {
                 ensureCanManageUser(userId, operatorId);
             }
@@ -171,6 +176,7 @@ public class UserAdministrationService {
                 .collect(Collectors.groupingBy(UserRoleView::getUserId));
 
         return users.stream()
+                .filter(user -> !hasPlatformSuperAdminRole(userRolesMap.getOrDefault(user.getId(), Collections.emptyList())))
                 .map(user -> new UserAdminSnapshot(
                         user.getId(),
                         user.getUsername(),
@@ -311,6 +317,26 @@ public class UserAdministrationService {
                     return roleCode != null && !roleCode.startsWith("JSBM");
                 })
                 .orElse(false);
+    }
+
+    private void ensureNotPlatformSuperAdminUser(UserAccountDO user) {
+        if (user == null) {
+            return;
+        }
+        if (ADMIN_USERNAME.equalsIgnoreCase(user.getUsername())) {
+            throw new com.boboboom.jxc.common.BusinessException("admin 超管账号不允许在用户管理中维护");
+        }
+        if (hasPlatformSuperAdminRole(userAccountRepository.findUserRoles(user.getId()))) {
+            throw new com.boboboom.jxc.common.BusinessException("平台超管账号不允许在用户管理中维护");
+        }
+    }
+
+    private boolean hasPlatformSuperAdminRole(List<UserRoleView> roles) {
+        if (roles == null || roles.isEmpty()) {
+            return false;
+        }
+        return roles.stream().anyMatch(role -> role != null
+                && PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode()));
     }
 
     private boolean matchesCreatedScope(UserAccountDO user,

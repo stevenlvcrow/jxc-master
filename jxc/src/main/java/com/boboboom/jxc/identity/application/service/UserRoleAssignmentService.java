@@ -19,6 +19,8 @@ import java.util.Set;
 @Service
 public class UserRoleAssignmentService {
 
+    private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
+    private static final String ADMIN_USERNAME = "admin";
     private static final String STATUS_ENABLED = "ENABLED";
     private static final String SCOPE_PLATFORM = "PLATFORM";
     private static final String SCOPE_GROUP = "GROUP";
@@ -42,6 +44,8 @@ public class UserRoleAssignmentService {
                                 Set<Long> managedGroupIds,
                                 Set<Long> managedStoreIds,
                                 List<UserRoleAssignRequest.UserRoleAssignment> assignments) {
+        UserAccountDO targetUser = userAccountRepository.findById(targetUserId)
+                .orElseThrow(() -> new BusinessException("用户不存在"));
         if (!platformAdmin) {
             ensureCanManageUser(targetUserId, managedGroupIds, managedStoreIds);
         }
@@ -49,6 +53,7 @@ public class UserRoleAssignmentService {
         List<UserRoleRelDO> toInsert = new ArrayList<>();
         LinkedHashSet<String> seenKeys = new LinkedHashSet<>();
         List<UserRoleAssignRequest.UserRoleAssignment> safeAssignments = assignments == null ? List.of() : assignments;
+        boolean containsPlatformSuperAdminRole = false;
         for (UserRoleAssignRequest.UserRoleAssignment assignment : safeAssignments) {
             if (assignment.getRoleId() == null) {
                 throw new BusinessException("角色ID不能为空");
@@ -59,6 +64,12 @@ public class UserRoleAssignmentService {
             }
             if (!platformAdmin && SCOPE_PLATFORM.equals(role.getRoleType())) {
                 throw new BusinessException("当前账号无平台角色授权权限");
+            }
+            if (PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode())) {
+                containsPlatformSuperAdminRole = true;
+                if (!ADMIN_USERNAME.equalsIgnoreCase(targetUser.getUsername())) {
+                    throw new BusinessException("PLATFORM_SUPER_ADMIN 仅允许绑定 admin 账号");
+                }
             }
             String scopeType = normalizeScopeType(assignment.getScopeType(), role.getRoleType());
             Long scopeId = normalizeScopeId(scopeType, assignment.getScopeId());
@@ -78,6 +89,10 @@ public class UserRoleAssignmentService {
             rel.setAssignedBy(operatorId);
             rel.setStatus(STATUS_ENABLED);
             toInsert.add(rel);
+        }
+
+        if (ADMIN_USERNAME.equalsIgnoreCase(targetUser.getUsername()) && !containsPlatformSuperAdminRole) {
+            throw new BusinessException("admin 账号必须保留 PLATFORM_SUPER_ADMIN");
         }
 
         if (platformAdmin) {
