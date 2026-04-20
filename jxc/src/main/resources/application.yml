@@ -22,6 +22,8 @@ spring:
 
 server:
   port: 8080
+  cors:
+    allowed-origin-patterns: ${CORS_ALLOWED_ORIGIN_PATTERNS:http://127.0.0.1:5173,http://192.168.88.168:5173}
 
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml

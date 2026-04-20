@@ -102,6 +102,9 @@ public class IdentityAccessControlService {
             throw new BusinessException("角色不存在");
         }
         if (orgScopeService.isPlatformAdmin(operatorId)) {
+            if (!"PLATFORM".equals(role.getRoleType()) || role.getTenantGroupId() == null || role.getTenantGroupId() != 0L) {
+                throw new BusinessException("当前账号仅可操作平台角色");
+            }
             return;
         }
         if (!"GROUP".equals(role.getRoleType()) && !"STORE".equals(role.getRoleType())) {
@@ -122,6 +125,9 @@ public class IdentityAccessControlService {
 
     public void ensureRoleMenuAssignable(Long operatorId, RoleDO role) {
         if (orgScopeService.isPlatformAdmin(operatorId)) {
+            if (role == null || !"PLATFORM".equals(role.getRoleType()) || role.getTenantGroupId() == null || role.getTenantGroupId() != 0L) {
+                throw new BusinessException("当前账号仅可配置平台角色菜单");
+            }
             return;
         }
         if (role != null && "GROUP_ADMIN".equals(role.getRoleCode())) {

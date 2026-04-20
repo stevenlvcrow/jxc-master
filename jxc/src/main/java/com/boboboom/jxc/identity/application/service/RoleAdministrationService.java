@@ -5,6 +5,7 @@ import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.domain.repository.GroupRepository;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
+import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleMenuRelDO;
@@ -28,14 +29,15 @@ public class RoleAdministrationService {
 
     private static final String STATUS_ENABLED = "ENABLED";
     private static final String STATUS_DISABLED = "DISABLED";
-    private static final String GROUP_ROLE_TEMPLATE_DESC = "GROUP_ROLE_TEMPLATE";
+    private static final String PLATFORM_ROLE_TYPE = "PLATFORM";
     private static final String ROLE_CODE_PREFIX = "JSBM";
-    private static final Set<String> PROTECTED_ROLE_CODES = Set.of("GROUP_ADMIN", "STORE_ADMIN");
+    private static final Set<String> PROTECTED_ROLE_CODES = Set.of("PLATFORM_SUPER_ADMIN");
     private static final Set<String> MANAGED_ROLE_TYPES = Set.of("GROUP", "STORE");
 
     private final RoleRepository roleRepository;
     private final GroupRepository groupRepository;
     private final RoleMenuRelRepository roleMenuRelRepository;
+    private final UserRoleRelRepository userRoleRelRepository;
     private final IdentityAccessControlService identityAccessControlService;
     private final RoleMenuAdministrationService roleMenuAdministrationService;
     private final BusinessCodeGenerator businessCodeGenerator;
@@ -44,6 +46,7 @@ public class RoleAdministrationService {
     public RoleAdministrationService(RoleRepository roleRepository,
                                      GroupRepository groupRepository,
                                      RoleMenuRelRepository roleMenuRelRepository,
+                                     UserRoleRelRepository userRoleRelRepository,
                                      IdentityAccessControlService identityAccessControlService,
                                      RoleMenuAdministrationService roleMenuAdministrationService,
                                      BusinessCodeGenerator businessCodeGenerator,
@@ -51,6 +54,7 @@ public class RoleAdministrationService {
         this.roleRepository = roleRepository;
         this.groupRepository = groupRepository;
         this.roleMenuRelRepository = roleMenuRelRepository;
+        this.userRoleRelRepository = userRoleRelRepository;
         this.identityAccessControlService = identityAccessControlService;
         this.roleMenuAdministrationService = roleMenuAdministrationService;
         this.businessCodeGenerator = businessCodeGenerator;
@@ -58,11 +62,13 @@ public class RoleAdministrationService {
     }
 
     public List<RoleAdminSnapshot> listRoles(Long operatorId, boolean platformAdmin, String orgId) {
-        Long tenantGroupId = resolveTenantGroupId(operatorId, platformAdmin, orgId);
         List<RoleDO> roles;
-        if (tenantGroupId == null) {
-            roles = sortRoles(roleRepository.findAll());
+        if (platformAdmin) {
+            roles = sortRoles(roleRepository.findByTenantGroupId(0L).stream()
+                    .filter(role -> PLATFORM_ROLE_TYPE.equals(role.getRoleType()))
+                    .toList());
         } else {
+            Long tenantGroupId = resolveManagedGroupId(operatorId, orgId);
             ensureGroupBuiltinRoles(tenantGroupId, operatorId);
             roles = sortRoles(roleRepository.findByTenantGroupId(tenantGroupId).stream()
                     .filter(role -> MANAGED_ROLE_TYPES.contains(role.getRoleType()))
@@ -97,9 +103,9 @@ public class RoleAdministrationService {
         List<RoleAdminSnapshot> result = new ArrayList<>(roles.size());
         for (RoleDO role : roles) {
             List<Long> menuIds = roleMenuIdMap.getOrDefault(role.getId(), Collections.emptyList());
-            String displayRoleCode = tenantGroupId == null
+            String displayRoleCode = platformAdmin
                     ? role.getRoleCode()
-                    : toTenantDisplayRoleCode(role.getRoleCode(), tenantGroupId);
+                    : toTenantDisplayRoleCode(role.getRoleCode(), role.getTenantGroupId());
             result.add(new RoleAdminSnapshot(
                     role.getId(),
                     displayRoleCode,
@@ -121,12 +127,17 @@ public class RoleAdministrationService {
     @Transactional
     public RoleDO createRole(RoleUpsertRequest request, Long operatorId, boolean platformAdmin, String orgId) {
         String roleType = trim(request.getRoleType());
-        if (!platformAdmin && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
-            throw new BusinessException("集团账号仅可创建集团/门店角色");
-        }
-        Long tenantGroupId = resolveTenantGroupId(operatorId, platformAdmin, orgId);
-        if (tenantGroupId == null) {
+        Long tenantGroupId;
+        if (platformAdmin) {
+            if (!PLATFORM_ROLE_TYPE.equals(roleType)) {
+                throw new BusinessException("平台账号仅可创建平台角色");
+            }
             tenantGroupId = 0L;
+        } else {
+            if (!"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
+                throw new BusinessException("集团账号仅可创建集团/门店角色");
+            }
+            tenantGroupId = resolveManagedGroupId(operatorId, orgId);
         }
 
         String roleCode = generateRoleCode(tenantGroupId);
@@ -162,7 +173,11 @@ public class RoleAdministrationService {
         ensureRoleMutable(role);
 
         String roleType = trim(request.getRoleType());
-        if (!platformAdmin && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
+        if (platformAdmin) {
+            if (!PLATFORM_ROLE_TYPE.equals(roleType)) {
+                throw new BusinessException("平台账号仅可设置平台角色");
+            }
+        } else if (!"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
             throw new BusinessException("集团账号仅可设置集团/门店角色");
         }
         role.setRoleName(trim(request.getRoleName()));
@@ -172,6 +187,21 @@ public class RoleAdministrationService {
         role.setStatus(normalizeStatus(request.getStatus()));
         roleRepository.update(role);
         roleMenuAdministrationService.saveRoleMenus(role, request.getMenuIds());
+    }
+
+    @Transactional
+    public void deleteRole(RoleDO role,
+                           Long operatorId,
+                           boolean platformAdmin,
+                           String orgId) {
+        if (role == null) {
+            throw new BusinessException("角色不存在");
+        }
+        identityAccessControlService.ensureCanManageRole(operatorId, role);
+        ensureRoleMutable(role);
+        roleMenuRelRepository.deleteByRoleId(role.getId());
+        userRoleRelRepository.deleteByRoleId(role.getId());
+        roleRepository.deleteById(role.getId());
     }
 
     @Transactional
@@ -200,14 +230,21 @@ public class RoleAdministrationService {
         if (PROTECTED_ROLE_CODES.contains(role.getRoleCode())) {
             return true;
         }
-        return GROUP_ROLE_TEMPLATE_DESC.equals(role.getDescription());
+        String roleCode = trimNullable(role.getRoleCode());
+        if (roleCode == null) {
+            return false;
+        }
+        if (PLATFORM_ROLE_TYPE.equals(role.getRoleType()) && role.getTenantGroupId() != null && role.getTenantGroupId() == 0L) {
+            return true;
+        }
+        return !roleCode.startsWith(ROLE_CODE_PREFIX);
     }
 
     public boolean isRoleMutable(RoleDO role) {
         if (role == null) {
             return true;
         }
-        return !isRoleBuiltin(role);
+        return !PROTECTED_ROLE_CODES.contains(role.getRoleCode());
     }
 
     public void ensureRoleMutable(RoleDO role) {
@@ -243,11 +280,11 @@ public class RoleAdministrationService {
         }
     }
 
-    private Long resolveTenantGroupId(Long operatorId, boolean platformAdmin, String orgId) {
-        if (platformAdmin && !StringUtils.hasText(orgId)) {
-            return null;
-        }
+    private Long resolveManagedGroupId(Long operatorId, String orgId) {
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScopeAllowAnonymous(operatorId, orgId);
+        if (!OrgScopeService.SCOPE_GROUP.equals(scope.scopeType())) {
+            throw new BusinessException("请先选择集团机构");
+        }
         return scope.groupId();
     }
 

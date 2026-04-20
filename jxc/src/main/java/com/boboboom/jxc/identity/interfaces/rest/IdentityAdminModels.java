@@ -24,21 +24,6 @@ record GroupAdminView(Long id,
                       LocalDateTime createdAt) {
 }
 
-record BindGroupAdminResult(Long groupId,
-                            String groupName,
-                            Long userId,
-                            String phone,
-                            String realName) {
-}
-
-record GroupAdminCandidateView(Long userId,
-                               String realName,
-                               String phone,
-                               Long storeId,
-                               String storeCode,
-                               String storeName) {
-}
-
 record StoreAdminView(Long id,
                       Long groupId,
                       String storeCode,

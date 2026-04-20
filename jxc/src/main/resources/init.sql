@@ -578,6 +578,8 @@ WHERE store_code = 'DEFAULT_STORE'
 );
 
 -- ITEM_MASTER_SEED_START
+-- 以下为模板数据源：平台内置角色模板、单位模板、类别模板、统计类型模板、标签模板；
+-- 这些数据会被复制到新建的集团/门店真实业务数据中。
 WITH item_scope_seed AS (
     SELECT 'PLATFORM'::VARCHAR(16) AS scope_type, 0::BIGINT AS scope_id
     UNION ALL
@@ -757,6 +759,7 @@ FROM item_scope_seed scope
 ON CONFLICT DO NOTHING;
 -- ITEM_MASTER_SEED_END
 
+-- 以下为角色模板数据，平台角色模板和集团/门店角色模板均属于模板数据源。
 INSERT INTO sys_role (role_code, role_name, role_type, data_scope_type, description, status)
 VALUES ('PLATFORM_SUPER_ADMIN', '平台超级管理员', 'PLATFORM', 'ALL', '系统初始化平台管理员角色', 'ENABLED')
 ON CONFLICT DO NOTHING;

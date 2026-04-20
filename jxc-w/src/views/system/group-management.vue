@@ -1,34 +1,26 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonToolbarSection, { type ToolbarButton } from '@/components/CommonToolbarSection.vue';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import {
-  bindGroupAdminApi,
   createAdminGroupApi,
   deleteAdminGroupApi,
-  fetchGroupAdminCandidatesApi,
   fetchAdminGroupsApi,
   updateAdminGroupApi,
   updateAdminGroupStatusApi,
-  type GroupAdminCandidateItem,
   type GroupAdminItem,
 } from '@/api/modules/system-admin';
 import { useSessionStore } from '@/stores/session';
 
 const loading = ref(false);
 const submitting = ref(false);
-const bindSubmitting = ref(false);
-const bindCandidatesLoading = ref(false);
 const createDialogVisible = ref(false);
-const bindDialogVisible = ref(false);
 const editingGroupId = ref<number | null>(null);
 const groups = ref<GroupAdminItem[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
-const bindingGroup = ref<GroupAdminItem | null>(null);
-const bindCandidates = ref<GroupAdminCandidateItem[]>([]);
 const queryForm = reactive({
   keyword: '',
   status: '',
@@ -46,26 +38,12 @@ const form = reactive({
   remark: '',
 });
 
-const bindForm = reactive({
-  userId: undefined as number | undefined,
-  phone: '',
-  realName: '',
-});
-
 const resetForm = () => {
   form.groupCode = '';
   form.groupName = '';
   form.status = 'ENABLED';
   form.remark = '';
   editingGroupId.value = null;
-};
-
-const resetBindForm = () => {
-  bindForm.userId = undefined;
-  bindForm.phone = '';
-  bindForm.realName = '';
-  bindCandidates.value = [];
-  bindingGroup.value = null;
 };
 
 const filteredGroups = computed(() => {
@@ -79,6 +57,7 @@ const filteredGroups = computed(() => {
     return keywordMatched && statusMatched;
   });
 });
+
 const pagedGroups = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
   return filteredGroups.value.slice(start, start + pageSize.value);
@@ -88,9 +67,11 @@ const resetQuery = () => {
   queryForm.keyword = '';
   queryForm.status = '';
 };
+
 const handlePageChange = (page: number) => {
   currentPage.value = page;
 };
+
 const handlePageSizeChange = (size: number) => {
   pageSize.value = size;
   currentPage.value = 1;
@@ -161,34 +142,6 @@ const handleStatusChange = async (row: GroupAdminItem, value: boolean | string |
   ElMessage.success('状态更新成功');
 };
 
-const openBindDialog = async (group: GroupAdminItem) => {
-  if (!canManageAllGroups.value) {
-    return;
-  }
-  bindingGroup.value = group;
-  bindCandidatesLoading.value = true;
-  try {
-    bindCandidates.value = await fetchGroupAdminCandidatesApi(group.id);
-  } finally {
-    bindCandidatesLoading.value = false;
-  }
-  bindDialogVisible.value = true;
-};
-
-const handleBindCandidateChange = (userId?: number) => {
-  if (!userId) {
-    return;
-  }
-  const target = bindCandidates.value.find((item) => item.userId === userId);
-  if (!target) {
-    return;
-  }
-  bindForm.phone = target.phone;
-  if (!bindForm.realName.trim()) {
-    bindForm.realName = target.realName;
-  }
-};
-
 const handleToolbarAction = (key: string) => {
   if (key === 'create') {
     openCreateDialog();
@@ -211,29 +164,6 @@ const handleDeleteGroup = async (group: GroupAdminItem) => {
   await deleteAdminGroupApi(group.id);
   ElMessage.success('集团删除成功');
   await loadGroups();
-};
-
-const handleBindAdmin = async () => {
-  if (!bindingGroup.value) {
-    return;
-  }
-  if (!bindForm.phone.trim()) {
-    ElMessage.warning('请选择门店账号或填写手机号');
-    return;
-  }
-  bindSubmitting.value = true;
-  try {
-    await bindGroupAdminApi(bindingGroup.value.id, {
-      phone: bindForm.phone.trim(),
-      realName: bindForm.realName.trim() || undefined,
-    });
-    ElMessage.success('集团管理员绑定成功');
-    bindDialogVisible.value = false;
-    resetBindForm();
-    await loadGroups();
-  } finally {
-    bindSubmitting.value = false;
-  }
 };
 
 onMounted(() => {
@@ -290,7 +220,6 @@ watch(
           <template #default="{ row }">
             <el-button type="primary" link @click="openEditDialog(row)">修改</el-button>
             <el-button v-if="canManageAllGroups" type="danger" link @click="handleDeleteGroup(row)">删除</el-button>
-            <el-button v-if="canManageAllGroups" type="primary" link @click="openBindDialog(row)">绑定管理员</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -334,48 +263,5 @@ watch(
         <el-button type="primary" :loading="submitting" @click="handleSave">保存</el-button>
       </template>
     </el-dialog>
-
-    <el-dialog
-      v-model="bindDialogVisible"
-      title="绑定集团管理员"
-      width="460px"
-      class="standard-form-dialog"
-      @closed="resetBindForm"
-    >
-      <el-form label-width="100px" class="standard-dialog-form">
-        <el-form-item label="集团">
-          <span>{{ bindingGroup?.groupName }}（{{ bindingGroup?.groupCode }}）</span>
-        </el-form-item>
-        <el-form-item label="门店账号">
-          <el-select
-            v-model="bindForm.userId"
-            filterable
-            clearable
-            placeholder="从门店绑定账号中选择"
-            style="width: 100%"
-            :loading="bindCandidatesLoading"
-            @change="handleBindCandidateChange($event as number | undefined)"
-          >
-            <el-option
-              v-for="item in bindCandidates"
-              :key="item.userId"
-              :label="`${item.realName}（${item.phone}）- ${item.storeName}`"
-              :value="item.userId"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="手机号" required>
-          <el-input v-model="bindForm.phone" maxlength="20" />
-        </el-form-item>
-        <el-form-item label="姓名">
-          <el-input v-model="bindForm.realName" maxlength="64" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="bindDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="bindSubmitting" @click="handleBindAdmin">绑定</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
-

@@ -300,11 +300,15 @@ public class UserAdministrationService {
         return roleRepository.findById(roleId)
                 .map(role -> {
                     String roleCode = role.getRoleCode();
-                    String description = role.getDescription();
-                    if ("GROUP_ADMIN".equals(roleCode) || "STORE_ADMIN".equals(roleCode)) {
+                    if ("PLATFORM_SUPER_ADMIN".equals(roleCode)) {
                         return true;
                     }
-                    return "GROUP_ROLE_TEMPLATE".equals(description);
+                    if ("PLATFORM".equals(role.getRoleType())
+                            && role.getTenantGroupId() != null
+                            && role.getTenantGroupId() == 0L) {
+                        return true;
+                    }
+                    return roleCode != null && !roleCode.startsWith("JSBM");
                 })
                 .orElse(false);
     }

@@ -12,6 +12,7 @@ import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -141,6 +142,24 @@ public class IdentityRoleAdminController {
         Long operatorId = identityAdminSupport.currentOperatorId();
         RoleDO role = roleAdministrationService.requireRole(id);
         roleAdministrationService.updateRoleStatus(role, request.getStatus(), operatorId);
+        return CodeDataResponse.ok();
+    }
+
+    @DeleteMapping("/roles/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 删除角色。
+     *
+     * @param id 角色主键
+     * @param orgId 机构标识
+     * @return 空响应
+     */
+    public CodeDataResponse<Void> deleteRole(@PathVariable Long id,
+                                             @RequestParam(required = false) String orgId) {
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
+        RoleDO role = roleAdministrationService.requireRole(id);
+        roleAdministrationService.deleteRole(role, operatorId, platformAdmin, orgId);
         return CodeDataResponse.ok();
     }
 

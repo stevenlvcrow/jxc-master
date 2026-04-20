@@ -2,10 +2,8 @@ package com.boboboom.jxc.identity.interfaces.rest;
 
 import com.boboboom.jxc.identity.application.service.GroupAdministrationService;
 import com.boboboom.jxc.identity.application.service.IdentityAccessControlService;
-import com.boboboom.jxc.identity.application.service.IdentityAdminLookupService;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.interfaces.rest.request.GroupAdminBindRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupStoreCreateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
@@ -35,7 +33,6 @@ public class IdentityGroupAdminController {
 
     private final IdentityAccessControlService identityAccessControlService;
     private final GroupAdministrationService groupAdministrationService;
-    private final IdentityAdminLookupService identityAdminLookupService;
     private final IdentityAdminSupport identityAdminSupport;
 
     /**
@@ -43,16 +40,13 @@ public class IdentityGroupAdminController {
      *
      * @param identityAccessControlService 组织权限控制服务
      * @param groupAdministrationService 分组管理服务
-     * @param identityAdminLookupService 组织管理查询服务
      * @param identityAdminSupport 当前登录管理员辅助服务
      */
     public IdentityGroupAdminController(IdentityAccessControlService identityAccessControlService,
                                         GroupAdministrationService groupAdministrationService,
-                                        IdentityAdminLookupService identityAdminLookupService,
                                         IdentityAdminSupport identityAdminSupport) {
         this.identityAccessControlService = identityAccessControlService;
         this.groupAdministrationService = groupAdministrationService;
-        this.identityAdminLookupService = identityAdminLookupService;
         this.identityAdminSupport = identityAdminSupport;
     }
 
@@ -147,38 +141,6 @@ public class IdentityGroupAdminController {
         return CodeDataResponse.ok();
     }
 
-    @PostMapping("/{groupId}/bind-admin")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
-    /**
-     * 为分组绑定管理员。
-     *
-     * @param groupId 分组主键
-     * @param request 绑定管理员请求
-     * @return 绑定结果
-     */
-    public CodeDataResponse<BindGroupAdminResult> bindGroupAdmin(@PathVariable Long groupId,
-                                                                 @Valid @RequestBody GroupAdminBindRequest request) {
-        identityAdminSupport.requirePlatformAdmin();
-        GroupDO group = identityAdminLookupService.requireGroup(groupId);
-        String phone = identityAdminLookupService.normalizePhone(request.getPhone());
-        String realName = identityAdminLookupService.trimNullable(request.getRealName()) == null
-                ? phone
-                : identityAdminLookupService.trim(request.getRealName());
-        GroupAdministrationService.BindGroupAdminSnapshot snapshot = groupAdministrationService.bindGroupAdmin(
-                group,
-                identityAdminSupport.currentOperatorId(),
-                phone,
-                realName
-        );
-        return CodeDataResponse.ok(new BindGroupAdminResult(
-                snapshot.groupId(),
-                snapshot.groupName(),
-                snapshot.userId(),
-                snapshot.phone(),
-                snapshot.realName()
-        ));
-    }
-
     @GetMapping("/{groupId}/stores")
     /**
      * 查询分组下的门店列表。
@@ -204,33 +166,6 @@ public class IdentityGroupAdminController {
                         store.getAddress(),
                         store.getRemark(),
                         store.getCreatedAt()
-                ))
-                .toList();
-        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
-    }
-
-    @GetMapping("/{groupId}/admin-candidates")
-    /**
-     * 查询可绑定为分组管理员的候选人列表。
-     *
-     * @param groupId 分组主键
-     * @param pageNum 页码
-     * @param pageSize 每页条数
-     * @return 候选人列表响应
-     */
-    public CodeDataResponse<PageData<GroupAdminCandidateView>> listGroupAdminCandidates(
-            @PathVariable Long groupId,
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize) {
-        identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
-        List<GroupAdminCandidateView> result = groupAdministrationService.listGroupAdminCandidates(groupId).stream()
-                .map(candidate -> new GroupAdminCandidateView(
-                        candidate.userId(),
-                        candidate.realName(),
-                        candidate.phone(),
-                        candidate.storeId(),
-                        candidate.storeCode(),
-                        candidate.storeName()
                 ))
                 .toList();
         return CodeDataResponse.ok(paginate(result, pageNum, pageSize));

@@ -71,15 +71,6 @@ export type GroupStoreItem = {
   createdAt: string;
 };
 
-export type GroupAdminCandidateItem = {
-  userId: number;
-  realName: string;
-  phone: string;
-  storeId: number;
-  storeCode: string;
-  storeName: string;
-};
-
 export type UserAdminItem = {
   id: number;
   username: string;
@@ -158,14 +149,8 @@ export const updateAdminGroupStatusApi = (id: number, status: 'ENABLED' | 'DISAB
 export const deleteAdminGroupApi = (id: number) =>
   apiClient.delete<void>(`/api/identity/admin/groups/${id}`);
 
-export const bindGroupAdminApi = (groupId: number, payload: { phone: string; realName?: string }) =>
-  apiClient.post<void>(`/api/identity/admin/groups/${groupId}/bind-admin`, payload);
-
 export const fetchGroupStoresApi = (groupId: number) =>
   fetchAdminPagedList<GroupStoreItem>(`/api/identity/admin/groups/${groupId}/stores`);
-
-export const fetchGroupAdminCandidatesApi = (groupId: number) =>
-  fetchAdminPagedList<GroupAdminCandidateItem>(`/api/identity/admin/groups/${groupId}/admin-candidates`);
 
 export const createGroupStoreApi = (groupId: number, payload: {
   storeCode?: string;
@@ -228,6 +213,11 @@ export const updateAdminRoleApi = (id: number, payload: RoleUpsertPayload, orgId
 
 export const updateAdminRoleStatusApi = (id: number, status: 'ENABLED' | 'DISABLED') =>
   apiClient.put<void>(`/api/identity/admin/roles/${id}/status`, { status });
+
+export const deleteAdminRoleApi = (id: number, orgId?: string) =>
+  apiClient.delete<void>(`/api/identity/admin/roles/${id}`, {
+    params: orgId ? { orgId } : undefined,
+  });
 
 export const fetchAdminMenusApi = (orgId?: string) =>
   fetchAdminPagedList<MenuAdminItem>('/api/identity/admin/menus', orgId ? { orgId } : undefined);

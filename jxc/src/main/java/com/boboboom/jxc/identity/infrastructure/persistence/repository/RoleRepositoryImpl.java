@@ -79,4 +79,9 @@ public class RoleRepositoryImpl implements RoleRepository {
     public void update(RoleDO role) {
         roleMapper.updateById(role);
     }
+
+    @Override
+    public void deleteById(Long id) {
+        roleMapper.deleteById(id);
+    }
 }

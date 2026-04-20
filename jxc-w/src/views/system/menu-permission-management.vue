@@ -34,7 +34,14 @@ const currentOrgId = computed(() => {
 });
 
 const isGroupMenuPermissionPage = computed(() => route.path.startsWith('/group/'));
-const platformTemplateMenuCodes = new Set([
+const platformRoleMenuCodes = new Set([
+  'SYS_MGMT',
+  'GROUP_MGMT_ADMIN',
+  'ROLE_MGMT',
+  'USER_MGMT',
+  'MENU_PERMISSION_MGMT',
+]);
+const itemTemplateMenuCodes = new Set([
   'STORE_BIZ_MOD_08',
   'STORE_BIZ_GRP_08_01',
   'STORE_BIZ_MENU_08_01_01',
@@ -43,7 +50,8 @@ const platformTemplateMenuCodes = new Set([
   'STORE_BIZ_MENU_08_01_04',
   'STORE_BIZ_MENU_08_01_05',
 ]);
-const isPlatformTemplateMenu = (menu: MenuAdminItem) => platformTemplateMenuCodes.has(menu.menuCode);
+const isPlatformRoleMenu = (menu: MenuAdminItem) => platformRoleMenuCodes.has(menu.menuCode);
+const isItemTemplateMenu = (menu: MenuAdminItem) => itemTemplateMenuCodes.has(menu.menuCode);
 const filteredRoles = computed(() => {
   if (!isGroupMenuPermissionPage.value) {
     return roles.value;
@@ -64,10 +72,10 @@ const visibleMenus = computed(() => {
     return menus.value;
   }
   if (roleType === 'PLATFORM') {
-    return menus.value.filter((item) => isPlatformTemplateMenu(item));
+    return menus.value.filter((item) => isPlatformRoleMenu(item));
   }
   if (roleType === 'GROUP') {
-    return menus.value.filter((item) => item.menuCode.startsWith('GROUP_') || isPlatformTemplateMenu(item));
+    return menus.value.filter((item) => item.menuCode.startsWith('GROUP_') || isItemTemplateMenu(item));
   }
   if (roleType === 'STORE') {
     return menus.value.filter((item) => item.menuCode.startsWith('STORE_BIZ_'));

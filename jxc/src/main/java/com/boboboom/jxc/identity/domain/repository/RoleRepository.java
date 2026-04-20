@@ -22,4 +22,6 @@ public interface RoleRepository {
     void save(RoleDO role);
 
     void update(RoleDO role);
+
+    void deleteById(Long id);
 }

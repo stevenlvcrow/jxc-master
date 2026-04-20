@@ -169,6 +169,14 @@ public class UserRoleRelRepositoryImpl implements UserRoleRelRepository {
     }
 
     @Override
+    public void deleteByRoleId(Long roleId) {
+        if (roleId == null) {
+            return;
+        }
+        userRoleRelMapper.delete(new LambdaQueryWrapper<UserRoleRelDO>().eq(UserRoleRelDO::getRoleId, roleId));
+    }
+
+    @Override
     public void deleteByScopeTypeAndScopeId(String scopeType, Long scopeId) {
         if (scopeType == null || scopeId == null) {
             return;

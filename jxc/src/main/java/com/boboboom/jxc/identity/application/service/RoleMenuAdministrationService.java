@@ -31,6 +31,13 @@ public class RoleMenuAdministrationService {
     private static final String STORE_ROLE_TYPE = "STORE";
     private static final String GROUP_MENU_PREFIX = "GROUP_";
     private static final String STORE_MENU_PREFIX = "STORE_BIZ_";
+    private static final LinkedHashSet<String> PLATFORM_ROLE_MENU_CODES = new LinkedHashSet<>(List.of(
+            "SYS_MGMT",
+            "GROUP_MGMT_ADMIN",
+            "ROLE_MGMT",
+            "USER_MGMT",
+            "MENU_PERMISSION_MGMT"
+    ));
     private static final LinkedHashSet<String> PLATFORM_TEMPLATE_MENU_CODES = new LinkedHashSet<>(List.of(
             "STORE_BIZ_MOD_08",
             "STORE_BIZ_GRP_08_01",
@@ -334,7 +341,7 @@ public class RoleMenuAdministrationService {
             return false;
         }
         if (PLATFORM_ROLE_TYPE.equals(normalizedRoleType)) {
-            return PLATFORM_TEMPLATE_MENU_CODES.contains(normalizedMenuCode);
+            return PLATFORM_ROLE_MENU_CODES.contains(normalizedMenuCode);
         }
         if (GROUP_ROLE_TYPE.equals(normalizedRoleType)) {
             return normalizedMenuCode.startsWith(GROUP_MENU_PREFIX) || PLATFORM_TEMPLATE_MENU_CODES.contains(normalizedMenuCode);
@@ -356,7 +363,7 @@ public class RoleMenuAdministrationService {
     private String buildRoleMenuValidationMessage(String roleType) {
         String normalizedRoleType = trimToNull(roleType);
         if (PLATFORM_ROLE_TYPE.equals(normalizedRoleType)) {
-            return "平台角色仅可分配基础模板菜单";
+            return "平台角色仅可分配平台菜单";
         }
         if (GROUP_ROLE_TYPE.equals(normalizedRoleType)) {
             return "集团角色仅可分配集团菜单和基础模板菜单";
@@ -382,10 +389,13 @@ public class RoleMenuAdministrationService {
     }
 
     private Long resolveTenantGroupId(Long operatorId, boolean platformAdmin, String orgId) {
-        if (platformAdmin && trimToNull(orgId) == null) {
-            return null;
+        if (platformAdmin) {
+            return 0L;
         }
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScopeAllowAnonymous(operatorId, orgId);
+        if (!OrgScopeService.SCOPE_GROUP.equals(scope.scopeType())) {
+            throw new BusinessException("请先选择集团机构");
+        }
         return scope.groupId();
     }
 

@@ -34,6 +34,8 @@ public interface UserRoleRelRepository {
 
     void deleteByUserId(Long userId);
 
+    void deleteByRoleId(Long roleId);
+
     void deleteByScopeTypeAndScopeId(String scopeType, Long scopeId);
 
     void deleteByUserIdAndGroupScopes(Long userId, Set<Long> groupIds);

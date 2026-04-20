@@ -2,18 +2,14 @@ package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.application.auth.PasswordCodec;
 import com.boboboom.jxc.identity.domain.repository.GroupRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreAdminRelRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
-import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.query.StoreAdminView;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupStoreCreateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupUpsertRequest;
 import com.boboboom.jxc.workflow.application.service.InventoryWorkflowBootstrapService;
@@ -21,8 +17,6 @@ import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRe
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 
@@ -33,7 +27,6 @@ public class GroupAdministrationService {
     private static final String GROUP_CODE_PREFIX = "JTBM";
     private static final String STORE_CODE_PREFIX = "MDBM";
 
-    private final UserAccountRepository userAccountRepository;
     private final UserRoleRelRepository userRoleRelRepository;
     private final GroupRepository groupRepository;
     private final StoreRepository storeRepository;
@@ -43,10 +36,8 @@ public class GroupAdministrationService {
     private final StoreSampleDataInitializationService storeSampleDataInitializationService;
     private final IdentityAdminLookupService identityAdminLookupService;
     private final BusinessCodeGenerator businessCodeGenerator;
-    private final UserCodeGenerator userCodeGenerator;
 
-    public GroupAdministrationService(UserAccountRepository userAccountRepository,
-                                      UserRoleRelRepository userRoleRelRepository,
+    public GroupAdministrationService(UserRoleRelRepository userRoleRelRepository,
                                       GroupRepository groupRepository,
                                       StoreRepository storeRepository,
                                       StoreAdminRelRepository storeAdminRelRepository,
@@ -54,9 +45,7 @@ public class GroupAdministrationService {
                                       InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService,
                                       StoreSampleDataInitializationService storeSampleDataInitializationService,
                                       IdentityAdminLookupService identityAdminLookupService,
-                                      BusinessCodeGenerator businessCodeGenerator,
-                                      UserCodeGenerator userCodeGenerator) {
-        this.userAccountRepository = userAccountRepository;
+                                      BusinessCodeGenerator businessCodeGenerator) {
         this.userRoleRelRepository = userRoleRelRepository;
         this.groupRepository = groupRepository;
         this.storeRepository = storeRepository;
@@ -66,59 +55,6 @@ public class GroupAdministrationService {
         this.storeSampleDataInitializationService = storeSampleDataInitializationService;
         this.identityAdminLookupService = identityAdminLookupService;
         this.businessCodeGenerator = businessCodeGenerator;
-        this.userCodeGenerator = userCodeGenerator;
-    }
-
-    @Transactional
-    public BindGroupAdminSnapshot bindGroupAdmin(GroupDO group,
-                                                 Long operatorId,
-                                                 String phone,
-                                                 String realNameOrPhone) {
-        UserAccountDO user = userAccountRepository.findByPhone(phone).orElse(null);
-
-        if (user == null) {
-            user = new UserAccountDO();
-            user.setUsername(userCodeGenerator.generate(realNameOrPhone, phone));
-            user.setRealName(realNameOrPhone);
-            user.setPhone(phone);
-            user.setPasswordHash(PasswordCodec.encode("123654"));
-            user.setPasswordSalt(null);
-            user.setStatus(STATUS_ENABLED);
-            user.setSourceType("MANUAL");
-            user.setCreatedScopeType("GROUP");
-            user.setCreatedScopeId(group.getId());
-            user.setFirstLoginChangedPwd(Boolean.FALSE);
-            userAccountRepository.save(user);
-        } else if (realNameOrPhone != null && !realNameOrPhone.equals(user.getRealName())) {
-            user.setRealName(realNameOrPhone);
-            user.setUsername(userCodeGenerator.generate(realNameOrPhone, phone));
-            userAccountRepository.update(user);
-        }
-
-        RoleDO groupAdminRole = identityAdminLookupService.requireRoleByCode("GROUP_ADMIN");
-        UserRoleRelDO rel = userRoleRelRepository.findByUserIdRoleAndScope(user.getId(), groupAdminRole.getId(), "GROUP", group.getId())
-                .orElse(null);
-        if (rel == null) {
-            rel = new UserRoleRelDO();
-            rel.setUserId(user.getId());
-            rel.setRoleId(groupAdminRole.getId());
-            rel.setScopeType("GROUP");
-            rel.setScopeId(group.getId());
-            rel.setAssignedBy(operatorId);
-            rel.setStatus(STATUS_ENABLED);
-            userRoleRelRepository.save(rel);
-        } else if (!STATUS_ENABLED.equals(rel.getStatus())) {
-            rel.setStatus(STATUS_ENABLED);
-            userRoleRelRepository.update(rel);
-        }
-
-        return new BindGroupAdminSnapshot(
-                group.getId(),
-                group.getGroupName(),
-                user.getId(),
-                user.getPhone(),
-                user.getRealName()
-        );
     }
 
     public List<GroupDO> listGroups(Long operatorId, boolean platformAdmin) {
@@ -258,44 +194,6 @@ public class GroupAdministrationService {
 
     public void ensureGroupBuiltinRoles(Long groupId, Long operatorId) {
         identityAdminLookupService.ensureGroupBuiltinRoles(groupId, operatorId);
-    }
-
-    public List<GroupAdminCandidateSnapshot> listGroupAdminCandidates(Long groupId) {
-        List<StoreAdminView> rows = storeRepository.findStoreAdminViewsByGroupId(groupId, STATUS_ENABLED);
-
-        LinkedHashMap<Long, GroupAdminCandidateSnapshot> deduped = new LinkedHashMap<>();
-        for (StoreAdminView row : rows) {
-            if (row.getAdminUserId() == null) {
-                continue;
-            }
-            deduped.putIfAbsent(
-                    row.getAdminUserId(),
-                    new GroupAdminCandidateSnapshot(
-                            row.getAdminUserId(),
-                            row.getAdminRealName(),
-                            row.getAdminPhone(),
-                            row.getStoreId(),
-                            row.getStoreCode(),
-                            row.getStoreName()
-                    )
-            );
-        }
-        return new ArrayList<>(deduped.values());
-    }
-
-    public record BindGroupAdminSnapshot(Long groupId,
-                                         String groupName,
-                                         Long userId,
-                                         String phone,
-                                         String realName) {
-    }
-
-    public record GroupAdminCandidateSnapshot(Long userId,
-                                              String realName,
-                                              String phone,
-                                              Long storeId,
-                                              String storeCode,
-                                              String storeName) {
     }
 
     private String generateGroupCode() {

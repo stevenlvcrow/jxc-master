@@ -12,10 +12,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     private final ApiAccessLogInterceptor apiAccessLogInterceptor;
     private final AuthInterceptor authInterceptor;
+    private final CorsProperties corsProperties;
 
-    public WebMvcConfig(ApiAccessLogInterceptor apiAccessLogInterceptor, AuthInterceptor authInterceptor) {
+    public WebMvcConfig(ApiAccessLogInterceptor apiAccessLogInterceptor,
+                        AuthInterceptor authInterceptor,
+                        CorsProperties corsProperties) {
         this.apiAccessLogInterceptor = apiAccessLogInterceptor;
         this.authInterceptor = authInterceptor;
+        this.corsProperties = corsProperties;
     }
 
     @Override
@@ -37,7 +41,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOriginPatterns("http://localhost:5173", "http://192.168.88.168:5173")
+                .allowedOriginPatterns(corsProperties.getAllowedOriginPatterns())
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")
                 .exposedHeaders("*")

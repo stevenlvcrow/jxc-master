@@ -1,11 +1,12 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonToolbarSection from '@/components/CommonToolbarSection.vue';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import {
   createAdminRoleApi,
+  deleteAdminRoleApi,
   fetchAdminRolesApi,
   updateAdminRoleApi,
   type RoleAdminItem,
@@ -44,7 +45,7 @@ const dataScopeOptions = ['ALL', 'GROUP', 'STORE', 'CUSTOM'];
 const isRoleEditable = (role: RoleAdminItem) => role.editable !== false;
 const isBuiltinRole = (role: RoleAdminItem) => role.builtin === true;
 const roleTypeSelectableOptions = computed(() => (
-  sessionStore.platformAdminMode ? roleTypeOptions : roleTypeOptions.filter((item) => item !== 'PLATFORM')
+  sessionStore.platformAdminMode ? ['PLATFORM'] : ['GROUP', 'STORE']
 ));
 const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
 
@@ -118,10 +119,6 @@ const openCreate = () => {
 };
 
 const openEdit = (row: RoleAdminItem) => {
-  if (!isRoleEditable(row)) {
-    ElMessage.warning('内置角色不可编辑');
-    return;
-  }
   editingRoleId.value = row.id;
   form.roleCode = row.roleCode;
   form.roleName = row.roleName;
@@ -166,6 +163,25 @@ const handleSave = async () => {
     await loadRoles();
   } finally {
     submitting.value = false;
+  }
+};
+
+const handleDelete = async (row: RoleAdminItem) => {
+  if (!isRoleEditable(row)) {
+    ElMessage.warning('当前角色不可删除');
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(`确定删除角色“${row.roleName}”吗？`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+    });
+    await deleteAdminRoleApi(row.id, currentOrgId.value);
+    ElMessage.success('角色删除成功');
+    await loadRoles();
+  } catch {
+    // 取消删除或删除失败时由全局错误处理器提示。
   }
 };
 
@@ -242,6 +258,14 @@ watch(
             >
               <el-button type="primary" link :disabled="!isRoleEditable(row)" @click="openEdit(row)">编辑</el-button>
             </el-tooltip>
+            <el-button
+              type="danger"
+              link
+              :disabled="!isRoleEditable(row)"
+              @click="handleDelete(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
