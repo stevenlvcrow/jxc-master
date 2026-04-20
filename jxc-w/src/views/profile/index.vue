@@ -32,6 +32,10 @@ const roleText = computed(() => {
 });
 
 const loadRoles = async () => {
+  if (!sessionStore.isLoggedIn) {
+    roleList.value = [];
+    return;
+  }
   try {
     roleList.value = await fetchCurrentUserRolesApi(sessionStore.currentOrgId || undefined);
   } catch {
@@ -64,8 +68,12 @@ onMounted(() => {
 });
 
 watch(
-  () => sessionStore.currentOrgId,
-  () => {
+  () => [sessionStore.isLoggedIn, sessionStore.currentOrgId] as const,
+  ([isLoggedIn]) => {
+    if (!isLoggedIn) {
+      roleList.value = [];
+      return;
+    }
     void loadRoles();
   },
 );

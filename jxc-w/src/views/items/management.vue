@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -11,6 +11,7 @@ import {
   type ItemStatus,
 } from '@/api/modules/item';
 import { useSessionStore } from '@/stores/session';
+import { normalizeItemOrgId, requireItemOrgId } from './org';
 import ItemCategoryTree from './components/ItemCategoryTree.vue';
 import ItemPaginationSection from './components/ItemPaginationSection.vue';
 import ItemQuerySection from './components/ItemQuerySection.vue';
@@ -38,7 +39,16 @@ const tableHeight = 360;
 const tableData = ref<ItemRow[]>([]);
 const selectedRows = ref<ItemRow[]>([]);
 const loading = ref(false);
-const emptyText = ref('当前机构暂无数据');
+const loadFailed = ref(false);
+const emptyText = computed(() => {
+  if (!normalizeItemOrgId(sessionStore.currentOrgId)) {
+    return '请先选择机构';
+  }
+  if (loadFailed.value) {
+    return '物品列表加载失败，请重试';
+  }
+  return '当前机构暂无物品';
+});
 
 const selectedCount = ref(0);
 const rootCategoryName = '物品类别';
@@ -56,24 +66,25 @@ const isCancelError = (error: unknown) => {
   return false;
 };
 
-const resolveItemOrgId = () => {
-  const orgId = (sessionStore.currentOrgId ?? '').trim();
-  if (!orgId) {
-    return undefined;
-  }
-  if (orgId.startsWith('group-') || orgId.startsWith('store-')) {
-    return orgId;
-  }
-  return undefined;
-};
+const isMissingOrgError = (error: unknown) => error instanceof Error && error.message === '请先选择机构';
+
+const resolveItemOrgId = () => requireItemOrgId(sessionStore.currentOrgId);
 
 const fetchCategoryTree = async () => {
-  const tree = await fetchItemCategoryTreeApi(resolveItemOrgId());
-  categoryTree.value = tree.length ? tree : [{ label: rootCategoryName, children: [] }];
+  try {
+    const tree = await fetchItemCategoryTreeApi(resolveItemOrgId());
+    categoryTree.value = tree.length ? tree : [{ label: rootCategoryName, children: [] }];
+  } catch (error) {
+    categoryTree.value = [{ label: rootCategoryName, children: [] }];
+    if (!isMissingOrgError(error)) {
+      ElMessage.error('物品类别树加载失败');
+    }
+  }
 };
 
 const fetchTableData = async () => {
   loading.value = true;
+  loadFailed.value = false;
   try {
     const res = await fetchItemsApi({
       pageNo: currentPage.value,
@@ -91,11 +102,16 @@ const fetchTableData = async () => {
     total.value = res.total;
     selectedRows.value = [];
     selectedCount.value = 0;
-    emptyText.value = '当前机构暂无数据';
   } catch {
     tableData.value = [];
     total.value = 0;
-    emptyText.value = '当前机构暂无数据';
+    selectedRows.value = [];
+    selectedCount.value = 0;
+    if (!normalizeItemOrgId(sessionStore.currentOrgId)) {
+      loadFailed.value = false;
+      return;
+    }
+    loadFailed.value = true;
   } finally {
     loading.value = false;
   }
@@ -284,8 +300,20 @@ const handleDeleteOne = async (row: ItemRow) => {
 };
 
 onMounted(async () => {
-  await Promise.all([fetchTableData(), fetchCategoryTree()]);
+  await fetchCategoryTree();
+  await fetchTableData();
 });
+
+watch(
+  () => sessionStore.currentOrgId,
+  async () => {
+    selectedTreeNode.value = rootCategoryName;
+    selectedTreeCategories.value = [];
+    currentPage.value = 1;
+    await fetchCategoryTree();
+    await fetchTableData();
+  },
+);
 </script>
 
 <template>
@@ -303,6 +331,7 @@ onMounted(async () => {
         :item-type-options="itemTypeOptions"
         :stat-type-options="statTypeOptions"
         :storage-mode-options="storageModeOptions"
+        @update:model-value="Object.assign(query, $event)"
         @search="handleSearch"
         @reset="handleReset"
       />

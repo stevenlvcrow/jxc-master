@@ -16,6 +16,7 @@ import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleR
 import com.boboboom.jxc.identity.infrastructure.persistence.query.StoreAdminView;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupStoreCreateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupUpsertRequest;
+import com.boboboom.jxc.workflow.application.service.InventoryWorkflowBootstrapService;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,8 +39,11 @@ public class GroupAdministrationService {
     private final StoreRepository storeRepository;
     private final StoreAdminRelRepository storeAdminRelRepository;
     private final WorkflowProcessStoreBindingRepository workflowProcessStoreBindingRepository;
+    private final InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService;
+    private final StoreSampleDataInitializationService storeSampleDataInitializationService;
     private final IdentityAdminLookupService identityAdminLookupService;
     private final BusinessCodeGenerator businessCodeGenerator;
+    private final UserCodeGenerator userCodeGenerator;
 
     public GroupAdministrationService(UserAccountRepository userAccountRepository,
                                       UserRoleRelRepository userRoleRelRepository,
@@ -47,16 +51,22 @@ public class GroupAdministrationService {
                                       StoreRepository storeRepository,
                                       StoreAdminRelRepository storeAdminRelRepository,
                                       WorkflowProcessStoreBindingRepository workflowProcessStoreBindingRepository,
+                                      InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService,
+                                      StoreSampleDataInitializationService storeSampleDataInitializationService,
                                       IdentityAdminLookupService identityAdminLookupService,
-                                      BusinessCodeGenerator businessCodeGenerator) {
+                                      BusinessCodeGenerator businessCodeGenerator,
+                                      UserCodeGenerator userCodeGenerator) {
         this.userAccountRepository = userAccountRepository;
         this.userRoleRelRepository = userRoleRelRepository;
         this.groupRepository = groupRepository;
         this.storeRepository = storeRepository;
         this.storeAdminRelRepository = storeAdminRelRepository;
         this.workflowProcessStoreBindingRepository = workflowProcessStoreBindingRepository;
+        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapService;
+        this.storeSampleDataInitializationService = storeSampleDataInitializationService;
         this.identityAdminLookupService = identityAdminLookupService;
         this.businessCodeGenerator = businessCodeGenerator;
+        this.userCodeGenerator = userCodeGenerator;
     }
 
     @Transactional
@@ -68,17 +78,20 @@ public class GroupAdministrationService {
 
         if (user == null) {
             user = new UserAccountDO();
-            user.setUsername(phone);
+            user.setUsername(userCodeGenerator.generate(realNameOrPhone, phone));
             user.setRealName(realNameOrPhone);
             user.setPhone(phone);
             user.setPasswordHash(PasswordCodec.encode("123654"));
             user.setPasswordSalt(null);
             user.setStatus(STATUS_ENABLED);
             user.setSourceType("MANUAL");
+            user.setCreatedScopeType("GROUP");
+            user.setCreatedScopeId(group.getId());
             user.setFirstLoginChangedPwd(Boolean.FALSE);
             userAccountRepository.save(user);
         } else if (realNameOrPhone != null && !realNameOrPhone.equals(user.getRealName())) {
             user.setRealName(realNameOrPhone);
+            user.setUsername(userCodeGenerator.generate(realNameOrPhone, phone));
             userAccountRepository.update(user);
         }
 
@@ -140,6 +153,7 @@ public class GroupAdministrationService {
         group.setRemark(identityAdminLookupService.trimNullable(request.getRemark()));
         groupRepository.save(group);
         ensureGroupBuiltinRoles(group.getId(), operatorId);
+        inventoryWorkflowBootstrapService.ensureDefaults(group.getId(), operatorId);
         return group;
     }
 
@@ -204,6 +218,7 @@ public class GroupAdministrationService {
         store.setAddress(identityAdminLookupService.trimNullable(request.getAddress()));
         store.setRemark(identityAdminLookupService.trimNullable(request.getRemark()));
         storeRepository.save(store);
+        storeSampleDataInitializationService.initializeStoreSampleData(store.getId());
         return store;
     }
 

@@ -45,9 +45,11 @@ public class ItemProfileRepositoryImpl implements ItemProfileRepository {
         if (itemId == null) {
             return Optional.empty();
         }
-        return Optional.ofNullable(itemProfileMapper.selectOne(new LambdaQueryWrapper<ItemProfileDO>()
+        return itemProfileMapper.selectList(new LambdaQueryWrapper<ItemProfileDO>()
                 .eq(ItemProfileDO::getItemId, itemId)
-                .last("limit 1")));
+                .orderByDesc(ItemProfileDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

@@ -21,12 +21,10 @@ src/api/
   refresh-token.ts     # 刷新 token（单飞）
   modules/
     auth.ts            # 登录示例
-    item.ts            # 物品列表与批量操作示例
+    item.ts            # 物品列表、分类、标签与统计类型接口
     org.ts             # 机构树示例
   types.ts             # 通用响应/分页类型
   index.ts             # 统一导出
-src/mocks/
-  items.ts             # 物品页 mock 数据与 mock 后端逻辑
 ```
 
 ### 响应约定
@@ -59,21 +57,12 @@ npm.cmd run dev
 
 ## 环境变量
 
-开发环境默认不走真实登录和机构接口，避免阻塞高保真联调：
+开发环境默认对接真实后端接口，需确保后端服务已启动：
 
 ```env
 VITE_API_BASE_URL=http://127.0.0.1:8080
-VITE_USE_REAL_AUTH_API=0
-VITE_USE_REAL_ORG_API=0
-VITE_USE_ITEM_MOCK=1
-```
-
-生产环境建议开启：
-
-```env
 VITE_USE_REAL_AUTH_API=1
 VITE_USE_REAL_ORG_API=1
-VITE_USE_ITEM_MOCK=0
 ```
 
 ## 新增一个业务接口的标准步骤

@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { authStorage } from '@/api/auth-storage';
 
-export type OrgNodeType = 'group' | 'store' | 'trial';
+export type OrgNodeType = 'group' | 'store';
 
 export type OrgNode = {
   id: string;
@@ -24,14 +24,6 @@ type LoginOptions = {
 };
 
 const defaultOrgTree: OrgNode[] = [
-  {
-    id: 'trial-1',
-    name: '测试美味火锅',
-    merchantNo: '53568192',
-    code: 'MD00002',
-    city: '成都',
-    type: 'trial',
-  },
   {
     id: 'group-1',
     name: 'BOBO集团总部',
@@ -91,7 +83,7 @@ const flattenNodes = (nodes: OrgNode[]): OrgNode[] => {
 
 const normalizeOrgType = (value: unknown): OrgNodeType => {
   const normalized = String(value ?? '').trim().toLowerCase();
-  if (normalized === 'group' || normalized === 'store' || normalized === 'trial') {
+  if (normalized === 'group' || normalized === 'store') {
     return normalized;
   }
   return 'store';
@@ -102,7 +94,7 @@ const normalizeOrgId = (rawId: unknown, type: OrgNodeType): string => {
   if (!normalized) {
     return '';
   }
-  if (/^(group|store|trial)-/i.test(normalized)) {
+  if (/^(group|store)-/i.test(normalized)) {
     return normalized.toLowerCase();
   }
   return `${type}-${normalized}`;
@@ -165,10 +157,8 @@ export const useSessionStore = defineStore('session', () => {
     userName.value = name;
     loginAccount.value = String(account ?? '').trim();
     platformAdminMode.value = Boolean(options.platformAdminMode);
-    if (platformAdminMode.value) {
-      currentOrgId.value = '';
-      persistOrg();
-    }
+    currentOrgId.value = '';
+    persistOrg();
     persistPlatformAdminMode();
     persistLogin();
     if (loginAccount.value) {

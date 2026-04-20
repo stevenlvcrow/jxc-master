@@ -27,9 +27,11 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
 
     @Override
     public Optional<UserAccountDO> findByPhone(String phone) {
-        return Optional.ofNullable(userAccountMapper.selectOne(new LambdaQueryWrapper<UserAccountDO>()
+        return userAccountMapper.selectList(new LambdaQueryWrapper<UserAccountDO>()
                 .eq(UserAccountDO::getPhone, phone)
-                .last("limit 1")));
+                .orderByDesc(UserAccountDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override
@@ -53,6 +55,14 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
                 .in(UserAccountDO::getId, ids)
                 .orderByDesc(UserAccountDO::getCreatedAt)
                 .orderByDesc(UserAccountDO::getId));
+    }
+
+    @Override
+    public List<UserAccountDO> findRolelessUsersByCreatedScopes(List<Long> groupIds, List<Long> storeIds) {
+        if ((groupIds == null || groupIds.isEmpty()) && (storeIds == null || storeIds.isEmpty())) {
+            return Collections.emptyList();
+        }
+        return userAccountMapper.selectRolelessUsersByCreatedScopes(groupIds, storeIds);
     }
 
     @Override

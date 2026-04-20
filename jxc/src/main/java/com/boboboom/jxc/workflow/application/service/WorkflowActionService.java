@@ -2,6 +2,8 @@ package com.boboboom.jxc.workflow.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
+import com.boboboom.jxc.identity.domain.repository.RoleRepository;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
@@ -28,15 +30,18 @@ public class WorkflowActionService {
     private final WorkflowProcessRegistryRepository processRegistryRepository;
     private final WorkflowDefinitionConfigRepository definitionConfigRepository;
     private final UserAccountRepository userAccountRepository;
+    private final RoleRepository roleRepository;
     private final ObjectMapper objectMapper;
 
     public WorkflowActionService(WorkflowProcessRegistryRepository processRegistryRepository,
                                  WorkflowDefinitionConfigRepository definitionConfigRepository,
                                  UserAccountRepository userAccountRepository,
+                                 RoleRepository roleRepository,
                                  ObjectMapper objectMapper) {
         this.processRegistryRepository = processRegistryRepository;
         this.definitionConfigRepository = definitionConfigRepository;
         this.userAccountRepository = userAccountRepository;
+        this.roleRepository = roleRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -126,6 +131,112 @@ public class WorkflowActionService {
         } catch (BusinessException ex) {
             return false;
         }
+    }
+
+    public String resolveApprovalRoleLabel(String businessCode,
+                                           String scopeType,
+                                           Long scopeId,
+                                           Long groupId,
+                                           Long operatorId,
+                                           String taskName) {
+        if (operatorId == null || !StringUtils.hasText(businessCode) || !StringUtils.hasText(taskName)) {
+            return "普通审核";
+        }
+        try {
+            Optional<WorkflowBinding> binding = resolveBinding(scopeType, scopeId, groupId, businessCode);
+            if (binding.isEmpty()) {
+                return "普通审核";
+            }
+            WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, binding.get().processCode(), binding.get().workflowCode());
+            if (config == null || !StringUtils.hasText(config.getNodeConfigJson())) {
+                return "普通审核";
+            }
+            JsonNode root = objectMapper.readTree(config.getNodeConfigJson());
+            if (root == null || !root.isArray()) {
+                return "普通审核";
+            }
+            String normalizedTaskName = trimToNull(taskName);
+            for (JsonNode node : root) {
+                String nodeName = trimToNull(node.path("nodeName").asText(null));
+                if (!StringUtils.hasText(nodeName) || !nodeName.equals(normalizedTaskName)) {
+                    continue;
+                }
+                Long approverUserId = node.path("approverUserId").isNumber()
+                        ? node.path("approverUserId").asLong()
+                        : null;
+                if (approverUserId != null && approverUserId.equals(operatorId)) {
+                    return "指定人员";
+                }
+                String roleCode = trimToNull(node.path("approverRoleCode").asText(null));
+                if (!StringUtils.hasText(roleCode)) {
+                    return "普通审核";
+                }
+                return roleRepository.findByRoleCode(roleCode)
+                        .map(RoleDO::getRoleName)
+                        .orElse(roleCode);
+            }
+        } catch (Exception ex) {
+            return "普通审核";
+        }
+        return "普通审核";
+    }
+
+    public Optional<ApprovalTarget> resolveApprovalTarget(String businessCode,
+                                                          String scopeType,
+                                                          Long scopeId,
+                                                          Long groupId,
+                                                          String taskName) {
+        if (!StringUtils.hasText(businessCode) || !StringUtils.hasText(taskName)) {
+            return Optional.empty();
+        }
+        try {
+            Optional<WorkflowBinding> binding = resolveBinding(scopeType, scopeId, groupId, businessCode);
+            if (binding.isEmpty()) {
+                return Optional.empty();
+            }
+            WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, binding.get().processCode(), binding.get().workflowCode());
+            if (config == null || !StringUtils.hasText(config.getNodeConfigJson())) {
+                return Optional.empty();
+            }
+            JsonNode root = objectMapper.readTree(config.getNodeConfigJson());
+            if (root == null || !root.isArray()) {
+                return Optional.empty();
+            }
+            String normalizedTaskName = trimToNull(taskName);
+            for (JsonNode node : root) {
+                String nodeName = trimToNull(node.path("nodeName").asText(null));
+                if (!StringUtils.hasText(nodeName) || !nodeName.equals(normalizedTaskName)) {
+                    continue;
+                }
+                Long approverUserId = node.path("approverUserId").isNumber()
+                        ? node.path("approverUserId").asLong()
+                        : null;
+                String approverRoleCode = trimToNull(node.path("approverRoleCode").asText(null));
+                String approverRoleName = resolveRoleName(approverRoleCode);
+                return Optional.of(new ApprovalTarget(approverUserId, approverRoleCode, approverRoleName));
+            }
+        } catch (Exception ex) {
+            return Optional.empty();
+        }
+        return Optional.empty();
+    }
+
+    public boolean matchesApprovalTarget(Long operatorId,
+                                         String scopeType,
+                                         Long scopeId,
+                                         Long groupId,
+                                         ApprovalTarget target) {
+        if (operatorId == null || target == null) {
+            return false;
+        }
+        if (target.userId() != null && target.userId().equals(operatorId)) {
+            return true;
+        }
+        if (!StringUtils.hasText(target.roleCode())) {
+            return false;
+        }
+        Set<String> userRoleCodes = collectUserRoleCodes(operatorId, scopeType, scopeId, groupId);
+        return userRoleCodes.contains(target.roleCode());
     }
 
     private Optional<WorkflowBinding> resolveBinding(String scopeType, Long scopeId, Long groupId, String businessCode) {
@@ -334,6 +445,16 @@ public class WorkflowActionService {
         return value.toUpperCase(Locale.ROOT);
     }
 
+    private String resolveRoleName(String roleCode) {
+        if (!StringUtils.hasText(roleCode)) {
+            return "";
+        }
+        return roleRepository.findByRoleCode(roleCode)
+                .map(RoleDO::getRoleName)
+                .filter(StringUtils::hasText)
+                .orElse(roleCode);
+    }
+
     private String trimToNull(String value) {
         if (!StringUtils.hasText(value)) {
             return null;
@@ -345,5 +466,8 @@ public class WorkflowActionService {
                                    String workflowCode,
                                    String processDefinitionKey,
                                    String processDefinitionId) {
+    }
+
+    public record ApprovalTarget(Long userId, String roleCode, String roleName) {
     }
 }

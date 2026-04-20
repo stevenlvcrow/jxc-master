@@ -37,13 +37,41 @@ public class UserRoleRelRepositoryImpl implements UserRoleRelRepository {
     }
 
     @Override
+    public boolean existsByUserIdAndRoleIdAndScopeTypeAndStatus(Long userId, Long roleId, String scopeType, String status) {
+        if (userId == null || roleId == null || scopeType == null || status == null) {
+            return false;
+        }
+        Long count = userRoleRelMapper.selectCount(new LambdaQueryWrapper<UserRoleRelDO>()
+                .eq(UserRoleRelDO::getUserId, userId)
+                .eq(UserRoleRelDO::getRoleId, roleId)
+                .eq(UserRoleRelDO::getScopeType, scopeType)
+                .eq(UserRoleRelDO::getStatus, status));
+        return count != null && count > 0;
+    }
+
+    @Override
+    public boolean existsByUserIdAndScopeTypeAndScopeIdAndStatus(Long userId, String scopeType, Long scopeId, String status) {
+        if (userId == null || scopeType == null || scopeId == null || status == null) {
+            return false;
+        }
+        Long count = userRoleRelMapper.selectCount(new LambdaQueryWrapper<UserRoleRelDO>()
+                .eq(UserRoleRelDO::getUserId, userId)
+                .eq(UserRoleRelDO::getScopeType, scopeType)
+                .eq(UserRoleRelDO::getScopeId, scopeId)
+                .eq(UserRoleRelDO::getStatus, status));
+        return count != null && count > 0;
+    }
+
+    @Override
     public Optional<UserRoleRelDO> findByUserIdRoleAndScope(Long userId, Long roleId, String scopeType, Long scopeId) {
-        return Optional.ofNullable(userRoleRelMapper.selectOne(new LambdaQueryWrapper<UserRoleRelDO>()
+        return userRoleRelMapper.selectList(new LambdaQueryWrapper<UserRoleRelDO>()
                 .eq(UserRoleRelDO::getUserId, userId)
                 .eq(UserRoleRelDO::getRoleId, roleId)
                 .eq(UserRoleRelDO::getScopeType, scopeType)
                 .eq(UserRoleRelDO::getScopeId, scopeId)
-                .last("limit 1")));
+                .orderByDesc(UserRoleRelDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

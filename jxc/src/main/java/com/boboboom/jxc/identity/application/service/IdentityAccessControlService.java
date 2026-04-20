@@ -72,6 +72,16 @@ public class IdentityAccessControlService {
         }
     }
 
+    /**
+     * 校验当前操作者是否可以访问目标门店。
+     *
+     * @param operatorId 操作者主键
+     * @param storeId 门店主键
+     */
+    public void ensureCanAccessStore(Long operatorId, Long storeId) {
+        orgScopeService.resolveAccessibleScope(operatorId, "store-" + storeId);
+    }
+
     public Set<Long> listManageableRoleIds(Long operatorId) {
         List<Long> managedGroupIds = listManagedGroupIds(operatorId);
         if (managedGroupIds.isEmpty()) {

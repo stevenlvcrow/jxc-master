@@ -82,6 +82,14 @@ const canDelete = ref(false);
 const canApprove = ref(false);
 const canUnapprove = ref(false);
 
+const resolvePurchaseInboundOrgId = () => {
+  const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
+  if (!currentOrgId || !currentOrgId.startsWith('store-')) {
+    return undefined;
+  }
+  return currentOrgId;
+};
+
 onMounted(() => {
   void loadWarehouseTree();
 });
@@ -94,17 +102,17 @@ watch(
 );
 
 const resolveOrgId = () => {
-  const orgId = (sessionStore.currentOrgId ?? '').trim();
-  if (!orgId) {
-    return undefined;
-  }
-  if (orgId.startsWith('group-') || orgId.startsWith('store-')) {
-    return orgId;
-  }
-  return undefined;
+  return resolvePurchaseInboundOrgId();
 };
 
 const fetchTableData = async () => {
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    tableData.value = [];
+    total.value = 0;
+    selectedIds.value = [];
+    return;
+  }
   loading.value = true;
   try {
     const result = await fetchPurchaseInboundPageApi({
@@ -126,7 +134,7 @@ const fetchTableData = async () => {
       inspectionCount: query.inspectionCount || undefined,
       printStatus: query.printStatus === '全部' ? undefined : query.printStatus,
       remark: query.remark || undefined,
-    }, resolveOrgId());
+    }, orgId);
     tableData.value = result.list;
     total.value = result.total;
     selectedIds.value = [];
@@ -136,8 +144,17 @@ const fetchTableData = async () => {
 };
 
 const loadPermission = async () => {
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    canCreate.value = false;
+    canUpdate.value = false;
+    canDelete.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
+    return;
+  }
   try {
-    const result = await fetchPurchaseInboundPermissionApi(resolveOrgId());
+    const result = await fetchPurchaseInboundPermissionApi(orgId);
     canCreate.value = Boolean(result.canCreate);
     canUpdate.value = Boolean(result.canUpdate);
     canDelete.value = Boolean(result.canDelete);
@@ -216,7 +233,25 @@ const handleToolbarAction = async (action: string) => {
       ElMessage.warning('请先选择单据');
       return;
     }
-    await batchUnapprovePurchaseInboundApi(selectedIds.value, resolveOrgId());
+    try {
+      const { value } = await ElMessageBox.prompt('请输入拒审原因', '拒审确认', {
+        confirmButtonText: '确认拒审',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '请输入拒审原因',
+        inputValidator: (value: string) => {
+          if (!value.trim()) {
+            return '请填写拒审原因';
+          }
+          return true;
+        },
+        inputErrorMessage: '请填写拒审原因',
+        closeOnClickModal: false,
+      });
+      await batchUnapprovePurchaseInboundApi(selectedIds.value, value.trim(), resolveOrgId());
+    } catch {
+      return;
+    }
     ElMessage.success('批量取消审核成功');
     await fetchTableData();
     return;
@@ -234,7 +269,12 @@ const handleDelete = async (row: PurchaseInboundRow) => {
   } catch {
     return;
   }
-  await deletePurchaseInboundApi(row.id, resolveOrgId());
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    ElMessage.warning('请选择门店后再操作');
+    return;
+  }
+  await deletePurchaseInboundApi(row.id, orgId);
   ElMessage.success('删除成功');
   await fetchTableData();
 };
@@ -345,7 +385,7 @@ watch(
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="复审状态">
+      <el-form-item label="审核状态">
         <el-select v-model="query.reviewStatus" clearable style="width: 120px">
           <el-option
             v-for="option in reviewStatusOptions"
@@ -454,7 +494,7 @@ watch(
       <el-table-column prop="supplier" label="供应商" min-width="140" show-overflow-tooltip />
       <el-table-column prop="amountTaxIncluded" label="金额（含税）" min-width="110" show-overflow-tooltip />
       <el-table-column prop="status" label="状态" min-width="100" show-overflow-tooltip />
-      <el-table-column prop="reviewStatus" label="复审状态" min-width="100" show-overflow-tooltip />
+      <el-table-column prop="reviewStatus" label="审核状态" min-width="100" show-overflow-tooltip />
       <el-table-column prop="reconciliationStatus" label="对账状态" min-width="100" show-overflow-tooltip />
       <el-table-column prop="invoiceStatus" label="发票状态" min-width="100" show-overflow-tooltip />
       <el-table-column prop="printStatus" label="打印状态" min-width="100" show-overflow-tooltip />

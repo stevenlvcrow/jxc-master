@@ -10,6 +10,7 @@ import {
   type ItemTagRow,
 } from '@/api/modules/item';
 import { useSessionStore } from '@/stores/session';
+import { requireItemOrgId } from './org';
 
 type TagDialogForm = {
   tagCode: string;
@@ -57,14 +58,7 @@ const formRules: FormRules<TagDialogForm> = {
 };
 
 const resolveItemOrgId = () => {
-  const orgId = (sessionStore.currentOrgId ?? '').trim();
-  if (!orgId) {
-    return undefined;
-  }
-  if (orgId.startsWith('group-') || orgId.startsWith('store-')) {
-    return orgId;
-  }
-  return undefined;
+  return requireItemOrgId(sessionStore.currentOrgId);
 };
 
 const fetchList = async () => {

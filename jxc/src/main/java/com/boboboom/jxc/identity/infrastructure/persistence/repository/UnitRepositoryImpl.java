@@ -45,29 +45,35 @@ public class UnitRepositoryImpl implements UnitRepository {
 
     @Override
     public Optional<UnitDO> findByIdAndScope(Long id, String scopeType, Long scopeId) {
-        return Optional.ofNullable(unitMapper.selectOne(new LambdaQueryWrapper<UnitDO>()
+        return unitMapper.selectList(new LambdaQueryWrapper<UnitDO>()
                 .eq(UnitDO::getId, id)
                 .eq(UnitDO::getScopeType, scopeType)
                 .eq(UnitDO::getScopeId, scopeId)
-                .last("limit 1")));
+                .orderByDesc(UnitDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override
     public Optional<UnitDO> findByScopeAndUnitCode(String scopeType, Long scopeId, String unitCode) {
-        return Optional.ofNullable(unitMapper.selectOne(new LambdaQueryWrapper<UnitDO>()
+        return unitMapper.selectList(new LambdaQueryWrapper<UnitDO>()
                 .eq(UnitDO::getScopeType, scopeType)
                 .eq(UnitDO::getScopeId, scopeId)
                 .eq(UnitDO::getUnitCode, unitCode)
-                .last("limit 1")));
+                .orderByDesc(UnitDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override
     public Optional<UnitDO> findByScopeAndUnitName(String scopeType, Long scopeId, String unitName) {
-        return Optional.ofNullable(unitMapper.selectOne(new LambdaQueryWrapper<UnitDO>()
+        return unitMapper.selectList(new LambdaQueryWrapper<UnitDO>()
                 .eq(UnitDO::getScopeType, scopeType)
                 .eq(UnitDO::getScopeId, scopeId)
                 .eq(UnitDO::getUnitName, unitName)
-                .last("limit 1")));
+                .orderByDesc(UnitDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

@@ -14,6 +14,8 @@ public class UserAccountDO extends BaseAuditDO {
     private String passwordSalt;
     private String status;
     private String sourceType;
+    private String createdScopeType;
+    private Long createdScopeId;
     private Boolean firstLoginChangedPwd;
     private LocalDateTime lastLoginAt;
     private String lastLoginIp;
@@ -72,6 +74,22 @@ public class UserAccountDO extends BaseAuditDO {
 
     public void setSourceType(String sourceType) {
         this.sourceType = sourceType;
+    }
+
+    public String getCreatedScopeType() {
+        return createdScopeType;
+    }
+
+    public void setCreatedScopeType(String createdScopeType) {
+        this.createdScopeType = createdScopeType;
+    }
+
+    public Long getCreatedScopeId() {
+        return createdScopeId;
+    }
+
+    public void setCreatedScopeId(Long createdScopeId) {
+        this.createdScopeId = createdScopeId;
     }
 
     public Boolean getFirstLoginChangedPwd() {

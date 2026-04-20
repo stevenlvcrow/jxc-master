@@ -1,15 +1,12 @@
 package com.boboboom.jxc.item.application.service;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.item.domain.repository.SupplierCategoryRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierCategoryDO;
-import com.boboboom.jxc.item.infrastructure.persistence.mapper.SupplierCategoryMapper;
 import com.boboboom.jxc.item.interfaces.rest.request.SupplierCategoryCreateRequest;
-import jakarta.validation.Valid;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -26,25 +23,21 @@ public class SupplierCategoryApplicationService {
     private static final String ROOT_CATEGORY = "供应商类别";
     private static final String CATEGORY_CODE_PREFIX = "GYLB";
 
-    private final SupplierCategoryMapper supplierCategoryMapper;
+    private final SupplierCategoryRepository supplierCategoryRepository;
     private final OrgScopeService orgScopeService;
     private final BusinessCodeGenerator businessCodeGenerator;
 
-    public SupplierCategoryApplicationService(SupplierCategoryMapper supplierCategoryMapper,
+    public SupplierCategoryApplicationService(SupplierCategoryRepository supplierCategoryRepository,
                                               OrgScopeService orgScopeService,
                                               BusinessCodeGenerator businessCodeGenerator) {
-        this.supplierCategoryMapper = supplierCategoryMapper;
+        this.supplierCategoryRepository = supplierCategoryRepository;
         this.orgScopeService = orgScopeService;
         this.businessCodeGenerator = businessCodeGenerator;
     }
 
-    public CodeDataResponse<List<TreeNode>> tree(String orgId) {
+    public List<TreeNode> tree(String orgId) {
         CategoryScope scope = resolveScope(orgId);
-        List<SupplierCategoryDO> list = supplierCategoryMapper.selectList(
-                scopeQuery(scope)
-                        .orderByAsc(SupplierCategoryDO::getCreatedAt)
-                        .orderByAsc(SupplierCategoryDO::getId)
-        );
+        List<SupplierCategoryDO> list = supplierCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
 
         Map<String, TreeNode> nodeMap = new LinkedHashMap<>();
         nodeMap.put(ROOT_CATEGORY, new TreeNode("all", ROOT_CATEGORY, new ArrayList<>()));
@@ -62,12 +55,12 @@ public class SupplierCategoryApplicationService {
                 parentNode.children().add(childNode);
             }
         }
-        return CodeDataResponse.ok(List.of(nodeMap.get(ROOT_CATEGORY)));
+        return List.of(nodeMap.get(ROOT_CATEGORY));
     }
 
     @Transactional
-    public CodeDataResponse<IdPayload> create(String orgId,
-                                              SupplierCategoryCreateRequest request) {
+    public IdPayload create(String orgId,
+                            SupplierCategoryCreateRequest request) {
         CategoryScope scope = resolveScope(orgId);
         String categoryCode = generateCategoryCode(scope);
         String categoryName = trim(request.categoryName());
@@ -83,14 +76,12 @@ public class SupplierCategoryApplicationService {
         row.setCategoryCode(categoryCode);
         row.setCategoryName(categoryName);
         row.setParentCategory(parentCategory);
-        supplierCategoryMapper.insert(row);
-        return CodeDataResponse.ok(new IdPayload(row.getId()));
+        supplierCategoryRepository.save(row);
+        return new IdPayload(row.getId());
     }
 
     private String generateCategoryCode(CategoryScope scope) {
-        List<String> existingCodes = supplierCategoryMapper.selectList(
-                        scopeQuery(scope).select(SupplierCategoryDO::getCategoryCode))
-                .stream()
+        List<String> existingCodes = supplierCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
                 .map(SupplierCategoryDO::getCategoryCode)
                 .filter(StringUtils::hasText)
                 .toList();
@@ -98,19 +89,13 @@ public class SupplierCategoryApplicationService {
     }
 
     private void ensureCodeUnique(CategoryScope scope, String code) {
-        SupplierCategoryDO existing = supplierCategoryMapper.selectOne(
-                scopeQuery(scope).eq(SupplierCategoryDO::getCategoryCode, code).last("limit 1")
-        );
-        if (existing != null) {
+        if (supplierCategoryRepository.findByScopeAndCode(scope.scopeType(), scope.scopeId(), code).isPresent()) {
             throw new BusinessException("类别编码已存在");
         }
     }
 
     private void ensureNameUnique(CategoryScope scope, String name) {
-        SupplierCategoryDO existing = supplierCategoryMapper.selectOne(
-                scopeQuery(scope).eq(SupplierCategoryDO::getCategoryName, name).last("limit 1")
-        );
-        if (existing != null) {
+        if (supplierCategoryRepository.findByScopeAndName(scope.scopeType(), scope.scopeId(), name).isPresent()) {
             throw new BusinessException("类别名称已存在");
         }
     }
@@ -119,10 +104,7 @@ public class SupplierCategoryApplicationService {
         if (Objects.equals(parentCategory, ROOT_CATEGORY)) {
             return;
         }
-        SupplierCategoryDO parent = supplierCategoryMapper.selectOne(
-                scopeQuery(scope).eq(SupplierCategoryDO::getCategoryName, parentCategory).last("limit 1")
-        );
-        if (parent == null) {
+        if (supplierCategoryRepository.findByScopeAndName(scope.scopeType(), scope.scopeId(), parentCategory).isEmpty()) {
             throw new BusinessException("上级类别不存在");
         }
     }
@@ -147,12 +129,6 @@ public class SupplierCategoryApplicationService {
             return ROOT_CATEGORY;
         }
         return normalized;
-    }
-
-    private LambdaQueryWrapper<SupplierCategoryDO> scopeQuery(CategoryScope scope) {
-        return new LambdaQueryWrapper<SupplierCategoryDO>()
-                .eq(SupplierCategoryDO::getScopeType, scope.scopeType())
-                .eq(SupplierCategoryDO::getScopeId, scope.scopeId());
     }
 
     private CategoryScope resolveScope(String orgId) {

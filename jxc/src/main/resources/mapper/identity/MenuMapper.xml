@@ -40,7 +40,8 @@
     <select id="selectMenusByUserContext" resultMap="MenuPermissionViewMap">
         with recursive eligible_roles as (
             select distinct r.id as role_id,
-                            r.role_code
+                            r.role_code,
+                            r.role_type
             from sys_user_role_rel urr
                      inner join sys_role r on r.id = urr.role_id
             where urr.user_id = #{userId}
@@ -68,7 +69,8 @@
                 )
             union
             select distinct r_store.id as role_id,
-                            r_store.role_code
+                            r_store.role_code,
+                            r_store.role_type
             from sys_role r_store
             where #{scopeType} = 'STORE'
               and r_store.status = 'ENABLED'
@@ -82,7 +84,8 @@
               )
             union
             select distinct r_store.id as role_id,
-                            r_store.role_code
+                            r_store.role_code,
+                            r_store.role_type
             from sys_role r_store
             where #{scopeType} = 'STORE'
               and r_store.status = 'ENABLED'
@@ -121,6 +124,7 @@
                      inner join sys_role_menu_rel rmr on rmr.role_id = er.role_id
                      inner join sys_menu m on m.id = rmr.menu_id
             where m.status = 'ENABLED'
+              and er.role_type = #{scopeType}
         ),
         menu_tree as (
             select dm.id,

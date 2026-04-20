@@ -12,7 +12,9 @@ import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest.UserB
 import com.boboboom.jxc.identity.interfaces.rest.request.UserRoleAssignRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest;
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,7 +23,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,6 +36,9 @@ import java.util.Set;
 @Validated
 @RestController
 @RequestMapping("/api/identity/admin/users")
+/**
+ * 用户管理接口，负责用户查询、创建、编辑、状态控制以及角色分配。
+ */
 public class IdentityUserAdminController {
 
     private final IdentityAccessControlService identityAccessControlService;
@@ -41,6 +48,16 @@ public class IdentityUserAdminController {
     private final IdentityAdminSupport identityAdminSupport;
     private final OrgScopeService orgScopeService;
 
+    /**
+     * 构造用户管理接口。
+     *
+     * @param identityAccessControlService 组织权限控制服务
+     * @param userAdministrationService 用户管理服务
+     * @param userRoleAssignmentService 用户角色分配服务
+     * @param identityAdminLookupService 用户查询辅助服务
+     * @param identityAdminSupport 当前登录管理员辅助服务
+     * @param orgScopeService 组织范围解析服务
+     */
     public IdentityUserAdminController(IdentityAccessControlService identityAccessControlService,
                                        UserAdministrationService userAdministrationService,
                                        UserRoleAssignmentService userRoleAssignmentService,
@@ -56,7 +73,15 @@ public class IdentityUserAdminController {
     }
 
     @GetMapping
-    public CodeDataResponse<List<UserAdminView>> listUsers() {
+    /**
+     * 查询用户列表。
+     *
+     * @param pageNum 页码
+     * @param pageSize 每页条数
+     * @return 用户列表响应
+     */
+    public CodeDataResponse<PageData<UserAdminView>> listUsers(@RequestParam(defaultValue = "1") Integer pageNum,
+                                                               @RequestParam(defaultValue = "10") Integer pageSize) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         List<UserAdminView> result = userAdministrationService
                 .listUsers(operatorId, identityAdminSupport.isPlatformAdmin(operatorId))
@@ -82,11 +107,21 @@ public class IdentityUserAdminController {
                                 .toList()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @GetMapping("/salesmen")
-    public CodeDataResponse<List<SalesmanCandidateView>> listSalesmen(@org.springframework.web.bind.annotation.RequestParam String orgId) {
+    /**
+     * 查询可选销售员候选人。
+     *
+     * @param orgId 机构标识
+     * @param pageNum 页码
+     * @param pageSize 每页条数
+     * @return 销售员候选人列表响应
+     */
+    public CodeDataResponse<PageData<SalesmanCandidateView>> listSalesmen(@RequestParam String orgId,
+                                                                          @RequestParam(defaultValue = "1") Integer pageNum,
+                                                                          @RequestParam(defaultValue = "10") Integer pageSize) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, orgId);
         if (!OrgScopeService.SCOPE_STORE.equals(scope.scopeType())) {
@@ -99,22 +134,39 @@ public class IdentityUserAdminController {
                         candidate.phone()
                 ))
                 .toList();
-        return CodeDataResponse.ok(result);
+        return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
     @PostMapping
-    public CodeDataResponse<IdPayload> createUser(@Valid @RequestBody UserUpsertRequest request) {
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 新建用户。
+     *
+     * @param request 用户新增请求
+     * @return 新建结果
+     */
+    public CodeDataResponse<IdPayload> createUser(@Valid @RequestBody UserUpsertRequest request,
+                                                  @RequestParam(required = false) String orgId) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
         if (!platformAdmin && identityAccessControlService.listManagedGroupIds(operatorId).isEmpty()) {
             throw new BusinessException("当前账号无用户创建权限");
         }
+        OrgScopeService.AccessibleScope scope = resolveCreateUserScope(operatorId, platformAdmin, orgId);
         String phone = identityAdminLookupService.normalizePhone(request.getPhone());
-        UserAccountDO user = userAdministrationService.createUser(request, phone);
+        UserAccountDO user = userAdministrationService.createUser(request, phone, scope.scopeType(), scope.scopeId());
         return CodeDataResponse.ok(new IdPayload(user.getId()));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 更新用户信息。
+     *
+     * @param id 用户主键
+     * @param request 用户更新请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> updateUser(@PathVariable Long id,
                                              @Valid @RequestBody UserUpsertRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
@@ -127,6 +179,14 @@ public class IdentityUserAdminController {
     }
 
     @PutMapping("/{id}/status")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 更新用户状态。
+     *
+     * @param id 用户主键
+     * @param request 状态更新请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> updateUserStatus(@PathVariable Long id,
                                                    @Valid @RequestBody StatusUpdateRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
@@ -139,6 +199,13 @@ public class IdentityUserAdminController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 删除单个用户。
+     *
+     * @param id 用户主键
+     * @return 空响应
+     */
     public CodeDataResponse<Void> deleteUser(@PathVariable Long id) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
@@ -147,6 +214,13 @@ public class IdentityUserAdminController {
     }
 
     @DeleteMapping
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 批量删除用户。
+     *
+     * @param request 批量删除请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> batchDeleteUsers(@Valid @RequestBody UserBatchDeleteRequest request) {
         Long operatorId = identityAdminSupport.currentOperatorId();
         boolean platformAdmin = identityAdminSupport.isPlatformAdmin(operatorId);
@@ -155,6 +229,14 @@ public class IdentityUserAdminController {
     }
 
     @PutMapping("/{id}/roles")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
+    /**
+     * 为用户分配角色。
+     *
+     * @param id 用户主键
+     * @param request 角色分配请求
+     * @return 空响应
+     */
     public CodeDataResponse<Void> assignUserRoles(@PathVariable Long id,
                                                   @Valid @RequestBody UserRoleAssignRequest request) {
         identityAdminLookupService.requireUser(id);
@@ -178,5 +260,25 @@ public class IdentityUserAdminController {
                 request.getAssignments()
         );
         return CodeDataResponse.ok();
+    }
+
+    private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
+        int toIndex = Math.min(fromIndex + safePageSize, rows.size());
+        return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);
+    }
+
+    private OrgScopeService.AccessibleScope resolveCreateUserScope(Long operatorId,
+                                                                   boolean platformAdmin,
+                                                                   String orgId) {
+        if (StringUtils.hasText(orgId)) {
+            return orgScopeService.resolveAccessibleScope(operatorId, orgId);
+        }
+        if (platformAdmin) {
+            return new OrgScopeService.AccessibleScope(OrgScopeService.SCOPE_PLATFORM, 0L, 0L);
+        }
+        throw new BusinessException("请先选择机构");
     }
 }

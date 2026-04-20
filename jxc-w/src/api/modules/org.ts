@@ -1,6 +1,6 @@
 ﻿import { apiClient } from '@/api/http-client';
 
-type OrgNodeType = 'group' | 'store' | 'trial';
+type OrgNodeType = 'group' | 'store';
 
 export type OrgNodeDto = {
   id: string;

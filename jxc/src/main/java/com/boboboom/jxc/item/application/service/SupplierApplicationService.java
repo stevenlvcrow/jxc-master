@@ -4,7 +4,6 @@ import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.item.domain.repository.SupplierContractRepository;
 import com.boboboom.jxc.item.domain.repository.SupplierFinanceAccountRepository;
 import com.boboboom.jxc.item.domain.repository.SupplierProfileRepository;
@@ -64,7 +63,7 @@ public class SupplierApplicationService {
         this.businessCodeGenerator = businessCodeGenerator;
     }
 
-    public CodeDataResponse<PageData<SupplierListRow>> list(
+    public PageData<SupplierListRow> list(
             Integer pageNo,
             Integer pageSize,
             String supplierInfo,
@@ -122,11 +121,11 @@ public class SupplierApplicationService {
                     formatDateTime(row.getUpdatedAt())
             ));
         }
-        return CodeDataResponse.ok(new PageData<>(rows, total == null ? 0 : total, safePageNo, safePageSize));
+        return new PageData<>(rows, total == null ? 0 : total, safePageNo, safePageSize);
     }
 
     @Transactional
-    public CodeDataResponse<IdPayload> create(String orgId, SupplierCreateRequest request) {
+    public IdPayload create(String orgId, SupplierCreateRequest request) {
         SupplierScope scope = resolveSupplierScope(orgId);
         String supplierCode = generateSupplierCode(scope);
         ensureSupplierCodeUnique(scope, supplierCode);
@@ -138,17 +137,17 @@ public class SupplierApplicationService {
         profile.setBindStatus(BIND_STATUS_UNBOUND);
         supplierProfileRepository.save(profile);
         replaceSupplierDetails(profile.getId(), request);
-        return CodeDataResponse.ok(new IdPayload(profile.getId()));
+        return new IdPayload(profile.getId());
     }
 
-    public CodeDataResponse<SupplierDetailResponse> detail(Long id, String orgId) {
+    public SupplierDetailResponse detail(Long id, String orgId) {
         SupplierScope scope = resolveSupplierScope(orgId);
         SupplierProfileDO profile = requireSupplierInScope(scope, id, "供应商不存在或无权限访问");
-        return CodeDataResponse.ok(buildSupplierDetail(profile));
+        return buildSupplierDetail(profile);
     }
 
     @Transactional
-    public CodeDataResponse<IdPayload> update(Long id, String orgId, SupplierCreateRequest request) {
+    public IdPayload update(Long id, String orgId, SupplierCreateRequest request) {
         SupplierScope scope = resolveSupplierScope(orgId);
         SupplierProfileDO profile = requireSupplierInScope(scope, id, "供应商不存在或无权限编辑");
         String supplierCode = trim(request.supplierCode());
@@ -158,7 +157,7 @@ public class SupplierApplicationService {
         applyProfileFields(profile, request, scope.scopeType(), supplierCode);
         supplierProfileRepository.update(profile);
         replaceSupplierDetails(profile.getId(), request);
-        return CodeDataResponse.ok(new IdPayload(profile.getId()));
+        return new IdPayload(profile.getId());
     }
 
     private String generateSupplierCode(SupplierScope scope) {

@@ -27,9 +27,11 @@ public class StoreRepositoryImpl implements StoreRepository {
 
     @Override
     public Optional<StoreDO> findByStoreCode(String storeCode) {
-        return Optional.ofNullable(storeMapper.selectOne(new LambdaQueryWrapper<StoreDO>()
+        return storeMapper.selectList(new LambdaQueryWrapper<StoreDO>()
                 .eq(StoreDO::getStoreCode, storeCode)
-                .last("limit 1")));
+                .orderByDesc(StoreDO::getId))
+                .stream()
+                .findFirst();
     }
 
     @Override

@@ -14,6 +14,7 @@ import {
 } from '@/api/modules/item';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
 import CommonMnemonicField from '@/components/CommonMnemonicField.vue';
+import { requireItemOrgId } from './org';
 
 const router = useRouter();
 const route = useRoute();
@@ -257,16 +258,7 @@ const CROP_ZOOM_MAX = 100;
 
 const cropDisplayWidth = computed(() => cropImageNaturalWidth.value * cropImageScale.value);
 const cropDisplayHeight = computed(() => cropImageNaturalHeight.value * cropImageScale.value);
-const resolveItemOrgId = () => {
-  const orgId = (sessionStore.currentOrgId ?? '').trim();
-  if (!orgId) {
-    return undefined;
-  }
-  if (orgId.startsWith('group-') || orgId.startsWith('store-')) {
-    return orgId;
-  }
-  return undefined;
-};
+const resolveItemOrgId = () => requireItemOrgId(sessionStore.currentOrgId);
 
 const addUnitRow = (index: number) => {
   unitSettingRows.value.splice(index + 1, 0, {
@@ -667,10 +659,15 @@ const handleSaveDraft = async () => {
   if (saving.value) {
     return;
   }
-  saving.value = true;
   try {
+    saving.value = true;
     const res = await saveItemDraftApi(buildCreatePayload(), resolveItemOrgId());
     ElMessage.success(`草稿已保存（${res.id}）`);
+  } catch (error) {
+    if (error instanceof Error && error.message === '请先选择机构') {
+      ElMessage.warning(error.message);
+      return;
+    }
   } finally {
     saving.value = false;
   }
@@ -688,8 +685,8 @@ const handleSave = async () => {
     ElMessage.warning('请先选择物品类别');
     return;
   }
-  saving.value = true;
   try {
+    saving.value = true;
     const payload = buildCreatePayload();
     if (isEditMode.value && editItemId.value) {
       await updateItemApi(editItemId.value, payload, resolveItemOrgId());
@@ -699,6 +696,11 @@ const handleSave = async () => {
       ElMessage.success('新增物品成功');
     }
     router.push('/archive/1/1');
+  } catch (error) {
+    if (error instanceof Error && error.message === '请先选择机构') {
+      ElMessage.warning(error.message);
+      return;
+    }
   } finally {
     saving.value = false;
   }
@@ -712,6 +714,12 @@ const loadDetailIfEditMode = async () => {
   try {
     const detail = await fetchItemDetailApi(editItemId.value, resolveItemOrgId());
     applyDetailPayload(detail);
+  } catch (error) {
+    if (error instanceof Error && error.message === '请先选择机构') {
+      ElMessage.warning(error.message);
+      return;
+    }
+    ElMessage.error('物品详情加载失败');
   } finally {
     detailLoading.value = false;
   }

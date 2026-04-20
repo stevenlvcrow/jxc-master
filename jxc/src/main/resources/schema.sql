@@ -101,7 +101,7 @@ VALUES ('PLATFORM', 0, 'U002', '箱', 'AUXILIARY', 'ENABLED', '初始化数据�
 ON CONFLICT (scope_type, scope_id, unit_code) DO NOTHING;
 
 INSERT INTO sys_unit (scope_type, scope_id, unit_code, unit_name, unit_type, status, remark)
-VALUES ('PLATFORM', 0, 'U003', '袋', 'AUXILIARY', 'DISABLED', '初始化数据：前端静态数据迁移')
+VALUES ('PLATFORM', 0, 'U003', '袋', 'AUXILIARY', 'ENABLED', '初始化数据：前端静态数据迁移')
 ON CONFLICT (scope_type, scope_id, unit_code) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS sys_user
@@ -114,6 +114,8 @@ CREATE TABLE IF NOT EXISTS sys_user
     password_salt            VARCHAR(128),
     status                   VARCHAR(16)  NOT NULL DEFAULT 'ENABLED',
     source_type              VARCHAR(32)  NOT NULL DEFAULT 'EXTERNAL_PUSH',
+    created_scope_type       VARCHAR(16)  NOT NULL DEFAULT 'PLATFORM',
+    created_scope_id         BIGINT       NOT NULL DEFAULT 0,
     first_login_changed_pwd  BOOLEAN      NOT NULL DEFAULT FALSE,
     last_login_at            TIMESTAMP,
     last_login_ip            VARCHAR(64),
@@ -121,11 +123,12 @@ CREATE TABLE IF NOT EXISTS sys_user
     updated_at               TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_sys_user_phone UNIQUE (phone),
     CONSTRAINT ck_sys_user_status CHECK (status IN ('ENABLED', 'DISABLED')),
-    CONSTRAINT ck_sys_user_source_type CHECK (source_type IN ('EXTERNAL_PUSH', 'MANUAL', 'SYSTEM_INIT'))
+    CONSTRAINT ck_sys_user_source_type CHECK (source_type IN ('EXTERNAL_PUSH', 'MANUAL', 'SYSTEM_INIT')),
+    CONSTRAINT ck_sys_user_created_scope_type CHECK (created_scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
 );
 
 COMMENT ON TABLE sys_user IS '统一账号表';
-COMMENT ON COLUMN sys_user.username IS '登录账号，当前等于手机号';
+COMMENT ON COLUMN sys_user.username IS '登录账号/用户编码，默认按姓名助记码+手机号后4位生成（小写）';
 COMMENT ON COLUMN sys_user.real_name IS '姓名';
 COMMENT ON COLUMN sys_user.phone IS '手机号，全局唯一';
 COMMENT ON COLUMN sys_user.password_hash IS '密码密文';
@@ -137,6 +140,42 @@ COMMENT ON COLUMN sys_user.last_login_at IS '最后登录时间';
 COMMENT ON COLUMN sys_user.last_login_ip IS '最后登录IP';
 COMMENT ON COLUMN sys_user.created_at IS '创建时间';
 COMMENT ON COLUMN sys_user.updated_at IS '更新时间';
+
+ALTER TABLE sys_user
+    ADD COLUMN IF NOT EXISTS created_scope_type VARCHAR(16);
+
+ALTER TABLE sys_user
+    ADD COLUMN IF NOT EXISTS created_scope_id BIGINT;
+
+COMMENT ON COLUMN sys_user.created_scope_type IS '创建归属范围：PLATFORM/GROUP/STORE';
+
+COMMENT ON COLUMN sys_user.created_scope_id IS '创建归属范围ID，PLATFORM 固定为 0';
+
+UPDATE sys_user
+SET created_scope_type = 'PLATFORM'
+WHERE created_scope_type IS NULL;
+
+UPDATE sys_user
+SET created_scope_id = 0
+WHERE created_scope_id IS NULL;
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_type SET DEFAULT 'PLATFORM';
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_type SET NOT NULL;
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_id SET DEFAULT 0;
+
+ALTER TABLE sys_user
+    ALTER COLUMN created_scope_id SET NOT NULL;
+
+ALTER TABLE sys_user
+    DROP CONSTRAINT IF EXISTS ck_sys_user_created_scope_type;
+
+ALTER TABLE sys_user
+    ADD CONSTRAINT ck_sys_user_created_scope_type CHECK (created_scope_type IN ('PLATFORM', 'GROUP', 'STORE'));
 
 CREATE TABLE IF NOT EXISTS sys_user_password_log
 (
@@ -1008,6 +1047,7 @@ CREATE TABLE IF NOT EXISTS inventory_purchase_inbound
     workflow_status VARCHAR(16)   NOT NULL DEFAULT 'NONE',
     pending_operation VARCHAR(16) NOT NULL DEFAULT 'NONE',
     remark         VARCHAR(500),
+    rejection_reason VARCHAR(256),
     created_by     BIGINT,
     approved_by    BIGINT,
     approved_at    TIMESTAMP,
@@ -1050,6 +1090,9 @@ ALTER TABLE inventory_purchase_inbound
 ALTER TABLE inventory_purchase_inbound
     ADD COLUMN IF NOT EXISTS pending_operation VARCHAR(16) NOT NULL DEFAULT 'NONE';
 
+ALTER TABLE inventory_purchase_inbound
+    ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR(256);
+
 COMMENT ON TABLE inventory_purchase_inbound IS '采购入库单';
 COMMENT ON COLUMN inventory_purchase_inbound.scope_type IS '数据范围：PLATFORM/GROUP/STORE';
 COMMENT ON COLUMN inventory_purchase_inbound.scope_id IS '范围ID，平台固定0';
@@ -1064,6 +1107,7 @@ COMMENT ON COLUMN inventory_purchase_inbound.workflow_task_id IS '当前待办�
 COMMENT ON COLUMN inventory_purchase_inbound.workflow_task_name IS '当前待办任务名称';
 COMMENT ON COLUMN inventory_purchase_inbound.workflow_status IS '流程状态：NONE/RUNNING/COMPLETED/REVOKED';
 COMMENT ON COLUMN inventory_purchase_inbound.pending_operation IS '待处理动作：NONE/CREATE/UPDATE/DELETE';
+COMMENT ON COLUMN inventory_purchase_inbound.rejection_reason IS '拒审原因';
 COMMENT ON COLUMN inventory_purchase_inbound.status IS '状态：草稿/已提交/已审核';
 
 CREATE TABLE IF NOT EXISTS inventory_purchase_inbound_line
@@ -1133,6 +1177,50 @@ CREATE INDEX IF NOT EXISTS idx_workflow_process_scope ON workflow_process_regist
 COMMENT ON TABLE workflow_process_registry IS '流程管理主表（集团级）';
 COMMENT ON COLUMN workflow_process_registry.process_code IS '流程ID';
 COMMENT ON COLUMN workflow_process_registry.template_id IS '绑定模板ID';
+
+CREATE TABLE IF NOT EXISTS workflow_approval_notification
+(
+    id            BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type    VARCHAR(16)   NOT NULL,
+    scope_id      BIGINT        NOT NULL,
+    business_code VARCHAR(64)   NOT NULL,
+    business_name VARCHAR(128)  NOT NULL,
+    business_id   BIGINT        NOT NULL,
+    approval_no   VARCHAR(64)   NOT NULL,
+    approver_name VARCHAR(64)   NOT NULL,
+    approver_role VARCHAR(128)  NOT NULL,
+    target_approver_user_id BIGINT,
+    target_approver_role_code VARCHAR(64),
+    target_approver_role_name VARCHAR(128),
+    audited_at    TIMESTAMP     NOT NULL,
+    result        VARCHAR(16)   NOT NULL,
+    remark        VARCHAR(256),
+    route_path    VARCHAR(256),
+    created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_approval_notification_scope ON workflow_approval_notification (scope_type, scope_id, audited_at DESC);
+
+ALTER TABLE workflow_approval_notification
+    ADD COLUMN IF NOT EXISTS target_approver_user_id BIGINT;
+ALTER TABLE workflow_approval_notification
+    ADD COLUMN IF NOT EXISTS target_approver_role_code VARCHAR(64);
+ALTER TABLE workflow_approval_notification
+    ADD COLUMN IF NOT EXISTS target_approver_role_name VARCHAR(128);
+
+COMMENT ON TABLE workflow_approval_notification IS '流程审批通知';
+COMMENT ON COLUMN workflow_approval_notification.approval_no IS '审批编号';
+COMMENT ON COLUMN workflow_approval_notification.business_name IS '流程名称';
+COMMENT ON COLUMN workflow_approval_notification.approver_name IS '审批人';
+COMMENT ON COLUMN workflow_approval_notification.approver_role IS '审批角色';
+COMMENT ON COLUMN workflow_approval_notification.target_approver_user_id IS '待审批目标人员ID';
+COMMENT ON COLUMN workflow_approval_notification.target_approver_role_code IS '待审批目标角色编码';
+COMMENT ON COLUMN workflow_approval_notification.target_approver_role_name IS '待审批目标角色名称';
+COMMENT ON COLUMN workflow_approval_notification.audited_at IS '审核时间';
+COMMENT ON COLUMN workflow_approval_notification.result IS '结果：通过/拒绝';
+COMMENT ON COLUMN workflow_approval_notification.remark IS '备注（拒绝原因）';
+COMMENT ON COLUMN workflow_approval_notification.route_path IS '业务页面路由';
 
 CREATE TABLE IF NOT EXISTS workflow_process_store_binding
 (
@@ -1379,4 +1467,922 @@ COMMENT ON COLUMN warehouse_item_rule_warehouse.rule_id IS '规则ID';
 COMMENT ON COLUMN warehouse_item_rule_warehouse.warehouse_id IS '仓库/档口ID';
 COMMENT ON COLUMN warehouse_item_rule_warehouse.warehouse_name IS '仓库/档口名称';
 COMMENT ON COLUMN warehouse_item_rule_warehouse.sort_order IS '排序';
+
+-- ============================================================
+-- 通用库存单据表（采购入库之外）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS inventory_purchase_return_outbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_purchase_return_outbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_purchase_return_outbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_purchase_return_outbound_scope ON inventory_purchase_return_outbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_purchase_return_outbound_date ON inventory_purchase_return_outbound (document_date DESC);
+COMMENT ON TABLE inventory_purchase_return_outbound IS '采购退货出库单';
+
+CREATE TABLE IF NOT EXISTS inventory_purchase_return_outbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_purchase_return_outbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_purchase_return_outbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_purchase_return_outbound_line_header ON inventory_purchase_return_outbound_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_department_picking
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_department_picking_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_department_picking_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_department_picking_scope ON inventory_department_picking (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_department_picking_date ON inventory_department_picking (document_date DESC);
+COMMENT ON TABLE inventory_department_picking IS '部门领料单';
+
+CREATE TABLE IF NOT EXISTS inventory_department_picking_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_department_picking_line_header FOREIGN KEY (header_id) REFERENCES inventory_department_picking (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_department_picking_line_header ON inventory_department_picking_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_department_return
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_department_return_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_department_return_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_department_return_scope ON inventory_department_return (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_department_return_date ON inventory_department_return (document_date DESC);
+COMMENT ON TABLE inventory_department_return IS '部门退料单';
+
+CREATE TABLE IF NOT EXISTS inventory_department_return_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_department_return_line_header FOREIGN KEY (header_id) REFERENCES inventory_department_return (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_department_return_line_header ON inventory_department_return_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_stock_transfer
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_stock_transfer_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_stock_transfer_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_transfer_scope ON inventory_stock_transfer (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_transfer_date ON inventory_stock_transfer (document_date DESC);
+COMMENT ON TABLE inventory_stock_transfer IS '移库单';
+
+CREATE TABLE IF NOT EXISTS inventory_stock_transfer_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_stock_transfer_line_header FOREIGN KEY (header_id) REFERENCES inventory_stock_transfer (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_transfer_line_header ON inventory_stock_transfer_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_stock_transfer_inbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_stock_transfer_inbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_stock_transfer_inbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_transfer_inbound_scope ON inventory_stock_transfer_inbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_transfer_inbound_date ON inventory_stock_transfer_inbound (document_date DESC);
+COMMENT ON TABLE inventory_stock_transfer_inbound IS '移库入库单';
+
+CREATE TABLE IF NOT EXISTS inventory_stock_transfer_inbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_stock_transfer_inbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_stock_transfer_inbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_transfer_inbound_line_header ON inventory_stock_transfer_inbound_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_department_transfer
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_department_transfer_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_department_transfer_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_department_transfer_scope ON inventory_department_transfer (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_department_transfer_date ON inventory_department_transfer (document_date DESC);
+COMMENT ON TABLE inventory_department_transfer IS '部门调拨单';
+
+CREATE TABLE IF NOT EXISTS inventory_department_transfer_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_department_transfer_line_header FOREIGN KEY (header_id) REFERENCES inventory_department_transfer (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_department_transfer_line_header ON inventory_department_transfer_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_damage_outbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_damage_outbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_damage_outbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_damage_outbound_scope ON inventory_damage_outbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_damage_outbound_date ON inventory_damage_outbound (document_date DESC);
+COMMENT ON TABLE inventory_damage_outbound IS '报损出库单';
+
+CREATE TABLE IF NOT EXISTS inventory_damage_outbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_damage_outbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_damage_outbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_damage_outbound_line_header ON inventory_damage_outbound_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_other_inbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_other_inbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_other_inbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_other_inbound_scope ON inventory_other_inbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_other_inbound_date ON inventory_other_inbound (document_date DESC);
+COMMENT ON TABLE inventory_other_inbound IS '其他入库单';
+
+CREATE TABLE IF NOT EXISTS inventory_other_inbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_other_inbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_other_inbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_other_inbound_line_header ON inventory_other_inbound_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_other_outbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_other_outbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_other_outbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_other_outbound_scope ON inventory_other_outbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_other_outbound_date ON inventory_other_outbound (document_date DESC);
+COMMENT ON TABLE inventory_other_outbound IS '其他出库单';
+
+CREATE TABLE IF NOT EXISTS inventory_other_outbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_other_outbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_other_outbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_other_outbound_line_header ON inventory_other_outbound_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_production_inbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_production_inbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_production_inbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_production_inbound_scope ON inventory_production_inbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_production_inbound_date ON inventory_production_inbound (document_date DESC);
+COMMENT ON TABLE inventory_production_inbound IS '生产入库单';
+
+CREATE TABLE IF NOT EXISTS inventory_production_inbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_production_inbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_production_inbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_production_inbound_line_header ON inventory_production_inbound_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_customer_sales_outbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_customer_sales_outbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_customer_sales_outbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_customer_sales_outbound_scope ON inventory_customer_sales_outbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_customer_sales_outbound_date ON inventory_customer_sales_outbound (document_date DESC);
+COMMENT ON TABLE inventory_customer_sales_outbound IS '客户销售出库单';
+
+CREATE TABLE IF NOT EXISTS inventory_customer_sales_outbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_customer_sales_outbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_customer_sales_outbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_customer_sales_outbound_line_header ON inventory_customer_sales_outbound_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_customer_return_inbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_customer_return_inbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_customer_return_inbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_customer_return_inbound_scope ON inventory_customer_return_inbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_customer_return_inbound_date ON inventory_customer_return_inbound (document_date DESC);
+COMMENT ON TABLE inventory_customer_return_inbound IS '客户退货入库单';
+
+CREATE TABLE IF NOT EXISTS inventory_customer_return_inbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_customer_return_inbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_customer_return_inbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_customer_return_inbound_line_header ON inventory_customer_return_inbound_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_warehouse_opening_balance
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_warehouse_opening_balance_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_warehouse_opening_balance_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_warehouse_opening_balance_scope ON inventory_warehouse_opening_balance (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_warehouse_opening_balance_date ON inventory_warehouse_opening_balance (document_date DESC);
+COMMENT ON TABLE inventory_warehouse_opening_balance IS '仓库期初单';
+
+CREATE TABLE IF NOT EXISTS inventory_warehouse_opening_balance_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_warehouse_opening_balance_line_header FOREIGN KEY (header_id) REFERENCES inventory_warehouse_opening_balance (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_warehouse_opening_balance_line_header ON inventory_warehouse_opening_balance_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_store_transfer
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_store_transfer_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_store_transfer_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_store_transfer_scope ON inventory_store_transfer (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_store_transfer_date ON inventory_store_transfer (document_date DESC);
+COMMENT ON TABLE inventory_store_transfer IS '店间调拨单';
+
+CREATE TABLE IF NOT EXISTS inventory_store_transfer_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_store_transfer_line_header FOREIGN KEY (header_id) REFERENCES inventory_store_transfer (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_store_transfer_line_header ON inventory_store_transfer_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_stock_transfer_outbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_stock_transfer_outbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_stock_transfer_outbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_transfer_outbound_scope ON inventory_stock_transfer_outbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_transfer_outbound_date ON inventory_stock_transfer_outbound (document_date DESC);
+COMMENT ON TABLE inventory_stock_transfer_outbound IS '移库出库单';
+
+CREATE TABLE IF NOT EXISTS inventory_stock_transfer_outbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_stock_transfer_outbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_stock_transfer_outbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_stock_transfer_outbound_line_header ON inventory_stock_transfer_outbound_line (header_id);
 

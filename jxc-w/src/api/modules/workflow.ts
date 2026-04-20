@@ -51,11 +51,11 @@ export type WorkflowPublishHistoryManageItem = {
 
 export type WorkflowProcessItem = {
   id: number;
-  processId: string;
+  process_code: string;
   businessName: string;
   templateId?: string;
   storeIds?: number[];
-  storeNames?: string;
+  storeNames?: string[];
   createdAt: string;
 };
 
@@ -63,6 +63,27 @@ export type WorkflowProcessStoreOption = {
   storeId: number;
   storeCode: string;
   storeName: string;
+};
+
+export type WorkflowApprovalNotificationItem = {
+  id: number;
+  approvalNo: string;
+  workflowName: string;
+  approverName: string;
+  approverRole: string;
+  auditedAt: string;
+  result: string;
+  remark: string;
+  routePath?: string;
+  businessCode: string;
+  businessId: number;
+};
+
+export type WorkflowApprovalNotificationPage = {
+  list: WorkflowApprovalNotificationItem[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
 };
 
 type OrgParams = {
@@ -109,7 +130,7 @@ export const publishWorkflowConfigApi = (params: OrgParams) =>
     processDefinitionKey: string;
     version: number;
     deployedAt: string;
-  }>('/api/workflow/configs/publish', undefined, {
+  }>('/api/workflow/configs/current/publish', undefined, {
     params: withParams(params),
   });
 
@@ -138,13 +159,13 @@ export const fetchWorkflowProcessesApi = (orgId?: string) =>
 
 export const createWorkflowProcessApi = (payload: {
   orgId?: string;
-  processCode: string;
+  process_code: string;
   businessName: string;
   templateId?: string;
 }) => apiClient.post<{ id: number }>(
   '/api/workflow/processes',
   {
-    processCode: payload.processCode,
+    process_code: payload.process_code,
     businessName: payload.businessName,
     templateId: payload.templateId,
   },
@@ -153,13 +174,13 @@ export const createWorkflowProcessApi = (payload: {
 
 export const updateWorkflowProcessApi = (id: number, payload: {
   orgId?: string;
-  processCode: string;
+  process_code: string;
   businessName: string;
   templateId?: string;
 }) => apiClient.put<void>(
   `/api/workflow/processes/${id}`,
   {
-    processCode: payload.processCode,
+    process_code: payload.process_code,
     businessName: payload.businessName,
     templateId: payload.templateId,
   },
@@ -188,3 +209,19 @@ export const bindWorkflowProcessStoresApi = (id: number, storeIds: number[], org
     { storeIds },
     { params: { orgId } },
   );
+
+export const fetchWorkflowApprovalNotificationsApi = (params: { orgId?: string; pageNum?: number; pageSize?: number }) =>
+  apiClient.get<WorkflowApprovalNotificationPage>('/api/workflow/notifications', {
+    params: {
+      orgId: params.orgId,
+      pageNum: params.pageNum,
+      pageSize: params.pageSize,
+    },
+  });
+
+export const fetchWorkflowPendingNotificationCountApi = (params: { orgId?: string }) =>
+  apiClient.get<number>('/api/workflow/notifications/pending-count', {
+    params: {
+      orgId: params.orgId,
+    },
+  });

@@ -2,8 +2,10 @@ package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
+import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserRoleAssignRequest;
 import org.springframework.stereotype.Service;
@@ -23,11 +25,14 @@ public class UserRoleAssignmentService {
     private static final String SCOPE_STORE = "STORE";
 
     private final RoleRepository roleRepository;
+    private final UserAccountRepository userAccountRepository;
     private final UserRoleRelRepository userRoleRelRepository;
 
     public UserRoleAssignmentService(RoleRepository roleRepository,
+                                     UserAccountRepository userAccountRepository,
                                      UserRoleRelRepository userRoleRelRepository) {
         this.roleRepository = roleRepository;
+        this.userAccountRepository = userAccountRepository;
         this.userRoleRelRepository = userRoleRelRepository;
     }
 
@@ -37,7 +42,7 @@ public class UserRoleAssignmentService {
                                 Set<Long> managedGroupIds,
                                 Set<Long> managedStoreIds,
                                 List<UserRoleAssignRequest.UserRoleAssignment> assignments) {
-        if (!platformAdmin && hasEnabledRoleAssignments(targetUserId)) {
+        if (!platformAdmin) {
             ensureCanManageUser(targetUserId, managedGroupIds, managedStoreIds);
         }
 
@@ -151,6 +156,14 @@ public class UserRoleAssignmentService {
             throw new BusinessException("当前账号无可管理用户范围");
         }
 
+        if (!hasEnabledRoleAssignments(targetUserId)) {
+            UserAccountDO user = userAccountRepository.findById(targetUserId).orElse(null);
+            if (matchesCreatedScope(user, managedGroupIds, managedStoreIds)) {
+                return;
+            }
+            throw new BusinessException("当前账号无该用户操作权限");
+        }
+
         Long matched = userRoleRelRepository.countByUserAndScopedRoles(targetUserId, STATUS_ENABLED, managedGroupIds, managedStoreIds);
         if (matched == null || matched == 0) {
             throw new BusinessException("当前账号无该用户操作权限");
@@ -163,6 +176,21 @@ public class UserRoleAssignmentService {
         }
         Long count = userRoleRelRepository.countByUserIdAndStatus(userId, STATUS_ENABLED);
         return count != null && count > 0;
+    }
+
+    private boolean matchesCreatedScope(UserAccountDO user,
+                                        Set<Long> managedGroupIds,
+                                        Set<Long> managedStoreIds) {
+        if (user == null || user.getCreatedScopeId() == null) {
+            return false;
+        }
+        if (SCOPE_GROUP.equals(user.getCreatedScopeType())) {
+            return managedGroupIds != null && managedGroupIds.contains(user.getCreatedScopeId());
+        }
+        if (SCOPE_STORE.equals(user.getCreatedScopeType())) {
+            return managedStoreIds != null && managedStoreIds.contains(user.getCreatedScopeId());
+        }
+        return false;
     }
 
     private String trimToNull(String value) {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   bindWorkflowProcessStoresApi,
@@ -17,8 +17,10 @@ import {
   type WorkflowPublishHistoryManageItem,
 } from '@/api/modules/workflow';
 import { useSessionStore } from '@/stores/session';
+import { workflowBusinessOptions } from '@/views/inventory/document-meta';
 
 const sessionStore = useSessionStore();
+const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
 const rows = ref<WorkflowProcessItem[]>([]);
@@ -29,11 +31,8 @@ const query = reactive({
 const processDialogVisible = ref(false);
 const processSubmitting = ref(false);
 const editingBusinessId = ref<number | null>(null);
-const workflowBusinessOptions = [
-  { processCode: 'PURCHASE_INBOUND', businessName: '采购入库流程' },
-];
 const processForm = reactive({
-  processCode: '',
+  process_code: '',
   businessName: '',
 });
 const adoptingBusinessCode = ref('');
@@ -86,11 +85,11 @@ const filteredRows = computed(() => {
     return rows.value;
   }
   return rows.value.filter((item) => {
-    const baseMatched = `${item.processId}${item.businessName}${item.createdAt}`.toLowerCase().includes(keyword);
+    const baseMatched = `${item.process_code}${item.businessName}${item.createdAt}`.toLowerCase().includes(keyword);
     if (baseMatched) {
       return true;
     }
-    const childRows = historyMap.value.get(item.processId) ?? [];
+    const childRows = historyMap.value.get(item.process_code) ?? [];
     return childRows.some((child) =>
       `${child.workflowCode}${child.workflowName}${child.savedAt}${child.versionNo}`.toLowerCase().includes(keyword));
   });
@@ -98,43 +97,57 @@ const filteredRows = computed(() => {
 
 const getHistoryRows = (businessCode: string) => historyMap.value.get(businessCode) ?? [];
 
+const syncExpandedRows = () => {
+  const routeBusinessCode = String(route.query.businessCode ?? '').trim();
+  if (!rows.value.length) {
+    expandedRowKeys.value = [];
+    return;
+  }
+  if (!routeBusinessCode) {
+    expandedRowKeys.value = [rows.value[0].id];
+    return;
+  }
+  const matched = rows.value.find((item) => item.process_code === routeBusinessCode);
+  expandedRowKeys.value = matched ? [matched.id] : [rows.value[0].id];
+};
+
 const resetProcessForm = () => {
-  processForm.processCode = '';
+  processForm.process_code = '';
   processForm.businessName = '';
   editingBusinessId.value = null;
 };
 
 const syncBusinessNameFromCode = () => {
-  const selected = workflowBusinessOptions.find((item) => item.processCode === processForm.processCode);
+  const selected = workflowBusinessOptions.find((item) => item.processCode === processForm.process_code);
   processForm.businessName = selected?.businessName ?? '';
 };
 
 const openCreateBusiness = () => {
   resetProcessForm();
-  processForm.processCode = workflowBusinessOptions[0]?.processCode ?? '';
+  processForm.process_code = workflowBusinessOptions[0]?.processCode ?? '';
   syncBusinessNameFromCode();
   processDialogVisible.value = true;
 };
 
 const openEditBusiness = (business: WorkflowProcessItem) => {
   editingBusinessId.value = business.id;
-  processForm.processCode = business.processId;
+  processForm.process_code = business.process_code;
   processForm.businessName = business.businessName;
   processDialogVisible.value = true;
 };
 
 const submitBusinessForm = async () => {
-  if (!processForm.processCode.trim()) {
-    ElMessage.warning('请选择业务ID');
+  if (!processForm.process_code.trim()) {
+    ElMessage.warning('请选择业务编码');
     return;
   }
-  const selectedBusiness = workflowBusinessOptions.find((item) => item.processCode === processForm.processCode);
+  const selectedBusiness = workflowBusinessOptions.find((item) => item.processCode === processForm.process_code);
   if (!selectedBusiness) {
-    ElMessage.warning('请选择有效的业务名称');
+    ElMessage.warning('请选择有效的业务编码');
     return;
   }
   if (!selectedBusiness.businessName.trim()) {
-    ElMessage.warning('请填写业务名称');
+    ElMessage.warning('业务名称不能为空');
     return;
   }
   processSubmitting.value = true;
@@ -147,7 +160,7 @@ const submitBusinessForm = async () => {
       }
       await updateWorkflowProcessApi(target.id, {
         orgId: sessionStore.currentOrgId,
-        processCode: target.processId,
+        process_code: target.process_code,
         businessName: selectedBusiness.businessName,
         templateId: target.templateId,
       });
@@ -155,7 +168,7 @@ const submitBusinessForm = async () => {
     } else {
       await createWorkflowProcessApi({
         orgId: sessionStore.currentOrgId,
-        processCode: selectedBusiness.processCode,
+        process_code: selectedBusiness.processCode,
         businessName: selectedBusiness.businessName,
       });
       ElMessage.success('业务新增成功');
@@ -179,7 +192,7 @@ const removeBusiness = async (business: WorkflowProcessItem) => {
     return;
   }
   await deleteWorkflowProcessApi(business.id, sessionStore.currentOrgId);
-  delete adoptedTemplateMap[business.processId];
+  delete adoptedTemplateMap[business.process_code];
   ElMessage.success('业务删除成功');
   await loadRows();
 };
@@ -204,15 +217,15 @@ const loadRows = async () => {
     });
     processRows.forEach((item) => {
       const templateId = item.templateId ?? '';
-      const publishedWorkflowSet = publishedWorkflowMap.get(item.processId) ?? new Set<string>();
+      const publishedWorkflowSet = publishedWorkflowMap.get(item.process_code) ?? new Set<string>();
       if (templateId && !publishedWorkflowSet.has(templateId)) {
-        adoptedTemplateMap[item.processId] = '';
+        adoptedTemplateMap[item.process_code] = '';
         item.templateId = undefined;
         return;
       }
-      adoptedTemplateMap[item.processId] = templateId;
+      adoptedTemplateMap[item.process_code] = templateId;
     });
-    expandedRowKeys.value = processRows.length ? [processRows[0].id] : [];
+    syncExpandedRows();
   } finally {
     loading.value = false;
   }
@@ -260,7 +273,7 @@ const publishConfig = async (business: WorkflowProcessItem, row: WorkflowPublish
   try {
     await publishWorkflowConfigApi({
       orgId: sessionStore.currentOrgId,
-      businessCode: business.processId,
+      businessCode: business.process_code,
       workflowCode: row.workflowCode,
     });
     ElMessage.success('流程发布成功');
@@ -309,23 +322,23 @@ const submitBindStores = async () => {
 };
 
 const adoptTemplate = async (business: WorkflowProcessItem, workflowCode: string) => {
-  if (adoptedTemplateMap[business.processId] === workflowCode) {
+  if (adoptedTemplateMap[business.process_code] === workflowCode) {
     return;
   }
-  const target = getHistoryRows(business.processId).find((item) => item.workflowCode === workflowCode);
+  const target = getHistoryRows(business.process_code).find((item) => item.workflowCode === workflowCode);
   if (!target || target.status !== 'PUBLISHED') {
-    ElMessage.warning('未发布版本不能使用，请先发布流程版本');
+    ElMessage.warning('未发布版本不可使用，请先发布流程版本');
     return;
   }
-  adoptingBusinessCode.value = business.processId;
+  adoptingBusinessCode.value = business.process_code;
   try {
     await updateWorkflowProcessApi(business.id, {
       orgId: sessionStore.currentOrgId,
-      processCode: business.processId,
+      process_code: business.process_code,
       businessName: business.businessName,
       templateId: workflowCode,
     });
-    adoptedTemplateMap[business.processId] = workflowCode;
+    adoptedTemplateMap[business.process_code] = workflowCode;
     business.templateId = workflowCode;
     ElMessage.success('使用状态已更新');
   } finally {
@@ -335,10 +348,10 @@ const adoptTemplate = async (business: WorkflowProcessItem, workflowCode: string
 
 const removeConfig = async (business: WorkflowProcessItem, row: WorkflowPublishHistoryManageItem) => {
   try {
-    await ElMessageBox.confirm(`确认删除流程模板“${row.workflowCode}”吗？`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm("确认删除流程模板 " + row.workflowCode + " 吗?", "删除确认", {
+      type: "warning",
+      confirmButtonText: "删除",
+      cancelButtonText: "取消",
     });
   } catch {
     return;
@@ -346,14 +359,14 @@ const removeConfig = async (business: WorkflowProcessItem, row: WorkflowPublishH
   deletingConfigId.value = row.id;
   try {
     await deleteWorkflowConfigApi(row.id, sessionStore.currentOrgId);
-    if ((adoptedTemplateMap[business.processId] ?? '') === row.workflowCode) {
+    if ((adoptedTemplateMap[business.process_code] ?? '') === row.workflowCode) {
       await updateWorkflowProcessApi(business.id, {
         orgId: sessionStore.currentOrgId,
-        processCode: business.processId,
+        process_code: business.process_code,
         businessName: business.businessName,
         templateId: undefined,
       });
-      adoptedTemplateMap[business.processId] = '';
+      adoptedTemplateMap[business.process_code] = '';
       business.templateId = undefined;
     }
     ElMessage.success('流程模板删除成功');
@@ -366,13 +379,20 @@ const removeConfig = async (business: WorkflowProcessItem, row: WorkflowPublishH
 onMounted(() => {
   void loadRows();
 });
+
+watch(
+  () => route.query.businessCode,
+  () => {
+    syncExpandedRows();
+  },
+);
 </script>
 
 <template>
   <div class="page-grid single">
     <section class="panel item-main-panel">
       <div class="toolbar">
-        <el-input v-model="query.keyword" placeholder="搜索业务ID/业务名称/流程ID/流程版本" clearable style="width: 360px" />
+        <el-input v-model="query.keyword" placeholder="搜索业务编码/业务名称/流程编码/流程版本" clearable style="width: 360px" />
         <div class="toolbar-actions">
           <el-button type="primary" @click="openCreateBusiness">新增</el-button>
           <el-button @click="loadRows">刷新</el-button>
@@ -390,9 +410,9 @@ onMounted(() => {
       >
         <el-table-column type="expand" width="48">
           <template #default="{ row: business }">
-            <el-table :data="getHistoryRows(business.processId)" border size="small" class="expand-table">
+            <el-table :data="getHistoryRows(business.process_code)" border size="small" class="expand-table">
               <el-table-column prop="workflowCode" label="流程版本" width="150" show-overflow-tooltip />
-              <el-table-column prop="savedAt" label="流程发布时间" width="170" />
+              <el-table-column prop="savedAt" label="保存时间" width="170" />
               <el-table-column label="是否发布" width="92" align="center">
                 <template #default="{ row }">
                   <span class="publish-status" :class="row.status === 'PUBLISHED' ? 'is-published' : 'is-draft'">
@@ -405,8 +425,8 @@ onMounted(() => {
                   <div class="use-radio-cell">
                     <el-radio
                       :value="row.workflowCode"
-                      :model-value="adoptedTemplateMap[business.processId]"
-                      :disabled="adoptingBusinessCode === business.processId || row.status !== 'PUBLISHED'"
+                      :model-value="adoptedTemplateMap[business.process_code]"
+                      :disabled="adoptingBusinessCode === business.process_code || row.status !== 'PUBLISHED'"
                       @change="adoptTemplate(business, row.workflowCode)"
                     />
                   </div>
@@ -414,10 +434,10 @@ onMounted(() => {
               </el-table-column>
               <el-table-column label="操作" width="210" fixed="right">
                 <template #default="{ row }">
-                  <el-button text type="primary" @click="openWorkflowConfig({ businessCode: business.processId, viewWorkflowCode: row.workflowCode })">
+                  <el-button text type="primary" @click="openWorkflowConfig({ businessCode: business.process_code, viewWorkflowCode: row.workflowCode })">
                     查看
                   </el-button>
-                  <el-button text type="primary" @click="openWorkflowConfig({ businessCode: business.processId, copyFromWorkflowCode: row.workflowCode })">
+                  <el-button text type="primary" @click="openWorkflowConfig({ businessCode: business.process_code, copyFromWorkflowCode: row.workflowCode })">
                     复制
                   </el-button>
                   <el-button
@@ -440,7 +460,7 @@ onMounted(() => {
             </el-table>
           </template>
         </el-table-column>
-        <el-table-column prop="processId" label="业务ID" width="180" show-overflow-tooltip />
+        <el-table-column prop="process_code" label="业务编码" width="180" show-overflow-tooltip />
         <el-table-column prop="businessName" label="业务名称" width="180" show-overflow-tooltip />
         <el-table-column prop="storeNames" label="关联门店" width="220" show-overflow-tooltip>
           <template #default="{ row }">
@@ -450,7 +470,7 @@ onMounted(() => {
         <el-table-column prop="createdAt" label="业务添加时间" width="160" />
         <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
-            <el-button text type="primary" @click="openWorkflowConfig({ businessCode: row.processId })">新增流程</el-button>
+            <el-button text type="primary" @click="openWorkflowConfig({ businessCode: row.process_code })">新增流程</el-button>
             <el-button text @click="openEditBusiness(row)">编辑</el-button>
             <el-button text @click="openBindStores(row)">绑定门店</el-button>
             <el-button text type="danger" @click="removeBusiness(row)">删除</el-button>
@@ -466,10 +486,10 @@ onMounted(() => {
         destroy-on-close
       >
         <el-form label-width="86px">
-          <el-form-item label="业务ID">
+          <el-form-item label="业务编码">
             <el-select
-              v-model="processForm.processCode"
-              placeholder="请选择业务ID"
+              v-model="processForm.process_code"
+              placeholder="请选择业务编码"
               style="width: 100%"
               :disabled="Boolean(editingBusinessId)"
               @change="syncBusinessNameFromCode"
@@ -477,7 +497,7 @@ onMounted(() => {
               <el-option
                 v-for="option in workflowBusinessOptions"
                 :key="option.processCode"
-                :label="`${option.businessName}（${option.processCode}）`"
+                :label="option.businessName + ' (' + option.processCode + ')'"
                 :value="option.processCode"
               />
             </el-select>
@@ -576,3 +596,4 @@ onMounted(() => {
   padding: 10px 0;
 }
 </style>
+

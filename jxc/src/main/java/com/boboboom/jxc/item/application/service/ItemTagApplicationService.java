@@ -4,7 +4,6 @@ import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.item.domain.repository.ItemTagRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemTagDO;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemTagBatchImportRequest;
@@ -42,12 +41,12 @@ public class ItemTagApplicationService {
         this.businessCodeGenerator = businessCodeGenerator;
     }
 
-    public CodeDataResponse<PageData<ItemTagRow>> list(Integer pageNo,
-                                                       Integer pageSize,
-                                                       String tagCode,
-                                                       String tagName,
-                                                       String itemName,
-                                                       String orgId) {
+    public PageData<ItemTagRow> list(Integer pageNo,
+                                     Integer pageSize,
+                                     String tagCode,
+                                     String tagName,
+                                     String itemName,
+                                     String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
         int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
@@ -75,12 +74,12 @@ public class ItemTagApplicationService {
             ));
         }
 
-        return CodeDataResponse.ok(new PageData<>(list, total == null ? 0 : total, safePageNo, safePageSize));
+        return new PageData<>(list, total == null ? 0 : total, safePageNo, safePageSize);
     }
 
     @Transactional
-    public CodeDataResponse<IdPayload> create(String orgId,
-                                              ItemTagCreateRequest request) {
+    public IdPayload create(String orgId,
+                            ItemTagCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         String tagCode = generateTagCode(scope);
         String tagName = trim(request.tagName());
@@ -97,13 +96,13 @@ public class ItemTagApplicationService {
         row.setRemark(trimNullable(request.itemName()));
         itemTagRepository.save(row);
 
-        return CodeDataResponse.ok(new IdPayload(row.getId()));
+        return new IdPayload(row.getId());
     }
 
     @Transactional
-    public CodeDataResponse<Void> update(Long id,
-                                         String orgId,
-                                         ItemTagUpdateRequest request) {
+    public void update(Long id,
+                       String orgId,
+                       ItemTagUpdateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         ItemTagDO existing = requireTag(id, scope);
         String tagCode = trim(request.tagCode());
@@ -116,21 +115,19 @@ public class ItemTagApplicationService {
         existing.setTagName(tagName);
         existing.setRemark(trimNullable(request.itemName()));
         itemTagRepository.update(existing);
-        return CodeDataResponse.ok();
     }
 
     @Transactional
-    public CodeDataResponse<Void> delete(Long id,
-                                         String orgId) {
+    public void delete(Long id,
+                       String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         requireTag(id, scope);
         itemTagRepository.deleteById(id);
-        return CodeDataResponse.ok();
     }
 
     @Transactional
-    public CodeDataResponse<BatchImportResult> batchImport(String orgId,
-                                                           ItemTagBatchImportRequest request) {
+    public BatchImportResult batchImport(String orgId,
+                                         ItemTagBatchImportRequest request) {
         ItemScope scope = resolveItemScope(orgId);
         Set<String> seenNames = new HashSet<>();
         BusinessCodeGenerator.CodeAllocator allocator = tagCodeAllocator(scope);
@@ -159,7 +156,7 @@ public class ItemTagApplicationService {
             inserted++;
         }
 
-        return CodeDataResponse.ok(new BatchImportResult(request.items().size(), inserted, skipped));
+        return new BatchImportResult(request.items().size(), inserted, skipped);
     }
 
     private ItemTagDO requireTag(Long id, ItemScope scope) {

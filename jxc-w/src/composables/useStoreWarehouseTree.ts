@@ -21,14 +21,6 @@ export const useStoreWarehouseTree = () => {
       const storeId = Number(String(currentOrg.id).slice('store-'.length));
       return Number.isNaN(storeId) ? null : storeId;
     }
-    if (currentOrg.type === 'group') {
-      const firstStore = currentOrg.children?.[0];
-      if (!firstStore) {
-        return null;
-      }
-      const storeId = Number(String(firstStore.id).slice('store-'.length));
-      return Number.isNaN(storeId) ? null : storeId;
-    }
     return null;
   };
 

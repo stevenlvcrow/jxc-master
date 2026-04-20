@@ -12,6 +12,7 @@ import {
 } from '@/api/modules/workflow';
 import { fetchAdminRolesApi, fetchAdminUsersApi, type RoleAdminItem, type UserAdminItem } from '@/api/modules/system-admin';
 import { useSessionStore } from '@/stores/session';
+import { workflowBusinessOptions } from '@/views/inventory/document-meta';
 
 type EditableNode = WorkflowNode & {
   x: number;
@@ -35,12 +36,19 @@ const approverLoading = ref(false);
 const workflowBusinesses = ref<WorkflowProcessItem[]>([]);
 const roleOptions = ref<RoleAdminItem[]>([]);
 const userOptions = ref<UserAdminItem[]>([]);
-const TARGET_BUSINESS_CODE = 'PURCHASE_INBOUND';
-const TARGET_BUSINESS_NAME = '采购入库流程';
 const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
 const copySourceWorkflowCode = ref('');
+const copySourceBusinessCode = ref('');
 const viewWorkflowCode = ref('');
 const isReadOnlyMode = computed(() => Boolean(viewWorkflowCode.value));
+const isCreateRouteMode = computed(() => {
+  const routeBusinessCode = String(route.query.businessCode ?? '').trim();
+  const routeWorkflowCode = String(route.query.workflowCode ?? '').trim();
+  return Boolean(routeBusinessCode)
+    && !copySourceWorkflowCode.value.trim()
+    && !viewWorkflowCode.value.trim()
+    && !routeWorkflowCode;
+});
 
 const selectedNodeKey = ref<string>('');
 const canvasRef = ref<HTMLDivElement | null>(null);
@@ -124,13 +132,21 @@ const isScopedContext = computed(
   () => sessionStore.currentOrgId.startsWith('group-') || sessionStore.currentOrgId.startsWith('store-'),
 );
 
-const businessOptions = computed(() => workflowBusinesses.value.map((item) => ({
-  label: item.businessName,
-  value: item.processId,
-})).filter((item) => item.value === TARGET_BUSINESS_CODE));
+const businessOptions = computed(() => {
+  const optionMap = new Map<string, string>();
+  workflowBusinessOptions.forEach((item) => {
+    optionMap.set(item.processCode, item.businessName);
+  });
+  workflowBusinesses.value.forEach((item) => {
+    if (!optionMap.has(item.process_code)) {
+      optionMap.set(item.process_code, item.businessName);
+    }
+  });
+  return Array.from(optionMap.entries()).map(([value, label]) => ({ value, label }));
+});
 
 const currentBusiness = computed(
-  () => workflowBusinesses.value.find((item) => item.processId === currentBusinessCode.value) ?? null,
+  () => workflowBusinesses.value.find((item) => item.process_code === currentBusinessCode.value) ?? null,
 );
 
 const selectedNode = computed(() => form.nodes.find((item) => item.nodeKey === selectedNodeKey.value) ?? null);
@@ -164,7 +180,8 @@ const editDraft = reactive({
 });
 
 const applyBusinessSelection = (businessCode: string) => {
-  if (businessCode !== TARGET_BUSINESS_CODE) {
+  const selected = resolveBusinessSelection(businessCode);
+  if (!selected) {
     currentBusinessCode.value = '';
     form.businessCode = '';
     form.workflowName = '';
@@ -173,9 +190,12 @@ const applyBusinessSelection = (businessCode: string) => {
     return;
   }
   currentBusinessCode.value = businessCode;
-  const selected = workflowBusinesses.value.find((item) => item.processId === businessCode) ?? null;
-  form.businessCode = selected?.processId ?? '';
+  form.businessCode = selected?.process_code ?? '';
   form.workflowName = selected?.businessName ?? '';
+  if (isCreateRouteMode.value) {
+    resetToDefaultStartNode();
+    return;
+  }
   form.workflowCode = selected?.templateId?.trim() ?? '';
   form.deployedAt = '';
 };
@@ -239,6 +259,51 @@ const createStartNode = (): EditableNode => normalizeNode({
   y: 76,
 }, 0);
 
+const resetToDefaultStartNode = () => {
+  form.workflowCode = '';
+  form.deployedAt = '';
+  form.nodes = [createStartNode()];
+  selectedNodeKey.value = 'start_node';
+  buildEdgesFromNodeConfig();
+  updateCanvasContentSize();
+};
+
+const findBusinessOption = (businessCode: string) =>
+  workflowBusinessOptions.find((item) => item.processCode === businessCode) ?? null;
+
+const applyCreateRouteState = () => {
+  if (!isCreateRouteMode.value) {
+    return false;
+  }
+  const routeBusinessCode = String(route.query.businessCode ?? '').trim();
+  if (!routeBusinessCode) {
+    return false;
+  }
+  currentBusinessCode.value = routeBusinessCode;
+  form.businessCode = routeBusinessCode;
+  form.workflowName = findBusinessOption(routeBusinessCode)?.businessName ?? '';
+  resetToDefaultStartNode();
+  return true;
+};
+
+const resolveBusinessSelection = (businessCode: string) => {
+  const registryItem = workflowBusinesses.value.find((item) => item.process_code === businessCode) ?? null;
+  if (registryItem) {
+    return registryItem;
+  }
+  const option = findBusinessOption(businessCode);
+  if (!option) {
+    return null;
+  }
+  return {
+    id: 0,
+    process_code: option.processCode,
+    businessName: option.businessName,
+    templateId: '',
+    createdAt: '',
+  } as WorkflowProcessItem;
+};
+
 const openAddNodeDialog = () => {
   if (isReadOnlyMode.value) {
     return;
@@ -278,7 +343,7 @@ const getNodeSize = (type?: string) => {
   return { width: 118, height: 38 };
 };
 
-const updateCanvasContentSize = () => {
+function updateCanvasContentSize() {
   const paddingX = 160;
   const paddingY = 160;
   const maxRight = form.nodes.reduce((acc, node) => {
@@ -291,7 +356,7 @@ const updateCanvasContentSize = () => {
   }, 0);
   canvasContentSize.width = Math.max(1600, canvasSize.width + 320, maxRight + paddingX);
   canvasContentSize.height = Math.max(960, canvasSize.height + 220, maxBottom + paddingY);
-};
+}
 
 const MIN_NODE_GAP = 28;
 const LAYOUT_PADDING_X = 64;
@@ -1084,7 +1149,7 @@ const toggleBatchUnapproveForSuccessNodes = () => {
   ElMessage.success(shouldEnable ? '成功节点已批量开启反审核' : '成功节点已批量关闭反审核');
 };
 
-const buildEdgesFromNodeConfig = () => {
+function buildEdgesFromNodeConfig() {
   edges.value = [];
   let restoredCount = 0;
   form.nodes.forEach((node) => {
@@ -1127,7 +1192,7 @@ const buildEdgesFromNodeConfig = () => {
       });
     }
   }
-};
+}
 
 const generateWorkflowCode = () => {
   const upperBusiness = (form.businessCode || '').toUpperCase();
@@ -1172,32 +1237,48 @@ const loadApproverOptions = async () => {
 };
 
 const loadBusinesses = async () => {
-  if (!sessionStore.currentOrgId?.startsWith('group-')) {
+  if (!isScopedContext.value) {
     workflowBusinesses.value = [];
-    currentBusinessCode.value = '';
     copySourceWorkflowCode.value = '';
+    copySourceBusinessCode.value = '';
     viewWorkflowCode.value = '';
-    form.businessCode = '';
-    form.workflowName = '';
-    form.workflowCode = '';
+    if (!applyCreateRouteState()) {
+      currentBusinessCode.value = '';
+      form.businessCode = '';
+      form.workflowName = '';
+      resetToDefaultStartNode();
+    }
     return;
   }
   businessLoading.value = true;
   try {
+    const businessLabelMap = new Map(workflowBusinessOptions.map((item) => [item.processCode, item.businessName]));
+    const optionOrderMap = new Map(workflowBusinessOptions.map((item, index) => [item.processCode, index]));
     workflowBusinesses.value = (await fetchWorkflowProcessesApi(sessionStore.currentOrgId))
-      .filter((item) => item.processId === TARGET_BUSINESS_CODE);
+      .filter((item) => businessLabelMap.has(item.process_code))
+      .map((item) => ({
+        ...item,
+        businessName: businessLabelMap.get(item.process_code) ?? item.businessName,
+      }))
+      .sort((left, right) => (optionOrderMap.get(left.process_code) ?? 999) - (optionOrderMap.get(right.process_code) ?? 999));
     if (!workflowBusinesses.value.length) {
-      ElMessage.warning(`请先在业务管理中新增“${TARGET_BUSINESS_NAME}（${TARGET_BUSINESS_CODE}）”`);
-      currentBusinessCode.value = '';
+      ElMessage.warning('请先在业务管理中新增库存审核业务流程');
       copySourceWorkflowCode.value = '';
+      copySourceBusinessCode.value = '';
       viewWorkflowCode.value = '';
-      form.businessCode = '';
-      form.workflowName = '';
-      form.workflowCode = '';
+      if (!applyCreateRouteState()) {
+        currentBusinessCode.value = '';
+        form.businessCode = '';
+        form.workflowName = '';
+        resetToDefaultStartNode();
+      }
       return;
     }
-    const exists = workflowBusinesses.value.some((item) => item.processId === currentBusinessCode.value);
-    const targetBusinessCode = exists ? currentBusinessCode.value : workflowBusinesses.value[0].processId;
+    const exists = workflowBusinesses.value.some((item) => item.process_code === currentBusinessCode.value);
+    const routeBusinessCode = String(route.query.businessCode ?? '').trim();
+    const targetBusinessCode = exists
+      ? currentBusinessCode.value
+      : (workflowBusinesses.value.find((item) => item.process_code === routeBusinessCode)?.process_code ?? workflowBusinesses.value[0].process_code);
     applyBusinessSelection(targetBusinessCode);
     if (copySourceWorkflowCode.value) {
       form.workflowCode = '';
@@ -1213,11 +1294,12 @@ const applyRouteSelection = () => {
   const routeCopyFromWorkflowCode = String(route.query.copyFromWorkflowCode ?? '').trim();
   const routeViewWorkflowCode = String(route.query.viewWorkflowCode ?? '').trim();
   copySourceWorkflowCode.value = routeCopyFromWorkflowCode;
+  copySourceBusinessCode.value = routeCopyFromWorkflowCode ? routeBusinessCode : '';
   viewWorkflowCode.value = routeViewWorkflowCode;
-  if (routeBusinessCode !== TARGET_BUSINESS_CODE) {
+  if (applyCreateRouteState()) {
     return;
   }
-  const matched = workflowBusinesses.value.find((item) => item.processId === routeBusinessCode);
+  const matched = workflowBusinesses.value.find((item) => item.process_code === routeBusinessCode);
   if (!matched) {
     return;
   }
@@ -1239,6 +1321,9 @@ const onBusinessChange = (value: string) => {
 };
 
 const loadConfig = async () => {
+  if (applyCreateRouteState()) {
+    return;
+  }
   if (!isScopedContext.value) {
     ElMessage.warning('请先切换到集团或门店机构后再配置流程');
     return;
@@ -1246,31 +1331,28 @@ const loadConfig = async () => {
   const sourceWorkflowCode = copySourceWorkflowCode.value.trim();
   const readOnlyWorkflowCode = viewWorkflowCode.value.trim();
   if (!form.businessCode) {
-    form.deployedAt = '';
-    form.nodes = [createStartNode()];
-    selectedNodeKey.value = '';
-    buildEdgesFromNodeConfig();
-    updateCanvasContentSize();
+    resetToDefaultStartNode();
     return;
   }
   const workflowCodeForLoad = readOnlyWorkflowCode || sourceWorkflowCode || form.workflowCode.trim();
   if (!workflowCodeForLoad) {
-    form.deployedAt = '';
-    form.nodes = [createStartNode()];
-    selectedNodeKey.value = '';
-    buildEdgesFromNodeConfig();
-    updateCanvasContentSize();
+    resetToDefaultStartNode();
     return;
   }
+  const businessCodeForLoad = sourceWorkflowCode
+    ? (copySourceBusinessCode.value || form.businessCode)
+    : form.businessCode;
   loading.value = true;
   try {
     const data = await fetchCurrentWorkflowConfigApi({
       orgId: sessionStore.currentOrgId,
-      businessCode: form.businessCode,
+      businessCode: businessCodeForLoad,
       workflowCode: workflowCodeForLoad,
     });
     form.scopeType = data.scopeType ?? '';
-    form.workflowName = data.workflowName || form.workflowName;
+    if (!sourceWorkflowCode) {
+      form.workflowName = data.workflowName || form.workflowName;
+    }
     if (readOnlyWorkflowCode) {
       form.workflowCode = readOnlyWorkflowCode;
       form.deployedAt = data.deployedAt ?? '';
@@ -1415,14 +1497,20 @@ const saveConfig = async () => {
         ),
       })),
     });
+    const savedBusinessCode = form.businessCode;
+    const savedWorkflowCode = form.workflowCode;
     if (isCopyMode) {
       copySourceWorkflowCode.value = '';
-    }
-    if (!form.deployedAt) {
-      form.deployedAt = formatDateTime(new Date());
+      copySourceBusinessCode.value = '';
     }
     ElMessage.success('流程版本已保存');
-    goBack();
+    await router.push({
+      path: '/group/workflow-history',
+      query: {
+        businessCode: savedBusinessCode,
+        workflowCode: savedWorkflowCode,
+      },
+    });
   } finally {
     saving.value = false;
   }
@@ -1437,6 +1525,7 @@ const goBack = () => {
 };
 
 onMounted(async () => {
+  applyCreateRouteState();
   await loadApproverOptions();
   await loadBusinesses();
   applyRouteSelection();
@@ -1467,6 +1556,14 @@ onBeforeUnmount(() => {
 });
 
 watch(
+  () => [route.query.businessCode, isCreateRouteMode.value] as const,
+  () => {
+    void applyCreateRouteState();
+  },
+  { immediate: true },
+);
+
+watch(
   () => sessionStore.currentOrgId,
   async () => {
     await loadBusinesses();
@@ -1494,6 +1591,7 @@ watch(
             v-model="currentBusinessCode"
             style="width: 180px"
             :loading="businessLoading"
+            :disabled="isCreateRouteMode || isReadOnlyMode"
             filterable
             placeholder="请选择业务"
             @change="onBusinessChange"
@@ -2126,3 +2224,4 @@ watch(
   }
 }
 </style>
+

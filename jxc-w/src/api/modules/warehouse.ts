@@ -2,6 +2,14 @@ import { apiClient } from '@/api/http-client';
 
 export type WarehouseStatus = 'ENABLED' | 'DISABLED';
 export type WarehouseType = '出品及生产部门' | '行政部门' | '普通仓库';
+type WarehouseQueryParams = { keyword?: string; status?: string; warehouseType?: string };
+type WarehousePageData<T> = {
+  list: T[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
+};
+const WAREHOUSE_LIST_PAGE_SIZE = 200;
 
 export type WarehouseRow = {
   id: number;
@@ -46,25 +54,48 @@ export type WarehouseUpdatePayload = {
   idealPurchaseSaleRatio?: string;
 };
 
-export const fetchWarehousesApi = (groupId: number, params?: { keyword?: string; status?: string; warehouseType?: string }) => {
-  const search = new URLSearchParams();
-  if (params?.keyword) search.set('keyword', params.keyword);
-  if (params?.status && params.status !== '全部') search.set('status', params.status);
-  if (params?.warehouseType && params.warehouseType !== '全部') search.set('warehouseType', params.warehouseType);
-  const qs = search.toString() ? `?${search.toString()}` : '';
-  return apiClient.get<WarehouseRow[]>(`/api/identity/admin/groups/${groupId}/warehouses${qs}`);
+const normalizeWarehouseQueryParams = (params?: WarehouseQueryParams) => ({
+  keyword: params?.keyword || undefined,
+  status: params?.status && params.status !== '全部' ? params.status : undefined,
+  warehouseType: params?.warehouseType && params.warehouseType !== '全部' ? params.warehouseType : undefined,
+});
+
+const fetchWarehousePagedList = async (url: string, params?: WarehouseQueryParams) => {
+  const rows: WarehouseRow[] = [];
+  let pageNum = 1;
+  let total = 0;
+  const normalizedParams = normalizeWarehouseQueryParams(params);
+
+  do {
+    const page = await apiClient.get<WarehousePageData<WarehouseRow>>(url, {
+      params: {
+        ...normalizedParams,
+        pageNum,
+        pageSize: WAREHOUSE_LIST_PAGE_SIZE,
+      },
+    });
+    const list = Array.isArray(page?.list) ? page.list : [];
+    rows.push(...list);
+    total = Number(page?.total ?? rows.length);
+
+    if (!list.length || Number(page?.pageSize ?? 0) <= 0) {
+      break;
+    }
+    pageNum += 1;
+  } while (rows.length < total);
+
+  return rows;
+};
+
+export const fetchWarehousesApi = (groupId: number, params?: WarehouseQueryParams) => {
+  return fetchWarehousePagedList(`/api/identity/admin/groups/${groupId}/warehouses`, params);
 };
 
 export const createWarehouseApi = (groupId: number, payload: WarehouseCreatePayload) =>
   apiClient.post<{ id: number }>(`/api/identity/admin/groups/${groupId}/warehouses`, payload);
 
-export const fetchStoreWarehousesApi = (storeId: number, params?: { keyword?: string; status?: string; warehouseType?: string }) => {
-  const search = new URLSearchParams();
-  if (params?.keyword) search.set('keyword', params.keyword);
-  if (params?.status && params.status !== '全部') search.set('status', params.status);
-  if (params?.warehouseType && params.warehouseType !== '全部') search.set('warehouseType', params.warehouseType);
-  const qs = search.toString() ? `?${search.toString()}` : '';
-  return apiClient.get<WarehouseRow[]>(`/api/identity/admin/stores/${storeId}/warehouses${qs}`);
+export const fetchStoreWarehousesApi = (storeId: number, params?: WarehouseQueryParams) => {
+  return fetchWarehousePagedList(`/api/identity/admin/stores/${storeId}/warehouses`, params);
 };
 
 export const createStoreWarehouseApi = (storeId: number, payload: WarehouseCreatePayload) =>

@@ -13,6 +13,7 @@ import {
   type ItemCategoryTreeNode,
 } from '@/api/modules/item';
 import { useSessionStore } from '@/stores/session';
+import { requireItemOrgId } from './org';
 
 type CategoryTableRow = {
   id: number;
@@ -94,14 +95,7 @@ const categoryTableData = ref<CategoryTableRow[]>([]);
 const categoryTree = ref<ItemCategoryTreeNode[]>([{ label: rootCategoryName, children: [] }]);
 
 const resolveItemOrgId = () => {
-  const orgId = (sessionStore.currentOrgId ?? '').trim();
-  if (!orgId) {
-    return undefined;
-  }
-  if (orgId.startsWith('group-') || orgId.startsWith('store-')) {
-    return orgId;
-  }
-  return undefined;
+  return requireItemOrgId(sessionStore.currentOrgId);
 };
 
 const categorySelectTree = computed<CategorySelectNode[]>(() => {

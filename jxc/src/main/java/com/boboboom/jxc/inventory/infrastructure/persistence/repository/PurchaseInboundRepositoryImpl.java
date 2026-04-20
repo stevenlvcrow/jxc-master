@@ -52,11 +52,13 @@ public class PurchaseInboundRepositoryImpl implements PurchaseInboundRepository 
                 .eq(PurchaseInboundDO::getScopeType, scopeType)
                 .eq(PurchaseInboundDO::getScopeId, scopeId)
                 .eq(PurchaseInboundDO::getId, id)
-                .last("limit 1");
+                .orderByDesc(PurchaseInboundDO::getId);
         if (!viewAll) {
             query.eq(PurchaseInboundDO::getCreatedBy, createdBy);
         }
-        return Optional.ofNullable(purchaseInboundMapper.selectOne(query));
+        return purchaseInboundMapper.selectList(query)
+                .stream()
+                .findFirst();
     }
 
     @Override
