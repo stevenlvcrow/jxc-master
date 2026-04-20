@@ -1,6 +1,9 @@
 export const normalizeItemOrgId = (orgId?: string | null) => String(orgId ?? '').trim().toLowerCase();
 
 export const resolveArchiveOrgId = (orgId?: string | null, _platformAdminMode = false) => {
+  if (_platformAdminMode) {
+    return 'platform';
+  }
   const normalizedOrgId = normalizeItemOrgId(orgId);
   if (!normalizedOrgId || !normalizedOrgId.startsWith('store-')) {
     return null;

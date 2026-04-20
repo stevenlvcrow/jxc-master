@@ -31,7 +31,15 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const sessionStore = useSessionStore();
 const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
-const emptyText = computed(() => (archiveOrgId.value ? '当前机构暂无数据' : '请先选择门店机构'));
+const emptyText = computed(() => {
+  if (!archiveOrgId.value) {
+    return '请先选择门店机构';
+  }
+  if (archiveOrgId.value === 'platform') {
+    return '平台模板暂无数据';
+  }
+  return '当前机构暂无数据';
+});
 
 const tableData = ref<UnitRecord[]>([]);
 const loading = ref(false);

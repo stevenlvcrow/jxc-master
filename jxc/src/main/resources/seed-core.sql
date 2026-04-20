@@ -155,7 +155,15 @@ unit_seed(unit_code, unit_name, unit_type, status, remark) AS (
         ('U038', '本', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
         ('U039', '组', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
         ('U040', '坛', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
-        ('U041', 'kg', 'STANDARD', 'ENABLED', '系统初始化业务默认单位')
+        ('U041', 'kg', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U042', '份', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U043', '盘', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U044', '碗', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U045', '片', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U046', '颗', 'STANDARD', 'ENABLED', '系统初始化业务默认单位'),
+        ('U047', '束', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U048', '扎', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位'),
+        ('U049', '打', 'AUXILIARY', 'ENABLED', '系统初始化业务默认单位')
 )
 INSERT INTO sys_unit (scope_type, scope_id, unit_code, unit_name, unit_type, status, remark)
 SELECT scope.scope_type,
