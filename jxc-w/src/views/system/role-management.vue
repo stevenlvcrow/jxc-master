@@ -45,7 +45,7 @@ const dataScopeOptions = ['ALL', 'GROUP', 'STORE', 'CUSTOM'];
 const isRoleEditable = (role: RoleAdminItem) => role.editable !== false;
 const isBuiltinRole = (role: RoleAdminItem) => role.builtin === true;
 const roleTypeSelectableOptions = computed(() => (
-  sessionStore.platformAdminMode ? ['PLATFORM'] : ['GROUP', 'STORE']
+  sessionStore.platformAdminMode ? ['PLATFORM', 'GROUP', 'STORE'] : ['GROUP', 'STORE']
 ));
 const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
 

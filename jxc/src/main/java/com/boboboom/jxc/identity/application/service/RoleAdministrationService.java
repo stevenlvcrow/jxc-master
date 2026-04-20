@@ -66,7 +66,6 @@ public class RoleAdministrationService {
         List<RoleDO> roles;
         if (platformAdmin) {
             roles = sortRoles(roleRepository.findByTenantGroupId(0L).stream()
-                    .filter(role -> PLATFORM_ROLE_TYPE.equals(role.getRoleType()))
                     .filter(role -> !PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode()))
                     .toList());
         } else {
@@ -131,8 +130,8 @@ public class RoleAdministrationService {
         String roleType = trim(request.getRoleType());
         Long tenantGroupId;
         if (platformAdmin) {
-            if (!PLATFORM_ROLE_TYPE.equals(roleType)) {
-                throw new BusinessException("平台账号仅可创建平台角色");
+            if (!PLATFORM_ROLE_TYPE.equals(roleType) && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
+                throw new BusinessException("平台账号仅可创建平台/集团/门店模板角色");
             }
             tenantGroupId = 0L;
         } else {
@@ -176,8 +175,8 @@ public class RoleAdministrationService {
 
         String roleType = trim(request.getRoleType());
         if (platformAdmin) {
-            if (!PLATFORM_ROLE_TYPE.equals(roleType)) {
-                throw new BusinessException("平台账号仅可设置平台角色");
+            if (!PLATFORM_ROLE_TYPE.equals(roleType) && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
+                throw new BusinessException("平台账号仅可设置平台/集团/门店模板角色");
             }
         } else if (!"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
             throw new BusinessException("集团账号仅可设置集团/门店角色");

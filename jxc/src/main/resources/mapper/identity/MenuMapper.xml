@@ -125,6 +125,10 @@
                      inner join sys_menu m on m.id = rmr.menu_id
             where m.status = 'ENABLED'
               and er.role_type = #{scopeType}
+              and not (
+                (#{scopeType} = 'PLATFORM' and m.menu_code like 'STORE_BIZ_%')
+                    or (#{scopeType} = 'GROUP' and m.menu_code like 'STORE_BIZ_%')
+              )
         ),
         menu_tree as (
             select dm.id,
