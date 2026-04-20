@@ -176,6 +176,7 @@ public class UserAdministrationService {
                 .collect(Collectors.groupingBy(UserRoleView::getUserId));
 
         return users.stream()
+                .filter(user -> !ADMIN_USERNAME.equalsIgnoreCase(user.getUsername()))
                 .filter(user -> !hasPlatformSuperAdminRole(userRolesMap.getOrDefault(user.getId(), Collections.emptyList())))
                 .map(user -> new UserAdminSnapshot(
                         user.getId(),
