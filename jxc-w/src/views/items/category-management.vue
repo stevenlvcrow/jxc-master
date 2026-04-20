@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import ItemCategoryTree from './components/ItemCategoryTree.vue';
 import ItemPaginationSection from './components/ItemPaginationSection.vue';
@@ -13,7 +13,7 @@ import {
   type ItemCategoryTreeNode,
 } from '@/api/modules/item';
 import { useSessionStore } from '@/stores/session';
-import { requireItemOrgId } from './org';
+import { requireItemOrgId, resolveArchiveOrgId } from './org';
 
 type CategoryTableRow = {
   id: number;
@@ -47,7 +47,8 @@ const pageSize = ref(10);
 const sessionStore = useSessionStore();
 const total = ref(0);
 const tableLoading = ref(false);
-const emptyText = '当前机构暂无数据';
+const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
+const emptyText = computed(() => (archiveOrgId.value ? '当前机构暂无数据' : '请先选择门店机构'));
 const selectedCount = ref(0);
 const tableHeight = 400;
 const statusOptions = ['全部', '启用', '停用'] as const;
@@ -95,7 +96,7 @@ const categoryTableData = ref<CategoryTableRow[]>([]);
 const categoryTree = ref<ItemCategoryTreeNode[]>([{ label: rootCategoryName, children: [] }]);
 
 const resolveItemOrgId = () => {
-  return requireItemOrgId(sessionStore.currentOrgId);
+  return requireItemOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
 };
 
 const categorySelectTree = computed<CategorySelectNode[]>(() => {
@@ -116,6 +117,13 @@ const createFormRules: FormRules = {
 const fetchCategoryList = async () => {
   tableLoading.value = true;
   try {
+    const orgId = archiveOrgId.value;
+    if (!orgId) {
+      categoryTableData.value = [];
+      total.value = 0;
+      selectedCount.value = 0;
+      return;
+    }
     const result = await fetchItemCategoriesApi({
       pageNo: currentPage.value,
       pageSize: pageSize.value,
@@ -123,7 +131,7 @@ const fetchCategoryList = async () => {
       status: query.status === '全部' ? undefined : query.status,
       treeNode: selectedTreeNode.value === rootCategoryName ? undefined : selectedTreeNode.value,
       sortBy: sortByParentCategory.value ? 'parentCategory' : undefined,
-    }, resolveItemOrgId());
+    }, orgId);
     categoryTableData.value = result.list ?? [];
     total.value = result.total ?? 0;
     selectedCount.value = 0;
@@ -133,7 +141,12 @@ const fetchCategoryList = async () => {
 };
 
 const fetchCategoryTree = async () => {
-  const tree = await fetchItemCategoryTreeApi(resolveItemOrgId());
+  const orgId = archiveOrgId.value;
+  if (!orgId) {
+    categoryTree.value = [{ label: rootCategoryName, children: [] }];
+    return;
+  }
+  const tree = await fetchItemCategoryTreeApi(orgId);
   categoryTree.value = tree.length ? tree : [{ label: rootCategoryName, children: [] }];
 };
 
@@ -181,11 +194,19 @@ const resetCreateForm = () => {
 };
 
 const openCreateDialog = () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   resetCreateForm();
   createDialogVisible.value = true;
 };
 
 const openEditDialog = (row: CategoryTableRow) => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   editingCategoryId.value = row.id;
   createForm.categoryName = row.categoryName;
   createForm.parentCategory = row.parentCategory;
@@ -205,6 +226,10 @@ const resetBatchCreateForm = () => {
 };
 
 const openBatchCreateDialog = () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   resetBatchCreateForm();
   batchCreateDialogVisible.value = true;
 };
@@ -254,6 +279,10 @@ const handleCreateSubmit = async () => {
 };
 
 const handleBatchCreateSubmit = async () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   const rows = batchCreateRows.value.map((row) => ({
     categoryName: row.categoryName.trim(),
   }));
@@ -284,6 +313,10 @@ const handleBatchCreateSubmit = async () => {
 };
 
 const handleDelete = async (row: CategoryTableRow) => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   try {
     await ElMessageBox.confirm(`确认删除类别“${row.categoryName}”吗？`, '删除确认', {
       type: 'warning',
@@ -320,6 +353,16 @@ const handleToolbarAction = async (action: string) => {
 onMounted(async () => {
   await Promise.all([fetchCategoryList(), fetchCategoryTree()]);
 });
+
+watch(
+  () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
+  async () => {
+    currentPage.value = 1;
+    selectedTreeNode.value = rootCategoryName;
+    sortByParentCategory.value = false;
+    await Promise.all([fetchCategoryList(), fetchCategoryTree()]);
+  },
+);
 </script>
 
 <template>

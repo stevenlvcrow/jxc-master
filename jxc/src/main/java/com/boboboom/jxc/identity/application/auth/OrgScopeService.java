@@ -81,6 +81,39 @@ public class OrgScopeService {
         return resolveAccessibleScope(userId, orgId);
     }
 
+    public AccessibleScope resolvePlatformOrStoreScope(Long userId, String orgId) {
+        String normalizedOrgId = trimToNull(orgId);
+        if (normalizedOrgId == null || PLATFORM_SCOPE_LITERAL.equals(normalizedOrgId)) {
+            if (isPlatformAdmin(userId)) {
+                return new AccessibleScope(SCOPE_PLATFORM, 0L, 0L);
+            }
+            throw new BusinessException("请先选择门店机构");
+        }
+        if (!normalizedOrgId.startsWith("store-")) {
+            throw new BusinessException("请先选择门店机构");
+        }
+
+        Long storeId = parseNumericId(normalizedOrgId.substring("store-".length()));
+        StoreDO store = storeRepository.findById(storeId).orElse(null);
+        if (store == null) {
+            throw new BusinessException("门店不存在");
+        }
+        if (store.getGroupId() == null) {
+            throw new BusinessException("门店未绑定集团");
+        }
+        if (isPlatformAdmin(userId)) {
+            return new AccessibleScope(SCOPE_STORE, storeId, store.getGroupId());
+        }
+        if (hasScope(userId, SCOPE_STORE, storeId)) {
+            return new AccessibleScope(SCOPE_STORE, storeId, store.getGroupId());
+        }
+        Long groupId = store.getGroupId();
+        if (hasScope(userId, SCOPE_GROUP, groupId)) {
+            return new AccessibleScope(SCOPE_STORE, storeId, groupId);
+        }
+        throw new BusinessException("当前账号无该门店权限");
+    }
+
     public WorkflowScope resolveWorkflowScope(Long userId, String orgId) {
         String normalizedOrgId = trimToNull(orgId);
         if (normalizedOrgId == null) {

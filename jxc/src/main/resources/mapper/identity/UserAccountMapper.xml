@@ -49,6 +49,31 @@
         limit 1
     </select>
 
+    <select id="selectUsersByCreatedGroupScopes" resultMap="UserAccountDOResultMap">
+        select u.id,
+               u.username,
+               u.real_name,
+               u.phone,
+               u.password_hash,
+               u.password_salt,
+               u.status,
+               u.source_type,
+               u.created_scope_type,
+               u.created_scope_id,
+               u.first_login_changed_pwd,
+               u.last_login_at,
+               u.last_login_ip,
+               u.created_at,
+               u.updated_at
+        from sys_user u
+        where u.created_scope_type = 'GROUP'
+          and u.created_scope_id in
+            <foreach collection="groupIds" item="groupId" open="(" separator="," close=")">
+                #{groupId}
+            </foreach>
+        order by u.created_at desc, u.id desc
+    </select>
+
     <select id="selectRolelessUsersByCreatedScopes" resultMap="UserAccountDOResultMap">
         select u.id,
                u.username,

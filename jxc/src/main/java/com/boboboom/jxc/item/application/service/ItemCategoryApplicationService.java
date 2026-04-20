@@ -548,7 +548,7 @@ public class ItemCategoryApplicationService {
     }
 
     private ItemScope resolveItemScope(String orgId) {
-        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolvePlatformOrStoreScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
         return new ItemScope(scope.scopeType(), scope.scopeId());
     }
 

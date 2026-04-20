@@ -58,6 +58,14 @@ public class UserAccountRepositoryImpl implements UserAccountRepository {
     }
 
     @Override
+    public List<UserAccountDO> findByCreatedGroupScopes(List<Long> groupIds) {
+        if (groupIds == null || groupIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return userAccountMapper.selectUsersByCreatedGroupScopes(groupIds);
+    }
+
+    @Override
     public List<UserAccountDO> findRolelessUsersByCreatedScopes(List<Long> groupIds, List<Long> storeIds) {
         if ((groupIds == null || groupIds.isEmpty()) && (storeIds == null || storeIds.isEmpty())) {
             return Collections.emptyList();

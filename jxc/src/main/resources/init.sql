@@ -4438,6 +4438,38 @@ SELECT
 FROM sys_menu m
 WHERE m.menu_code LIKE 'STORE_BIZ_%'
 ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_role_menu_rel (role_id, menu_id)
+SELECT
+    (SELECT id FROM sys_role WHERE role_code = 'GROUP_ADMIN'),
+    m.id
+FROM sys_menu m
+WHERE m.menu_code IN (
+    'STORE_BIZ_MOD_08',
+    'STORE_BIZ_GRP_08_01',
+    'STORE_BIZ_MENU_08_01_01',
+    'STORE_BIZ_MENU_08_01_02',
+    'STORE_BIZ_MENU_08_01_03',
+    'STORE_BIZ_MENU_08_01_04',
+    'STORE_BIZ_MENU_08_01_05'
+)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_role_menu_rel (role_id, menu_id)
+SELECT
+    (SELECT id FROM sys_role WHERE role_code = 'PLATFORM_SUPER_ADMIN'),
+    m.id
+FROM sys_menu m
+WHERE m.menu_code IN (
+    'STORE_BIZ_MOD_08',
+    'STORE_BIZ_GRP_08_01',
+    'STORE_BIZ_MENU_08_01_01',
+    'STORE_BIZ_MENU_08_01_02',
+    'STORE_BIZ_MENU_08_01_03',
+    'STORE_BIZ_MENU_08_01_04',
+    'STORE_BIZ_MENU_08_01_05'
+)
+ON CONFLICT DO NOTHING;
 -- STORE_MENU_SEED_END
 
 CREATE TABLE IF NOT EXISTS item_statistics_type

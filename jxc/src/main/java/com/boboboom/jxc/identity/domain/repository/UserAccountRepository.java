@@ -18,6 +18,8 @@ public interface UserAccountRepository {
 
     List<UserAccountDO> findByIdsOrdered(List<Long> ids);
 
+    List<UserAccountDO> findByCreatedGroupScopes(List<Long> groupIds);
+
     List<UserAccountDO> findRolelessUsersByCreatedScopes(List<Long> groupIds, List<Long> storeIds);
 
     List<UserRoleView> findUserRolesByUserIds(List<Long> userIds);

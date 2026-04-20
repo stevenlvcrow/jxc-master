@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { createUnitApi, deleteUnitApi, fetchUnitsApi, updateUnitApi, type UnitItem } from '@/api/modules/unit';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import { useSessionStore } from '@/stores/session';
+import { resolveArchiveOrgId } from '@/views/items/org';
 
 type UnitType = 'STANDARD' | 'AUXILIARY';
 type UnitStatus = 'ENABLED' | 'DISABLED';
@@ -29,6 +30,8 @@ const query = reactive<{
 const currentPage = ref(1);
 const pageSize = ref(10);
 const sessionStore = useSessionStore();
+const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
+const emptyText = computed(() => (archiveOrgId.value ? '当前机构暂无数据' : '请先选择门店机构'));
 
 const tableData = ref<UnitRecord[]>([]);
 const loading = ref(false);
@@ -70,6 +73,10 @@ const statusLabel = (status: UnitStatus) => (status === 'ENABLED' ? '启用' : '
 const typeLabel = (type: UnitType) => (type === 'STANDARD' ? '标准单位' : '辅助单位');
 
 const openCreateDialog = () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   dialogMode.value = 'create';
   editingId.value = null;
   createForm.code = '';
@@ -79,6 +86,10 @@ const openCreateDialog = () => {
   dialogVisible.value = true;
 };
 const openEditDialog = (row: UnitRecord) => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   dialogMode.value = 'edit';
   editingId.value = row.id;
   createForm.code = row.code;
@@ -90,11 +101,16 @@ const openEditDialog = (row: UnitRecord) => {
 const loadUnits = async () => {
   loading.value = true;
   try {
+    const orgId = archiveOrgId.value;
+    if (!orgId) {
+      tableData.value = [];
+      return;
+    }
     const data = await fetchUnitsApi({
       keyword: query.keyword.trim() || undefined,
       status: query.status,
       unitType: query.unitType,
-    }, sessionStore.currentOrgId || undefined);
+    }, orgId);
     tableData.value = data.map((item: UnitItem) => ({
       id: item.id,
       code: item.code,
@@ -127,6 +143,10 @@ const handlePageSizeChange = (size: number) => {
 };
 
 const handleDelete = async (row: UnitRecord) => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   await ElMessageBox.confirm(`确定删除单位“${row.name}”吗？`, '删除确认', {
     type: 'warning',
     confirmButtonText: '确定',
@@ -139,6 +159,10 @@ const handleDelete = async (row: UnitRecord) => {
 
 const submitCreate = async () => {
   await createFormRef.value?.validate();
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   saving.value = true;
   const payload = {
     code: dialogMode.value === 'edit' ? createForm.code.trim() : undefined,
@@ -148,10 +172,10 @@ const submitCreate = async () => {
   } as const;
   try {
     if (dialogMode.value === 'create') {
-      await createUnitApi(payload, sessionStore.currentOrgId || undefined);
+      await createUnitApi(payload, archiveOrgId.value);
       ElMessage.success('新增成功');
     } else if (editingId.value != null) {
-      await updateUnitApi(editingId.value, payload, sessionStore.currentOrgId || undefined);
+      await updateUnitApi(editingId.value, payload, archiveOrgId.value);
       ElMessage.success('编辑成功');
     }
     dialogVisible.value = false;
@@ -164,6 +188,14 @@ const submitCreate = async () => {
 onMounted(() => {
   void loadUnits();
 });
+
+watch(
+  () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
+  () => {
+    currentPage.value = 1;
+    void loadUnits();
+  },
+);
 </script>
 
 <template>
@@ -207,6 +239,7 @@ onMounted(() => {
         border
         stripe
         class="erp-table"
+        :empty-text="emptyText"
       >
         <el-table-column label="序号" width="60" align="center">
           <template #default="scope">

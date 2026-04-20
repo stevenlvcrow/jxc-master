@@ -273,12 +273,38 @@ public class IdentityUserAdminController {
     private OrgScopeService.AccessibleScope resolveCreateUserScope(Long operatorId,
                                                                    boolean platformAdmin,
                                                                    String orgId) {
-        if (StringUtils.hasText(orgId)) {
-            return orgScopeService.resolveAccessibleScope(operatorId, orgId);
+        String normalizedOrgId = StringUtils.hasText(orgId) ? orgId.trim() : null;
+        if (!StringUtils.hasText(normalizedOrgId)) {
+            if (platformAdmin) {
+                return new OrgScopeService.AccessibleScope(OrgScopeService.SCOPE_PLATFORM, 0L, 0L);
+            }
+            throw new BusinessException("请先选择集团机构");
         }
-        if (platformAdmin) {
-            return new OrgScopeService.AccessibleScope(OrgScopeService.SCOPE_PLATFORM, 0L, 0L);
+
+        if ("platform".equalsIgnoreCase(normalizedOrgId)) {
+            if (platformAdmin) {
+                return new OrgScopeService.AccessibleScope(OrgScopeService.SCOPE_PLATFORM, 0L, 0L);
+            }
+            throw new BusinessException("请先选择集团机构");
         }
-        throw new BusinessException("请先选择机构");
+
+        if (normalizedOrgId.startsWith("group-")) {
+            OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, normalizedOrgId);
+            if (!OrgScopeService.SCOPE_GROUP.equals(scope.scopeType())) {
+                throw new BusinessException("请先选择集团机构");
+            }
+            return new OrgScopeService.AccessibleScope(OrgScopeService.SCOPE_GROUP, scope.scopeId(), scope.groupId());
+        }
+
+        if (normalizedOrgId.startsWith("store-")) {
+            OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, normalizedOrgId);
+            Long groupId = scope.groupId();
+            if (groupId == null || groupId <= 0) {
+                throw new BusinessException("门店未绑定集团");
+            }
+            return new OrgScopeService.AccessibleScope(OrgScopeService.SCOPE_GROUP, groupId, groupId);
+        }
+
+        throw new BusinessException("机构参数非法");
     }
 }

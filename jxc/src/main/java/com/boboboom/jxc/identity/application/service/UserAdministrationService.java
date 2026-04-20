@@ -159,35 +159,7 @@ public class UserAdministrationService {
             if (managedGroupIds.isEmpty()) {
                 return Collections.emptyList();
             }
-
-            List<Long> managedStoreIds = storeRepository.findByGroupIds(managedGroupIds)
-                    .stream()
-                    .map(store -> store.getId())
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .toList();
-
-            List<Long> scopedUserIds = userRoleRelRepository.findByStatusAndGroupOrStoreScopes(
-                            STATUS_ENABLED, new LinkedHashSet<>(managedGroupIds), new LinkedHashSet<>(managedStoreIds))
-                    .stream()
-                    .map(UserRoleRelDO::getUserId)
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .toList();
-
-            List<Long> rolelessUserIds = userAccountRepository.findRolelessUsersByCreatedScopes(managedGroupIds, managedStoreIds)
-                    .stream()
-                    .map(UserAccountDO::getId)
-                    .filter(Objects::nonNull)
-                    .toList();
-
-            LinkedHashSet<Long> visibleUserIds = new LinkedHashSet<>(scopedUserIds);
-            visibleUserIds.addAll(rolelessUserIds);
-            if (visibleUserIds.isEmpty()) {
-                return Collections.emptyList();
-            }
-
-            users = userAccountRepository.findByIdsOrdered(new java.util.ArrayList<>(visibleUserIds));
+            users = userAccountRepository.findByCreatedGroupScopes(managedGroupIds);
         }
 
         if (users.isEmpty()) {

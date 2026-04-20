@@ -24,6 +24,22 @@ import java.util.stream.Collectors;
 public class RoleMenuAdministrationService {
 
     private static final String STATUS_ENABLED = "ENABLED";
+    private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
+    private static final String GROUP_ADMIN_ROLE_CODE = "GROUP_ADMIN";
+    private static final String PLATFORM_ROLE_TYPE = "PLATFORM";
+    private static final String GROUP_ROLE_TYPE = "GROUP";
+    private static final String STORE_ROLE_TYPE = "STORE";
+    private static final String GROUP_MENU_PREFIX = "GROUP_";
+    private static final String STORE_MENU_PREFIX = "STORE_BIZ_";
+    private static final LinkedHashSet<String> PLATFORM_TEMPLATE_MENU_CODES = new LinkedHashSet<>(List.of(
+            "STORE_BIZ_MOD_08",
+            "STORE_BIZ_GRP_08_01",
+            "STORE_BIZ_MENU_08_01_01",
+            "STORE_BIZ_MENU_08_01_02",
+            "STORE_BIZ_MENU_08_01_03",
+            "STORE_BIZ_MENU_08_01_04",
+            "STORE_BIZ_MENU_08_01_05"
+    ));
 
     private final MenuRepository menuRepository;
     private final RoleMenuRelRepository roleMenuRelRepository;
@@ -77,15 +93,100 @@ public class RoleMenuAdministrationService {
                 "setting",
                 48
         );
+        MenuDO archiveRoot = ensureMenu(
+                "STORE_BIZ_MOD_08",
+                "档案管理",
+                null,
+                null,
+                null,
+                null,
+                "document",
+                108
+        );
+        MenuDO archiveGroup = ensureMenu(
+                "STORE_BIZ_GRP_08_01",
+                "物品",
+                archiveRoot.getId(),
+                null,
+                null,
+                null,
+                null,
+                1801
+        );
+        MenuDO archiveItem = ensureMenu(
+                "STORE_BIZ_MENU_08_01_01",
+                "物品管理",
+                archiveGroup.getId(),
+                "/archive/1/1",
+                "views/feature/index",
+                "store:biz:08:01:01:view",
+                null,
+                108011
+        );
+        MenuDO archiveCategory = ensureMenu(
+                "STORE_BIZ_MENU_08_01_02",
+                "物品类别管理",
+                archiveGroup.getId(),
+                "/archive/1/2",
+                "views/feature/index",
+                "store:biz:08:01:02:view",
+                null,
+                108012
+        );
+        MenuDO archiveUnit = ensureMenu(
+                "STORE_BIZ_MENU_08_01_03",
+                "单位管理",
+                archiveGroup.getId(),
+                "/archive/1/3",
+                "views/feature/index",
+                "store:biz:08:01:03:view",
+                null,
+                108013
+        );
+        MenuDO archiveStatistics = ensureMenu(
+                "STORE_BIZ_MENU_08_01_04",
+                "统计类型管理",
+                archiveGroup.getId(),
+                "/archive/1/4",
+                "views/feature/index",
+                "store:biz:08:01:04:view",
+                null,
+                108014
+        );
+        MenuDO archiveTag = ensureMenu(
+                "STORE_BIZ_MENU_08_01_05",
+                "物品标签管理",
+                archiveGroup.getId(),
+                "/archive/1/5",
+                "views/feature/index",
+                "store:biz:08:01:05:view",
+                null,
+                108015
+        );
 
-        RoleDO groupAdminRole = roleRepository.findByRoleCode("GROUP_ADMIN").orElse(null);
-        if (groupAdminRole == null) {
-            return;
+        RoleDO groupAdminRole = roleRepository.findByRoleCode(GROUP_ADMIN_ROLE_CODE).orElse(null);
+        RoleDO platformSuperAdminRole = roleRepository.findByRoleCode(PLATFORM_SUPER_ADMIN_ROLE_CODE).orElse(null);
+        if (groupAdminRole != null) {
+            ensureRoleMenuRel(groupAdminRole.getId(), userMgmt.getId());
+            ensureRoleMenuRel(groupAdminRole.getId(), roleMgmt.getId());
+            ensureRoleMenuRel(groupAdminRole.getId(), menuPermMgmt.getId());
+            ensureRoleMenuRel(groupAdminRole.getId(), archiveRoot.getId());
+            ensureRoleMenuRel(groupAdminRole.getId(), archiveGroup.getId());
+            ensureRoleMenuRel(groupAdminRole.getId(), archiveItem.getId());
+            ensureRoleMenuRel(groupAdminRole.getId(), archiveCategory.getId());
+            ensureRoleMenuRel(groupAdminRole.getId(), archiveUnit.getId());
+            ensureRoleMenuRel(groupAdminRole.getId(), archiveStatistics.getId());
+            ensureRoleMenuRel(groupAdminRole.getId(), archiveTag.getId());
         }
-
-        ensureRoleMenuRel(groupAdminRole.getId(), userMgmt.getId());
-        ensureRoleMenuRel(groupAdminRole.getId(), roleMgmt.getId());
-        ensureRoleMenuRel(groupAdminRole.getId(), menuPermMgmt.getId());
+        if (platformSuperAdminRole != null) {
+            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveRoot.getId());
+            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveGroup.getId());
+            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveItem.getId());
+            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveCategory.getId());
+            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveUnit.getId());
+            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveStatistics.getId());
+            ensureRoleMenuRel(platformSuperAdminRole.getId(), archiveTag.getId());
+        }
     }
 
     public List<MenuAssignmentOption> listAssignableMenus(Long operatorId,
@@ -97,6 +198,7 @@ public class RoleMenuAdministrationService {
         return menuRepository.findAllOrdered()
                 .stream()
                 .filter(menu -> STATUS_ENABLED.equals(menu.getStatus()))
+                .filter(menu -> platformAdmin || isAssignableForManagedRole(menu.getMenuCode()))
                 .map(this::toOption)
                 .toList();
     }
@@ -130,7 +232,7 @@ public class RoleMenuAdministrationService {
         Map<Long, MenuDO> validMenuMap = validMenus.stream().collect(Collectors.toMap(MenuDO::getId, item -> item));
         for (Long menuId : dedupedMenuIds) {
             MenuDO menu = validMenuMap.get(menuId);
-            if (menu == null || !isMenuAssignableToRoleType(role.getRoleType(), menu.getMenuCode())) {
+            if (menu == null || !isMenuAssignableToRole(role, menu.getMenuCode())) {
                 continue;
             }
             RoleMenuRelDO rel = new RoleMenuRelDO();
@@ -206,14 +308,23 @@ public class RoleMenuAdministrationService {
             if (menu == null) {
                 continue;
             }
-            boolean isStoreMenu = menu.getMenuCode() != null && menu.getMenuCode().startsWith("STORE_BIZ_");
-            if ("STORE".equals(role.getRoleType()) && !isStoreMenu) {
-                throw new BusinessException("门店角色仅可分配门店菜单");
+            if (PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode())) {
+                continue;
             }
-            if ("GROUP".equals(role.getRoleType()) && isStoreMenu) {
-                throw new BusinessException("集团角色仅可分配集团菜单");
+            if (!isMenuAssignableToRole(role, menu.getMenuCode())) {
+                throw new BusinessException(buildRoleMenuValidationMessage(role.getRoleType()));
             }
         }
+    }
+
+    private boolean isMenuAssignableToRole(RoleDO role, String menuCode) {
+        if (role == null) {
+            return false;
+        }
+        if (PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode())) {
+            return true;
+        }
+        return isMenuAssignableToRoleType(role.getRoleType(), menuCode);
     }
 
     private boolean isMenuAssignableToRoleType(String roleType, String menuCode) {
@@ -222,13 +333,38 @@ public class RoleMenuAdministrationService {
         if (normalizedMenuCode == null) {
             return false;
         }
-        if ("GROUP".equals(normalizedRoleType)) {
-            return normalizedMenuCode.startsWith("GROUP_");
+        if (PLATFORM_ROLE_TYPE.equals(normalizedRoleType)) {
+            return PLATFORM_TEMPLATE_MENU_CODES.contains(normalizedMenuCode);
         }
-        if ("STORE".equals(normalizedRoleType)) {
-            return normalizedMenuCode.startsWith("STORE_BIZ_");
+        if (GROUP_ROLE_TYPE.equals(normalizedRoleType)) {
+            return normalizedMenuCode.startsWith(GROUP_MENU_PREFIX) || PLATFORM_TEMPLATE_MENU_CODES.contains(normalizedMenuCode);
         }
-        return true;
+        if (STORE_ROLE_TYPE.equals(normalizedRoleType)) {
+            return normalizedMenuCode.startsWith(STORE_MENU_PREFIX);
+        }
+        return false;
+    }
+
+    private boolean isAssignableForManagedRole(String menuCode) {
+        String normalizedMenuCode = trimToNull(menuCode);
+        if (normalizedMenuCode == null) {
+            return false;
+        }
+        return normalizedMenuCode.startsWith(GROUP_MENU_PREFIX) || normalizedMenuCode.startsWith(STORE_MENU_PREFIX);
+    }
+
+    private String buildRoleMenuValidationMessage(String roleType) {
+        String normalizedRoleType = trimToNull(roleType);
+        if (PLATFORM_ROLE_TYPE.equals(normalizedRoleType)) {
+            return "平台角色仅可分配基础模板菜单";
+        }
+        if (GROUP_ROLE_TYPE.equals(normalizedRoleType)) {
+            return "集团角色仅可分配集团菜单和基础模板菜单";
+        }
+        if (STORE_ROLE_TYPE.equals(normalizedRoleType)) {
+            return "门店角色仅可分配门店菜单";
+        }
+        return "当前角色类型不支持菜单分配";
     }
 
     private MenuAssignmentOption toOption(MenuDO menu) {

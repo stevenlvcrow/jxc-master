@@ -1,9 +1,20 @@
 export const normalizeItemOrgId = (orgId?: string | null) => String(orgId ?? '').trim().toLowerCase();
 
-export const requireItemOrgId = (orgId?: string | null) => {
+export const resolveArchiveOrgId = (orgId?: string | null, platformAdminMode = false) => {
+  if (platformAdminMode) {
+    return 'platform';
+  }
   const normalizedOrgId = normalizeItemOrgId(orgId);
-  if (!normalizedOrgId) {
-    throw new Error('请先选择机构');
+  if (!normalizedOrgId || !normalizedOrgId.startsWith('store-')) {
+    return null;
   }
   return normalizedOrgId;
+};
+
+export const requireItemOrgId = (orgId?: string | null, platformAdminMode = false) => {
+  const resolvedOrgId = resolveArchiveOrgId(orgId, platformAdminMode);
+  if (!resolvedOrgId) {
+    throw new Error('请先选择门店机构');
+  }
+  return resolvedOrgId;
 };

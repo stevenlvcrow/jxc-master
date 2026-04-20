@@ -34,6 +34,16 @@ const currentOrgId = computed(() => {
 });
 
 const isGroupMenuPermissionPage = computed(() => route.path.startsWith('/group/'));
+const platformTemplateMenuCodes = new Set([
+  'STORE_BIZ_MOD_08',
+  'STORE_BIZ_GRP_08_01',
+  'STORE_BIZ_MENU_08_01_01',
+  'STORE_BIZ_MENU_08_01_02',
+  'STORE_BIZ_MENU_08_01_03',
+  'STORE_BIZ_MENU_08_01_04',
+  'STORE_BIZ_MENU_08_01_05',
+]);
+const isPlatformTemplateMenu = (menu: MenuAdminItem) => platformTemplateMenuCodes.has(menu.menuCode);
 const filteredRoles = computed(() => {
   if (!isGroupMenuPermissionPage.value) {
     return roles.value;
@@ -49,20 +59,18 @@ const filteredRoles = computed(() => {
 const selectedRole = computed(() => filteredRoles.value.find((item) => item.id === selectedRoleId.value));
 const visibleMenus = computed(() => {
   const roleType = selectedRole.value?.roleType;
-  if (isGroupMenuPermissionPage.value) {
-    if (roleType === 'STORE') {
-      return menus.value.filter((item) => item.menuCode.startsWith('STORE_BIZ_'));
-    }
-    if (roleType === 'GROUP') {
-      return menus.value.filter((item) => item.menuCode.startsWith('GROUP_'));
-    }
-    return [];
+  const roleCode = selectedRole.value?.roleCode;
+  if (roleCode === 'PLATFORM_SUPER_ADMIN') {
+    return menus.value;
+  }
+  if (roleType === 'PLATFORM') {
+    return menus.value.filter((item) => isPlatformTemplateMenu(item));
+  }
+  if (roleType === 'GROUP') {
+    return menus.value.filter((item) => item.menuCode.startsWith('GROUP_') || isPlatformTemplateMenu(item));
   }
   if (roleType === 'STORE') {
     return menus.value.filter((item) => item.menuCode.startsWith('STORE_BIZ_'));
-  }
-  if (roleType === 'GROUP') {
-    return menus.value.filter((item) => !item.menuCode.startsWith('STORE_BIZ_'));
   }
   return menus.value;
 });

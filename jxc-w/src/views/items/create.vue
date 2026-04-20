@@ -258,7 +258,7 @@ const CROP_ZOOM_MAX = 100;
 
 const cropDisplayWidth = computed(() => cropImageNaturalWidth.value * cropImageScale.value);
 const cropDisplayHeight = computed(() => cropImageNaturalHeight.value * cropImageScale.value);
-const resolveItemOrgId = () => requireItemOrgId(sessionStore.currentOrgId);
+const resolveItemOrgId = () => requireItemOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
 
 const addUnitRow = (index: number) => {
   unitSettingRows.value.splice(index + 1, 0, {
@@ -664,7 +664,7 @@ const handleSaveDraft = async () => {
     const res = await saveItemDraftApi(buildCreatePayload(), resolveItemOrgId());
     ElMessage.success(`草稿已保存（${res.id}）`);
   } catch (error) {
-    if (error instanceof Error && error.message === '请先选择机构') {
+    if (error instanceof Error && error.message === '请先选择门店机构') {
       ElMessage.warning(error.message);
       return;
     }
@@ -697,7 +697,7 @@ const handleSave = async () => {
     }
     router.push('/archive/1/1');
   } catch (error) {
-    if (error instanceof Error && error.message === '请先选择机构') {
+    if (error instanceof Error && error.message === '请先选择门店机构') {
       ElMessage.warning(error.message);
       return;
     }
@@ -715,7 +715,7 @@ const loadDetailIfEditMode = async () => {
     const detail = await fetchItemDetailApi(editItemId.value, resolveItemOrgId());
     applyDetailPayload(detail);
   } catch (error) {
-    if (error instanceof Error && error.message === '请先选择机构') {
+    if (error instanceof Error && error.message === '请先选择门店机构') {
       ElMessage.warning(error.message);
       return;
     }
