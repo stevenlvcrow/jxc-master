@@ -170,9 +170,22 @@ public class WorkflowProcessApplicationService {
                 .distinct()
                 .toList();
         validateStoreIds(groupId, storeIds);
-
-        processStoreBindingRepository.deleteByGroupAndProcessRegistryId(groupId, row.getId());
-        for (Long storeId : storeIds) {
+        List<WorkflowProcessStoreBindingDO> existingBindings = processStoreBindingRepository
+                .findByGroupAndProcessRegistryId(groupId, row.getId());
+        Set<Long> existingStoreIds = existingBindings.stream()
+                .map(WorkflowProcessStoreBindingDO::getStoreId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<Long> targetStoreIds = new LinkedHashSet<>(storeIds);
+        for (Long storeId : existingStoreIds) {
+            if (targetStoreIds.contains(storeId)) {
+                continue;
+            }
+            processStoreBindingRepository.deleteByGroupAndProcessRegistryIdAndStoreId(groupId, row.getId(), storeId);
+        }
+        for (Long storeId : targetStoreIds) {
+            if (existingStoreIds.contains(storeId)) {
+                continue;
+            }
             WorkflowProcessStoreBindingDO binding = new WorkflowProcessStoreBindingDO();
             binding.setGroupId(groupId);
             binding.setProcessRegistryId(row.getId());

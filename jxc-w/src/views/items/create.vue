@@ -13,6 +13,7 @@ import {
   updateItemApi,
 } from '@/api/modules/item';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonNumberInput from '@/components/CommonNumberInput.vue';
 import CommonMnemonicField from '@/components/CommonMnemonicField.vue';
 import { requireItemOrgId } from './org';
 
@@ -75,7 +76,6 @@ const form = reactive({
   shelfLifeDays: undefined as number | undefined,
   warningDays: undefined as number | undefined,
   stagnantDays: undefined as number | undefined,
-  tag: '',
 });
 
 const categoryOptions = ['蔬菜', '奶茶', '肉类', '调料', '面点', '熟食', '日用百货', '水产', '河粉', '面食', '预制菜', '酒水', '一次性用品', '前厅类'];
@@ -801,33 +801,27 @@ const loadDetailIfEditMode = async () => {
               />
             </el-form-item>
             <el-form-item label="保质期天数">
-              <el-input-number
+              <CommonNumberInput
                 v-model="form.shelfLifeDays"
                 :min="0"
                 :disabled="!form.shelfLifeEnabled"
-                controls-position="right"
                 placeholder="请输入保质期天数"
               />
             </el-form-item>
             <el-form-item label="提前预警天数">
-              <el-input-number
+              <CommonNumberInput
                 v-model="form.warningDays"
                 :min="0"
                 :disabled="!form.shelfLifeEnabled"
-                controls-position="right"
                 placeholder="请输入提前预警天数"
               />
             </el-form-item>
             <el-form-item label="呆滞天数">
-              <el-input-number
+              <CommonNumberInput
                 v-model="form.stagnantDays"
                 :min="0"
-                controls-position="right"
                 placeholder="请输入呆滞天数"
               />
-            </el-form-item>
-            <el-form-item label="物品标签">
-              <el-input v-model="form.tag" placeholder="请输入物品标签" />
             </el-form-item>
           </div>
         </div>

@@ -427,6 +427,19 @@ const loadWorkflowNoticeBadgeCount = async () => {
   }
 };
 
+const refreshWorkflowNoticeBadgeCount = async () => {
+  if (!sessionStore.isLoggedIn) {
+    workflowNoticeBadgeCount.value = 0;
+    return;
+  }
+  const targetOrgId = sessionStore.platformAdminMode ? 'platform' : sessionStore.currentOrgId;
+  if (!targetOrgId && sessionStore.requiresOrgSelection) {
+    workflowNoticeBadgeCount.value = 0;
+    return;
+  }
+  await loadWorkflowNoticeBadgeCount();
+};
+
 const resolveWorkflowNoticeRoute = (row: WorkflowApprovalNotificationItem) => {
   if (row.routePath) {
     return row.routePath;
@@ -444,7 +457,13 @@ const handleWorkflowNoticeRowClick = (row: WorkflowApprovalNotificationItem) => 
     return;
   }
   workflowNoticeDialogVisible.value = false;
-  router.push(targetPath);
+  const resolved = router.resolve(targetPath);
+  router.push({
+    path: resolved.path,
+    query: row.result === '待审核'
+      ? { ...resolved.query, approvalMode: '1' }
+      : resolved.query,
+  });
 };
 
 const handleWorkflowNoticePageChange = async (page: number) => {
@@ -570,19 +589,17 @@ watch(
 
 watch(
   () => [sessionStore.currentOrgId, sessionStore.platformAdminMode, sessionStore.isLoggedIn] as const,
-  async ([orgId, isPlatformAdminMode, isLoggedIn]) => {
-    if (!isLoggedIn) {
-      workflowNoticeBadgeCount.value = 0;
-      return;
-    }
-    const targetOrgId = isPlatformAdminMode ? 'platform' : orgId;
-    if (!targetOrgId && sessionStore.requiresOrgSelection) {
-      workflowNoticeBadgeCount.value = 0;
-      return;
-    }
-    await loadWorkflowNoticeBadgeCount();
+  async () => {
+    await refreshWorkflowNoticeBadgeCount();
   },
   { immediate: true },
+);
+
+watch(
+  () => route.path,
+  () => {
+    void refreshWorkflowNoticeBadgeCount();
+  },
 );
 
 watch(
@@ -910,17 +927,18 @@ onBeforeUnmount(() => {
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: nowrap;
   justify-content: flex-end;
   min-width: 0;
   font-size: 14px;
   font-weight: 400;
+  line-height: 1;
 }
 
 .topbar-item {
   flex: 0 0 auto;
-  height: 24px;
+  height: 20px;
   display: inline-flex;
   align-items: center;
   vertical-align: middle;
@@ -935,9 +953,10 @@ onBeforeUnmount(() => {
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
   flex: 1 1 auto;
+  line-height: 1;
 }
 
 .page-title {
@@ -947,6 +966,7 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   font-size: 14px;
   font-weight: 400;
+  line-height: 1;
 }
 
 .org-switch-trigger,
@@ -976,7 +996,7 @@ onBeforeUnmount(() => {
   padding: 0;
   min-width: 0;
   max-width: 340px;
-  height: 24px;
+  height: 20px;
   text-align: left;
   background: transparent;
   line-height: 1;
@@ -1002,7 +1022,8 @@ onBeforeUnmount(() => {
 }
 
 .workflow-notice-trigger {
-  width: 24px;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border-radius: 50%;
   border: none;
@@ -1011,7 +1032,7 @@ onBeforeUnmount(() => {
 }
 
 .user-trigger {
-  height: 24px;
+  height: 20px;
   padding: 0 4px;
   max-width: 160px;
   font-size: inherit;
@@ -1068,11 +1089,76 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: nowrap;
-  min-height: 48px;
-  height: auto;
-  padding: 6px 16px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+}
+
+.topbar :deep(.el-button) {
+  min-height: 20px;
+  height: 20px;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1;
+}
+
+.topbar :deep(.el-button.is-circle) {
+  width: 20px;
+  padding: 0;
+}
+
+.topbar :deep(.el-badge__content) {
+  top: 2px;
+}
+
+.tabbar {
+  min-height: 28px;
+  height: 28px;
+  padding: 0 12px;
+  display: flex;
+  align-items: stretch;
+}
+
+.workspace-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.workspace-tab-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  line-height: 1;
+}
+
+.tabbar :deep(.el-tabs) {
+  --el-tabs-header-height: 28px;
+}
+
+.tabbar :deep(.el-tabs__header) {
+  margin: 0;
+  min-height: 28px;
+}
+
+.tabbar :deep(.el-tabs__nav-wrap) {
+  min-height: 28px;
+}
+
+.tabbar :deep(.el-tabs__nav-scroll) {
+  min-height: 28px;
+}
+
+.tabbar :deep(.el-tabs__item) {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.tabbar :deep(.el-tabs__content) {
+  display: none;
 }
 
 @media (max-width: 1200px) {

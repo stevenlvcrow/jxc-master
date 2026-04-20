@@ -28,6 +28,7 @@ const submitLogin = async () => {
     const loginAccount = account.value.trim();
     sessionStore.login('李智杰', loginAccount, {
       platformAdminMode: isMockPlatformAccount(loginAccount),
+      phone: /^1\d{10}$/.test(loginAccount) ? loginAccount : '',
     });
     router.replace(sessionStore.requiresOrgSelection ? '/select-org' : PROFILE_HOME_PATH);
     return;
@@ -43,8 +44,9 @@ const submitLogin = async () => {
       refreshToken: result.refreshToken,
     });
     const loginAccount = account.value.trim();
-    sessionStore.login(result.userName || loginAccount, loginAccount, {
+    sessionStore.login(result.userName || loginAccount, result.account || loginAccount, {
       platformAdminMode: Boolean(result.platformAdmin),
+      phone: result.phone || '',
     });
     router.replace(sessionStore.requiresOrgSelection ? '/select-org' : PROFILE_HOME_PATH);
   } catch {

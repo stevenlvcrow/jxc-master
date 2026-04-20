@@ -16,6 +16,7 @@ import { useSessionStore } from '@/stores/session';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
 import CommonCodeField from '@/components/CommonCodeField.vue';
 import CommonMnemonicField from '@/components/CommonMnemonicField.vue';
+import CommonNumberInput from '@/components/CommonNumberInput.vue';
 
 type SectionKey = 'basic' | 'params' | 'supply' | 'qualification' | 'contract' | 'finance' | 'invoice';
 
@@ -580,13 +581,14 @@ const saveSupplier = async () => {
                 :data="supplierCategoryTree"
                 node-key="id"
                 :props="{ label: 'label', children: 'children', value: 'label' }"
+                default-expand-all
                 check-strictly
                 clearable
                 placeholder="请选择供货商类别"
               />
             </el-form-item>
             <el-form-item label="税率(%)" data-field="taxRate">
-              <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" :step="0.5" />
+              <CommonNumberInput v-model="form.taxRate" :min="0" :max="100" :precision="2" />
             </el-form-item>
             <el-form-item label="启用状态" data-field="status">
               <el-switch v-model="form.enabled" active-text="启用" inactive-text="停用" />

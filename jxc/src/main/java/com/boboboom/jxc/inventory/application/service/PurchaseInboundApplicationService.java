@@ -10,7 +10,6 @@ import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.Purchase
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
 import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundBatchRequest;
 import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundCreateRequest;
-import com.boboboom.jxc.workflow.application.service.PurchaseInboundWorkflowService;
 import jakarta.validation.Valid;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,7 +48,7 @@ public class PurchaseInboundApplicationService {
     private final PurchaseInboundPermissionService purchaseInboundPermissionService;
     private final PurchaseInboundNotificationService purchaseInboundNotificationService;
     private final PurchaseInboundUnapproveService purchaseInboundUnapproveService;
-    private final PurchaseInboundWorkflowService purchaseInboundWorkflowService;
+    private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
     private final OrgScopeService orgScopeService;
 
     public PurchaseInboundApplicationService(InventoryBalanceRepository inventoryBalanceRepository,
@@ -59,7 +58,7 @@ public class PurchaseInboundApplicationService {
                                              PurchaseInboundPermissionService purchaseInboundPermissionService,
                                              PurchaseInboundNotificationService purchaseInboundNotificationService,
                                              PurchaseInboundUnapproveService purchaseInboundUnapproveService,
-                                             PurchaseInboundWorkflowService purchaseInboundWorkflowService,
+                                             InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
                                              OrgScopeService orgScopeService) {
         this.inventoryBalanceRepository = inventoryBalanceRepository;
         this.purchaseInboundRepository = purchaseInboundRepository;
@@ -68,7 +67,7 @@ public class PurchaseInboundApplicationService {
         this.purchaseInboundPermissionService = purchaseInboundPermissionService;
         this.purchaseInboundNotificationService = purchaseInboundNotificationService;
         this.purchaseInboundUnapproveService = purchaseInboundUnapproveService;
-        this.purchaseInboundWorkflowService = purchaseInboundWorkflowService;
+        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowService;
         this.orgScopeService = orgScopeService;
     }
 
@@ -193,7 +192,13 @@ public class PurchaseInboundApplicationService {
         ensurePurchaseInboundOperationPermission(scope, "DELETE");
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         PurchaseInboundDO header = requireHeader(scope, id, operatorId);
-        if (purchaseInboundWorkflowService.shouldTriggerAction(scope.scopeType(), scope.scopeId(), scope.groupId(), "DELETE")) {
+        if (inventoryDocumentWorkflowService.shouldTriggerAction(
+                InventoryDocumentType.PURCHASE_INBOUND,
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                "DELETE"
+        )) {
             if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
                 throw new BusinessException("已审核单据请先反审核后再删除");
             }
@@ -210,7 +215,13 @@ public class PurchaseInboundApplicationService {
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         List<PurchaseInboundDO> headers = requireHeaders(scope, request.ids(), operatorId);
         for (PurchaseInboundDO header : headers) {
-            if (purchaseInboundWorkflowService.shouldTriggerAction(scope.scopeType(), scope.scopeId(), scope.groupId(), "DELETE")) {
+            if (inventoryDocumentWorkflowService.shouldTriggerAction(
+                    InventoryDocumentType.PURCHASE_INBOUND,
+                    scope.scopeType(),
+                    scope.scopeId(),
+                    scope.groupId(),
+                    "DELETE"
+            )) {
                 if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
                     throw new BusinessException("已审核单据请先反审核后再删除");
                 }
@@ -332,7 +343,14 @@ public class PurchaseInboundApplicationService {
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         PurchaseInboundDO header = buildPurchaseInboundHeader(scope, id, request, createMode, operatorId);
         persistPurchaseInbound(scope, header, request, createMode);
-        boolean workflowApplied = purchaseInboundWorkflowService.syncOnAction(scope.scopeType(), scope.scopeId(), scope.groupId(), header, operatorId, action);
+        boolean workflowApplied = inventoryDocumentWorkflowService.syncPurchaseInboundOnAction(
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                header,
+                operatorId,
+                action
+        );
         if (!workflowApplied) {
             header.setPendingOperation("NONE");
             purchaseInboundRepository.update(header);
@@ -583,15 +601,16 @@ public class PurchaseInboundApplicationService {
         if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
             return;
         }
-        String approverRole = purchaseInboundWorkflowService.resolveApprovalRoleLabel(
+        String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
+                InventoryDocumentType.PURCHASE_INBOUND,
                 scope.scopeType(),
                 scope.scopeId(),
                 scope.groupId(),
                 context.operatorId(),
                 header.getWorkflowTaskName()
         );
-        PurchaseInboundWorkflowService.ApprovalResult workflowResult =
-                purchaseInboundWorkflowService.completeCurrentTask(header, context.operatorId());
+        InventoryDocumentWorkflowService.ApprovalResult workflowResult =
+                inventoryDocumentWorkflowService.completePurchaseInboundCurrentTask(header, context.operatorId());
         if (!workflowResult.workflowApplied()) {
             approveWithoutWorkflow(scope, header, lines, context, approverRole);
             return;
@@ -624,7 +643,7 @@ public class PurchaseInboundApplicationService {
                                      List<PurchaseInboundLineDO> lines,
                                      BatchApproveContext context,
                                      String approverRole,
-                                     PurchaseInboundWorkflowService.ApprovalResult workflowResult) {
+                                     InventoryDocumentWorkflowService.ApprovalResult workflowResult) {
         if (workflowResult.completed()) {
             if (deletePendingHeaderIfNecessary(header)) {
                 return;
@@ -837,7 +856,7 @@ public class PurchaseInboundApplicationService {
             throw new BusinessException("已审核单据请先反审核后再删除");
         }
         if (StringUtils.hasText(header.getWorkflowInstanceId())) {
-            purchaseInboundWorkflowService.cancelWorkflowInstanceIfRunning(header);
+            inventoryDocumentWorkflowService.cancelPurchaseInboundWorkflowInstanceIfRunning(header);
         }
         purchaseInboundLineRepository.deleteByInboundId(header.getId());
         purchaseInboundRepository.deleteById(header.getId());
@@ -845,7 +864,14 @@ public class PurchaseInboundApplicationService {
 
     private void saveDeleteWorkflow(InventoryScope scope, PurchaseInboundDO header, Long operatorId) {
         header.setPendingOperation("DELETE");
-        purchaseInboundWorkflowService.syncOnAction(scope.scopeType(), scope.scopeId(), scope.groupId(), header, operatorId, "DELETE");
+        inventoryDocumentWorkflowService.syncPurchaseInboundOnAction(
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                header,
+                operatorId,
+                "DELETE"
+        );
         header.setStatus(STATUS_SUBMITTED);
         header.setApprovedBy(null);
         header.setApprovedAt(null);

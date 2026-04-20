@@ -5,6 +5,8 @@ public class AuthLoginResult {
     private String accessToken;
     private String refreshToken;
     private String userName;
+    private String account;
+    private String phone;
     private Boolean platformAdmin;
 
     public String getAccessToken() {
@@ -29,6 +31,22 @@ public class AuthLoginResult {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public String getAccount() {
+        return account;
+    }
+
+    public void setAccount(String account) {
+        this.account = account;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 
     public Boolean getPlatformAdmin() {

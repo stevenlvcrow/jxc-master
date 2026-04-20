@@ -15,4 +15,6 @@ public interface WorkflowProcessStoreBindingRepository {
     void save(WorkflowProcessStoreBindingDO binding);
 
     void deleteByGroupAndProcessRegistryId(Long groupId, Long processRegistryId);
+
+    void deleteByGroupAndProcessRegistryIdAndStoreId(Long groupId, Long processRegistryId, Long storeId);
 }

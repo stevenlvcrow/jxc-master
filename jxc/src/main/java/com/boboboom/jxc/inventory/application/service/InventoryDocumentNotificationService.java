@@ -39,11 +39,12 @@ public class InventoryDocumentNotificationService {
         WorkflowActionService.ApprovalTarget approvalTarget = inventoryDocumentWorkflowService
                 .resolveApprovalTarget(type, scopeType, scopeId, groupId, header.getWorkflowTaskName())
                 .orElse(null);
+        String workflowName = inventoryDocumentWorkflowService.resolveBusinessName(type, scopeType, scopeId, groupId) + "流程";
         workflowApprovalNotificationApplicationService.record(
                 scopeType,
                 scopeId,
                 type.getBusinessCode(),
-                type.getBusinessName() + "流程",
+                workflowName,
                 header.getId(),
                 header.getDocumentCode(),
                 AuthContextHolder.userNameOr("system"),

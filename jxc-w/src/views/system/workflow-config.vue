@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import {
   fetchWorkflowProcessesApi,
@@ -15,6 +15,10 @@ import { useSessionStore } from '@/stores/session';
 import { workflowBusinessOptions } from '@/views/inventory/document-meta';
 
 type EditableNode = WorkflowNode & {
+  allowReject?: boolean;
+  allowUnapprove?: boolean;
+  roleSignMode?: 'OR' | 'AND';
+  conditionExpression?: string;
   x: number;
   y: number;
 };
@@ -1113,22 +1117,8 @@ const edgeLabelPoint = (edge: EdgeItem) => {
 };
 
 const openEdgeExpression = async (edge: EdgeItem) => {
-  const sourceNode = form.nodes.find((item) => item.nodeKey === edge.from);
-  if (!sourceNode || normalizeNodeTypeValue(sourceNode.nodeType) !== 'CONDITION') {
-    return;
-  }
-  try {
-    const { value } = await ElMessageBox.prompt('请输入连线条件表达式', '连线条件', {
-      inputValue: edge.conditionExpression || '',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      inputPlaceholder: '例如：amount > 1000',
-      closeOnClickModal: false,
-    });
-    edge.conditionExpression = String(value ?? '').trim();
-  } catch {
-    // canceled
-  }
+  void edge;
+  ElMessage.warning('当前版本暂不支持配置连线条件表达式');
 };
 
 const clearEdges = () => {
@@ -1137,16 +1127,7 @@ const clearEdges = () => {
 };
 
 const toggleBatchUnapproveForSuccessNodes = () => {
-  const successNodes = form.nodes.filter((item) => normalizeNodeTypeValue(item.nodeType) === 'SUCCESS');
-  if (!successNodes.length) {
-    ElMessage.warning('当前没有成功节点可批量反审');
-    return;
-  }
-  const shouldEnable = successNodes.some((item) => !item.allowUnapprove);
-  successNodes.forEach((item) => {
-    item.allowUnapprove = shouldEnable;
-  });
-  ElMessage.success(shouldEnable ? '成功节点已批量开启反审核' : '成功节点已批量关闭反审核');
+  ElMessage.warning('当前版本暂不支持反审核节点开关');
 };
 
 function buildEdgesFromNodeConfig() {
@@ -1481,20 +1462,9 @@ const saveConfig = async () => {
         x: Math.round(node.x),
         y: Math.round(node.y),
         approverRoleCode: supportsRoleAssignment(node.nodeType) ? String(node.approverRoleCode ?? '').trim() : '',
-        roleSignMode: node.nodeType === 'CONDITION' ? normalizeRoleSignMode(node.roleSignMode) : 'OR',
         approverUserId: supportsApproverUser(node.nodeType) ? node.approverUserId : undefined,
-        allowReject: false,
-        allowUnapprove: node.nodeType === 'SUCCESS' ? node.allowUnapprove : false,
         nodeType: node.nodeType,
         triggerActions: supportsActionTriggers(node.nodeType) ? normalizeActionTriggers(node.triggerActions) : [],
-        conditionExpression: JSON.stringify(
-          edges.value
-            .filter((edge) => edge.from === node.nodeKey)
-            .map((edge) => ({
-              to: edge.to,
-              expression: (edge.conditionExpression || '').trim(),
-            })),
-        ),
       })),
     });
     const savedBusinessCode = form.businessCode;
@@ -1610,7 +1580,6 @@ watch(
       <div class="table-toolbar compact-toolbar">
         <el-button @click="goBack">返回上一页</el-button>
         <template v-if="!isReadOnlyMode">
-          <el-button @click="toggleBatchUnapproveForSuccessNodes">批量反审</el-button>
           <el-button :type="connectingMode ? 'warning' : 'default'" @click="toggleConnectMode">
             {{ connectingMode ? '退出连线模式' : '连线模式' }}
           </el-button>
@@ -1655,14 +1624,6 @@ watch(
               @click.stop="openEdgeExpression(edge)"
             />
             <g v-for="edge in edges" :key="`${edge.id}_label`">
-              <text
-                v-if="edge.conditionExpression"
-                :x="edgeLabelPoint(edge).x"
-                :y="edgeLabelPoint(edge).y"
-                class="edge-label"
-              >
-                {{ edge.conditionExpression }}
-              </text>
             </g>
           </svg>
 
@@ -1690,12 +1651,6 @@ watch(
               ×
             </button>
             <div class="node-title">{{ node.nodeName }}</div>
-            <span
-              v-if="node.nodeType === 'SUCCESS' && node.allowUnapprove"
-              class="node-unapprove-tag"
-              title="可反审"
-              aria-label="可反审"
-            />
             <div
               v-if="!isReadOnlyMode && contextMenu.visible && contextMenu.nodeKey === node.nodeKey"
               class="node-context-menu"
@@ -1745,11 +1700,6 @@ watch(
               <el-option label="结束节点" value="END" />
             </el-select>
           </el-form-item>
-          <template v-if="selectedNode.nodeType === 'SUCCESS'">
-            <el-form-item label="允许反审核">
-              <el-switch v-model="selectedNode.allowUnapprove" />
-            </el-form-item>
-          </template>
           <template v-if="selectedNode.nodeType === 'NORMAL' || selectedNode.nodeType === 'CONDITION'">
             <el-form-item label="审批角色">
               <el-select
@@ -1778,12 +1728,6 @@ watch(
             </el-form-item>
           </template>
           <template v-if="selectedNode.nodeType === 'CONDITION'">
-            <el-form-item label="会签方式">
-              <el-radio-group v-model="selectedNode.roleSignMode">
-                <el-radio label="OR">或签</el-radio>
-                <el-radio label="AND">会签</el-radio>
-              </el-radio-group>
-            </el-form-item>
             <el-form-item label="指定人员">
               <el-select
                 v-model="selectedNode.approverUserId"
@@ -1822,11 +1766,6 @@ watch(
               <el-option label="结束节点" value="END" />
             </el-select>
           </el-form-item>
-          <template v-if="editDraft.nodeType === 'SUCCESS'">
-            <el-form-item label="允许反审核">
-              <el-switch v-model="editDraft.allowUnapprove" />
-            </el-form-item>
-          </template>
           <template v-if="editDraft.nodeType === 'NORMAL' || editDraft.nodeType === 'CONDITION'">
             <el-form-item label="审批角色">
               <el-select
@@ -1855,12 +1794,6 @@ watch(
             </el-form-item>
           </template>
           <template v-if="editDraft.nodeType === 'CONDITION'">
-            <el-form-item label="会签方式">
-              <el-radio-group v-model="editDraft.roleSignMode">
-                <el-radio label="OR">或签</el-radio>
-                <el-radio label="AND">会签</el-radio>
-              </el-radio-group>
-            </el-form-item>
             <el-form-item label="指定人员">
               <el-select
                 v-model="editDraft.approverUserId"
@@ -1900,11 +1833,6 @@ watch(
           <el-form-item label="节点名称">
             <el-input v-model="nodeDraft.nodeName" placeholder="如：财务审批" />
           </el-form-item>
-          <template v-if="nodeDraft.nodeType === 'SUCCESS'">
-            <el-form-item label="允许反审核">
-              <el-switch v-model="nodeDraft.allowUnapprove" />
-            </el-form-item>
-          </template>
           <template v-if="nodeDraft.nodeType === 'NORMAL' || nodeDraft.nodeType === 'CONDITION'">
             <el-form-item label="审批角色">
               <el-select
@@ -1933,12 +1861,6 @@ watch(
             </el-form-item>
           </template>
           <template v-if="nodeDraft.nodeType === 'CONDITION'">
-            <el-form-item label="会签方式">
-              <el-radio-group v-model="nodeDraft.roleSignMode">
-                <el-radio label="OR">或签</el-radio>
-                <el-radio label="AND">会签</el-radio>
-              </el-radio-group>
-            </el-form-item>
             <el-form-item label="指定人员">
               <el-select
                 v-model="nodeDraft.approverUserId"

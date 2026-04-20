@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonNumberInput from '@/components/CommonNumberInput.vue';
 import CommonSelectorDialog, {
   type SelectorColumn,
   type SelectorTreeNode,
 } from '@/components/CommonSelectorDialog.vue';
 import {
+  batchApprovePurchaseInboundApi,
+  batchUnapprovePurchaseInboundApi,
   createPurchaseInboundApi,
   fetchPurchaseInboundDetailApi,
   updatePurchaseInboundApi,
@@ -96,7 +99,18 @@ const isEditMode = computed(() => route.name === 'PurchaseInboundEdit');
 const detailStatus = ref('');
 const canCreate = ref(false);
 const canUpdate = ref(false);
+const canApprove = ref(false);
+const canUnapprove = ref(false);
+const isApprovalMode = computed(() => String(route.query.approvalMode ?? '').trim() === '1' && inboundId.value != null);
+const showApprovalActions = computed(() =>
+  isApprovalMode.value
+    && detailStatus.value === '已提交'
+    && (canApprove.value || canUnapprove.value),
+);
 const isReadonlyMode = computed(() => {
+  if (isApprovalMode.value) {
+    return true;
+  }
   if (isViewMode.value || detailStatus.value === '已审核') {
     return true;
   }
@@ -186,6 +200,8 @@ const rows = ref<ItemRow[]>([
 
 const batchWarehouseDialogVisible = ref(false);
 const batchWarehouse = ref('');
+const actionPrimaryText = computed(() => (showApprovalActions.value ? '审核通过' : '保存'));
+const actionSecondaryText = computed(() => (showApprovalActions.value ? '审核不通过' : '保存草稿'));
 
 const createEmptyRow = (id: number): ItemRow => ({
   id,
@@ -386,10 +402,10 @@ const loadSalesmanOptions = async () => {
   }));
   const normalizedOptions = Array.from(new Map(options.map((item) => [item.userId, item])).values());
   salesmanOptions.value = isSalesman
-    ? normalizedOptions.filter((item) => item.phone === sessionStore.loginAccount)
+    ? normalizedOptions.filter((item) => item.phone === sessionStore.userPhone)
     : normalizedOptions;
   if (isCreateMode.value && !isReadonlyMode.value && form.salesmanUserId == null) {
-    const selfCandidate = salesmanOptions.value.find((item) => item.phone && item.phone === sessionStore.loginAccount);
+    const selfCandidate = salesmanOptions.value.find((item) => item.phone && item.phone === sessionStore.userPhone);
     if (selfCandidate) {
       form.salesmanUserId = selfCandidate.userId;
       form.salesmanName = selfCandidate.realName;
@@ -407,15 +423,21 @@ const loadPermission = async () => {
   if (!orgId) {
     canCreate.value = false;
     canUpdate.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
     return;
   }
   try {
     const result = await fetchPurchaseInboundPermissionApi(orgId);
     canCreate.value = Boolean(result.canCreate);
     canUpdate.value = Boolean(result.canUpdate);
+    canApprove.value = Boolean(result.canApprove);
+    canUnapprove.value = Boolean(result.canUnapprove);
   } catch {
     canCreate.value = false;
     canUpdate.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
   }
 };
 
@@ -729,6 +751,10 @@ const validateForm = () => {
 };
 
 const handleSaveDraft = () => {
+  if (showApprovalActions.value) {
+    void handleRejectAction();
+    return;
+  }
   ElMessage.info('当前版本仅支持直接保存入库单，草稿功能待接入');
 };
 
@@ -774,6 +800,53 @@ const handleSave = async () => {
   router.push('/inventory/1/2');
 };
 
+const handleApproveAction = async () => {
+  const orgId = resolveOrgId();
+  if (inboundId.value == null || !orgId) {
+    return;
+  }
+  if (!canApprove.value) {
+    ElMessage.warning('当前账号无审核权限');
+    return;
+  }
+  await batchApprovePurchaseInboundApi([inboundId.value], orgId);
+  ElMessage.success('审核通过成功');
+  router.push('/inventory/1/2');
+};
+
+const handleRejectAction = async () => {
+  const orgId = resolveOrgId();
+  if (inboundId.value == null || !orgId) {
+    return;
+  }
+  if (!canUnapprove.value) {
+    ElMessage.warning('当前账号无审核权限');
+    return;
+  }
+  try {
+    const { value } = await ElMessageBox.prompt('请输入不通过原因', '审核不通过', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '请输入不通过原因',
+      inputValidator: (input: string) => input.trim() ? true : '请填写不通过原因',
+    });
+    await batchUnapprovePurchaseInboundApi([inboundId.value], value.trim(), orgId);
+    ElMessage.success('审核不通过成功');
+    router.push('/inventory/1/2');
+  } catch {
+    // 用户取消时不提示
+  }
+};
+
+const handlePrimaryAction = () => {
+  if (showApprovalActions.value) {
+    void handleApproveAction();
+    return;
+  }
+  void handleSave();
+};
+
 watch(
   () => [route.name, route.params.id, sessionStore.currentOrgId],
   () => {
@@ -790,10 +863,14 @@ watch(
     <FixedActionBreadcrumb
       :navs="navs"
       :active-key="activeNav"
-      :show-actions="!isReadonlyMode"
+      :show-actions="showApprovalActions || !isReadonlyMode"
+      :primary-action-text="actionPrimaryText"
+      :secondary-action-text="actionSecondaryText"
+      :show-primary-action="showApprovalActions ? canApprove : true"
+      :show-secondary-action="showApprovalActions ? canUnapprove : true"
       @back="handleBack"
       @save-draft="handleSaveDraft"
-      @save="handleSave"
+      @save="handlePrimaryAction"
       @navigate="scrollToSection"
     />
 
@@ -916,17 +993,17 @@ watch(
           </el-table-column>
           <el-table-column label="数量" min-width="110">
             <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="0" :precision="4" :step="1" controls-position="right" :disabled="isReadonlyMode" />
+              <CommonNumberInput v-model="row.quantity" :min="0" :precision="4" :disabled="isReadonlyMode" />
             </template>
           </el-table-column>
           <el-table-column label="入库单价" min-width="120">
             <template #default="{ row }">
-              <el-input-number v-model="row.inboundPrice" :min="0" :precision="4" :step="1" controls-position="right" :disabled="isReadonlyMode" />
+              <CommonNumberInput v-model="row.inboundPrice" :min="0" :precision="4" :disabled="isReadonlyMode" />
             </template>
           </el-table-column>
           <el-table-column label="金额" min-width="120">
             <template #default="{ row }">
-              <el-input-number v-model="row.amount" :min="0" :precision="2" :step="1" controls-position="right" :disabled="isReadonlyMode" />
+              <CommonNumberInput v-model="row.amount" :min="0" :precision="2" :disabled="isReadonlyMode" />
             </template>
           </el-table-column>
           <el-table-column label="是否赠品" min-width="96">
@@ -1043,7 +1120,7 @@ watch(
   font-size: 11px;
 }
 
-.purchase-inbound-item-table :deep(.el-input-number) {
+.purchase-inbound-item-table :deep(.common-number-input) {
   width: 100%;
 }
 

@@ -3,7 +3,6 @@ package com.boboboom.jxc.inventory.application.service;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
-import com.boboboom.jxc.workflow.application.service.PurchaseInboundWorkflowService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -22,16 +21,16 @@ public class PurchaseInboundUnapproveService {
     private static final String PENDING_OPERATION_NONE = "NONE";
     private static final String INVENTORY_BIZ_TYPE_UNAPPROVE = "PURCHASE_INBOUND_UNAPPROVE";
 
-    private final PurchaseInboundWorkflowService purchaseInboundWorkflowService;
+    private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
     private final PurchaseInboundNotificationService purchaseInboundNotificationService;
     private final InventoryStockMutationService inventoryStockMutationService;
     private final PurchaseInboundRepository purchaseInboundRepository;
 
-    public PurchaseInboundUnapproveService(PurchaseInboundWorkflowService purchaseInboundWorkflowService,
+    public PurchaseInboundUnapproveService(InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
                                            PurchaseInboundNotificationService purchaseInboundNotificationService,
                                            InventoryStockMutationService inventoryStockMutationService,
                                            PurchaseInboundRepository purchaseInboundRepository) {
-        this.purchaseInboundWorkflowService = purchaseInboundWorkflowService;
+        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowService;
         this.purchaseInboundNotificationService = purchaseInboundNotificationService;
         this.inventoryStockMutationService = inventoryStockMutationService;
         this.purchaseInboundRepository = purchaseInboundRepository;
@@ -59,7 +58,8 @@ public class PurchaseInboundUnapproveService {
             resetDeletePendingIfNecessary(header);
             return;
         }
-        String approverRole = purchaseInboundWorkflowService.resolveApprovalRoleLabel(
+        String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
+                InventoryDocumentType.PURCHASE_INBOUND,
                 scopeType,
                 scopeId,
                 groupId,
@@ -118,7 +118,7 @@ public class PurchaseInboundUnapproveService {
 
     private void persistAfterUnapprove(PurchaseInboundDO header) {
         if (hasWorkflowMetadata(header)) {
-            purchaseInboundWorkflowService.resetWorkflowState(header);
+            inventoryDocumentWorkflowService.resetPurchaseInboundWorkflowState(header);
             return;
         }
         purchaseInboundRepository.update(header);

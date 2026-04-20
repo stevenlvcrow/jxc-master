@@ -168,7 +168,7 @@ public class IdentityWarehouseAdminController {
     public CodeDataResponse<IdPayload> createStoreWarehouse(@PathVariable Long storeId,
                                                             @Valid @RequestBody WarehouseCreateRequest request) {
         StoreDO store = identityAdminLookupService.requireStore(storeId);
-        identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), store.getGroupId());
+        identityAccessControlService.ensureCanAccessStore(identityAdminSupport.currentOperatorId(), store.getId());
         WarehouseDO warehouse = warehouseAdministrationService.createWarehouse(storeId, request);
         return CodeDataResponse.ok(new IdPayload(warehouse.getId()));
     }
@@ -244,10 +244,9 @@ public class IdentityWarehouseAdminController {
      */
     private void ensureCanManageWarehouse(WarehouseDO warehouse) {
         Long operatorId = identityAdminSupport.currentOperatorId();
-        // 门店仓库先回溯到所属门店，再按门店所属分组校验权限。
+        // 门店仓库按门店权限校验，避免出现可查看但不可维护的权限割裂。
         if (warehouse.getStoreId() != null) {
-            StoreDO store = identityAdminLookupService.requireStore(warehouse.getStoreId());
-            identityAccessControlService.ensureCanManageGroup(operatorId, store.getGroupId());
+            identityAccessControlService.ensureCanAccessStore(operatorId, warehouse.getStoreId());
             return;
         }
         // 分组仓库直接按分组权限校验。

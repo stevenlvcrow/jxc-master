@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonNumberInput from '@/components/CommonNumberInput.vue';
 import CommonSelectorDialog, {
   type SelectorColumn,
   type SelectorTreeNode,
@@ -408,10 +409,10 @@ const loadSalesmanOptions = async () => {
   }));
   const normalized = Array.from(new Map(options.map((item) => [item.userId, item])).values());
   salesmanOptions.value = isSalesman
-    ? normalized.filter((item) => item.phone === sessionStore.loginAccount)
+    ? normalized.filter((item) => item.phone === sessionStore.userPhone)
     : normalized;
   if (isCreateMode.value && !form.salesmanUserId) {
-    const selfCandidate = salesmanOptions.value.find((item) => item.phone === sessionStore.loginAccount);
+    const selfCandidate = salesmanOptions.value.find((item) => item.phone === sessionStore.userPhone);
     if (selfCandidate) {
       form.salesmanUserId = selfCandidate.userId;
       form.salesmanName = selfCandidate.realName;
@@ -910,12 +911,10 @@ watch(
           </el-table-column>
           <el-table-column label="单位一实盘数" min-width="120">
             <template #default="{ row }">
-              <el-input-number
+              <CommonNumberInput
                 v-model="row.unit1ActualQty"
                 :min="0"
                 :precision="4"
-                :step="1"
-                controls-position="right"
                 :disabled="isReadonlyMode"
                 @change="syncRowDerived(row)"
               />
@@ -1040,12 +1039,12 @@ watch(
   min-height: 22px;
 }
 
-.inventory-check-item-table :deep(.el-input-number) {
+.inventory-check-item-table :deep(.common-number-input) {
   width: 100%;
 }
 
 .inventory-check-item-table :deep(.el-input__wrapper),
-.inventory-check-item-table :deep(.el-input-number),
+.inventory-check-item-table :deep(.common-number-input),
 .inventory-check-item-table :deep(.el-select__wrapper) {
   min-height: 24px;
 }

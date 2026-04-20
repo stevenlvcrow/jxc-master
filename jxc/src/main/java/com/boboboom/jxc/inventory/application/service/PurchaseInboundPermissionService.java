@@ -4,7 +4,6 @@ import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.workflow.application.service.PurchaseInboundWorkflowService;
 import org.springframework.stereotype.Service;
 
 /**
@@ -13,14 +12,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class PurchaseInboundPermissionService {
 
-    private final PurchaseInboundWorkflowService purchaseInboundWorkflowService;
+    private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
     private final UserRoleRelRepository userRoleRelRepository;
     private final RoleRepository roleRepository;
 
-    public PurchaseInboundPermissionService(PurchaseInboundWorkflowService purchaseInboundWorkflowService,
+    public PurchaseInboundPermissionService(InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
                                             UserRoleRelRepository userRoleRelRepository,
                                             RoleRepository roleRepository) {
-        this.purchaseInboundWorkflowService = purchaseInboundWorkflowService;
+        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowService;
         this.userRoleRelRepository = userRoleRelRepository;
         this.roleRepository = roleRepository;
     }
@@ -77,7 +76,13 @@ public class PurchaseInboundPermissionService {
      * @return 是否可审核
      */
     public boolean canReview(String scopeType, Long scopeId, Long groupId, Long operatorId) {
-        return purchaseInboundWorkflowService.hasBusinessReviewPermission(scopeType, scopeId, groupId, operatorId);
+        return inventoryDocumentWorkflowService.hasBusinessReviewPermission(
+                InventoryDocumentType.PURCHASE_INBOUND,
+                scopeType,
+                scopeId,
+                groupId,
+                operatorId
+        );
     }
 
     /**
@@ -135,7 +140,8 @@ public class PurchaseInboundPermissionService {
                                                    Long groupId,
                                                    Long operatorId,
                                                    String action) {
-        return purchaseInboundWorkflowService.hasBusinessOperationPermission(
+        return inventoryDocumentWorkflowService.hasBusinessOperationPermission(
+                InventoryDocumentType.PURCHASE_INBOUND,
                 scopeType,
                 scopeId,
                 groupId,

@@ -70,6 +70,68 @@ public class InventoryStockMutationService {
         ));
     }
 
+    /**
+     * 按指定业务将库存余额直接设置到目标值，并记录流水。
+     *
+     * @param scopeType       作用域类型
+     * @param scopeId         作用域 ID
+     * @param warehouseName   仓库名称
+     * @param bizId           业务单据 ID
+     * @param bizLineId       业务明细 ID
+     * @param itemCode        物品编码
+     * @param itemName        物品名称
+     * @param targetQuantity  目标库存数量
+     * @param bizType         业务类型
+     * @param operatorId      操作人 ID
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void applyAbsolute(String scopeType,
+                              Long scopeId,
+                              String warehouseName,
+                              Long bizId,
+                              Long bizLineId,
+                              String itemCode,
+                              String itemName,
+                              BigDecimal targetQuantity,
+                              String bizType,
+                              Long operatorId) {
+        BigDecimal normalizedTarget = normalizeNonNegative(targetQuantity);
+        InventoryBalanceDO balance = inventoryBalanceRepository.lockByScopeWarehouseAndItem(
+                scopeType, scopeId, warehouseName, itemCode
+        ).orElse(null);
+        if (balance == null) {
+            createInitialAbsoluteBalance(
+                    scopeType,
+                    scopeId,
+                    warehouseName,
+                    itemCode,
+                    itemName,
+                    normalizedTarget,
+                    bizType,
+                    bizId,
+                    bizLineId,
+                    operatorId
+            );
+            return;
+        }
+        BigDecimal before = defaultQuantity(balance.getQuantity());
+        upsertBalance(balance, scopeType, scopeId, warehouseName, itemCode, itemName, normalizedTarget);
+        inventoryTransactionRepository.save(buildTransaction(
+                scopeType,
+                scopeId,
+                bizType,
+                bizId,
+                bizLineId,
+                warehouseName,
+                itemCode,
+                itemName,
+                normalizedTarget.subtract(before),
+                before,
+                normalizedTarget,
+                operatorId
+        ));
+    }
+
     private void createInitialBalance(String scopeType,
                                       Long scopeId,
                                       String warehouseName,
@@ -109,6 +171,55 @@ public class InventoryStockMutationService {
         inventoryBalanceRepository.update(locked);
         inventoryTransactionRepository.save(buildTransaction(
                 scopeType, scopeId, bizType, bizId, bizLineId, warehouseName, itemCode, itemName, delta, before, after, operatorId
+        ));
+    }
+
+    private void createInitialAbsoluteBalance(String scopeType,
+                                              Long scopeId,
+                                              String warehouseName,
+                                              String itemCode,
+                                              String itemName,
+                                              BigDecimal targetQuantity,
+                                              String bizType,
+                                              Long bizId,
+                                              Long bizLineId,
+                                              Long operatorId) {
+        InventoryBalanceDO created = new InventoryBalanceDO();
+        created.setScopeType(scopeType);
+        created.setScopeId(scopeId);
+        created.setWarehouseName(warehouseName);
+        created.setItemCode(itemCode);
+        created.setItemName(itemName);
+        created.setQuantity(targetQuantity);
+        try {
+            inventoryBalanceRepository.save(created);
+            inventoryTransactionRepository.save(buildTransaction(
+                    scopeType, scopeId, bizType, bizId, bizLineId, warehouseName, itemCode, itemName, targetQuantity, BigDecimal.ZERO, targetQuantity, operatorId
+            ));
+            return;
+        } catch (DataIntegrityViolationException ex) {
+            // Another transaction inserted the same balance row first; fall through to the locked update path.
+        }
+        InventoryBalanceDO locked = inventoryBalanceRepository.lockByScopeWarehouseAndItem(
+                scopeType, scopeId, warehouseName, itemCode
+        ).orElseThrow(() -> new BusinessException("库存变更失败，请重试"));
+        BigDecimal before = defaultQuantity(locked.getQuantity());
+        locked.setItemName(itemName);
+        locked.setQuantity(targetQuantity);
+        inventoryBalanceRepository.update(locked);
+        inventoryTransactionRepository.save(buildTransaction(
+                scopeType,
+                scopeId,
+                bizType,
+                bizId,
+                bizLineId,
+                warehouseName,
+                itemCode,
+                itemName,
+                targetQuantity.subtract(before),
+                before,
+                targetQuantity,
+                operatorId
         ));
     }
 
@@ -161,5 +272,19 @@ public class InventoryStockMutationService {
         transaction.setAfterQty(after);
         transaction.setOperatorId(operatorId);
         return transaction;
+    }
+
+    private BigDecimal normalizeNonNegative(BigDecimal quantity) {
+        if (quantity == null) {
+            return BigDecimal.ZERO;
+        }
+        if (quantity.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BusinessException("库存数量不能小于 0");
+        }
+        return quantity;
+    }
+
+    private BigDecimal defaultQuantity(BigDecimal quantity) {
+        return quantity == null ? BigDecimal.ZERO : quantity;
     }
 }

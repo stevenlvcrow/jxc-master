@@ -3,7 +3,9 @@ package com.boboboom.jxc.inventory.application.service;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
 import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
 import com.boboboom.jxc.inventory.domain.repository.InventoryDocumentRepository;
 import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryDocumentBatchRequest;
 import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryDocumentSaveRequest;
@@ -38,6 +40,7 @@ public class InventoryDocumentApplicationService {
     private static final String STATUS_DRAFT = "草稿";
     private static final String STATUS_SUBMITTED = "已提交";
     private static final String STATUS_APPROVED = "已审核";
+    private static final String WORKFLOW_STATUS_NONE = "NONE";
     private static final String PENDING_OPERATION_NONE = "NONE";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
@@ -47,6 +50,7 @@ public class InventoryDocumentApplicationService {
     private final InventoryDocumentNotificationService inventoryDocumentNotificationService;
     private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
     private final OrgScopeService orgScopeService;
+    private final WarehouseRepository warehouseRepository;
     private final ObjectMapper objectMapper;
 
     public InventoryDocumentApplicationService(InventoryDocumentRepository inventoryDocumentRepository,
@@ -55,6 +59,7 @@ public class InventoryDocumentApplicationService {
                                                InventoryDocumentNotificationService inventoryDocumentNotificationService,
                                                InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
                                                OrgScopeService orgScopeService,
+                                               WarehouseRepository warehouseRepository,
                                                ObjectMapper objectMapper) {
         this.inventoryDocumentRepository = inventoryDocumentRepository;
         this.inventoryStockMutationService = inventoryStockMutationService;
@@ -62,6 +67,7 @@ public class InventoryDocumentApplicationService {
         this.inventoryDocumentNotificationService = inventoryDocumentNotificationService;
         this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowService;
         this.orgScopeService = orgScopeService;
+        this.warehouseRepository = warehouseRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -110,6 +116,23 @@ public class InventoryDocumentApplicationService {
         String statusKeyword = trimNullable(status);
         String remarkKeyword = toLower(trimNullable(remark));
 
+        if (type == InventoryDocumentType.WAREHOUSE_OPENING_BALANCE) {
+            return listWarehouseOpeningBalance(
+                    scope,
+                    headers,
+                    lineMap,
+                    pageNum,
+                    pageSize,
+                    start,
+                    end,
+                    documentCodeKeyword,
+                    primaryKeyword,
+                    itemKeyword,
+                    statusKeyword,
+                    remarkKeyword
+            );
+        }
+
         List<InventoryDocumentRow> rows = headers.stream()
                 .filter(header -> matchDate(header, start, end))
                 .filter(header -> !StringUtils.hasText(documentCodeKeyword)
@@ -122,6 +145,49 @@ public class InventoryDocumentApplicationService {
                         || toLower(defaultIfBlank(header.getRemark(), "")).contains(remarkKeyword))
                 .filter(header -> matchItem(lineMap.getOrDefault(header.getId(), List.of()), itemKeyword))
                 .map(header -> toRow(header, lineMap.getOrDefault(header.getId(), List.of())))
+                .toList();
+
+        int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
+        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 100);
+        int startIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
+        int endIndex = Math.min(startIndex + safePageSize, rows.size());
+        return new PageData<>(rows.subList(startIndex, endIndex), rows.size(), safePageNum, safePageSize);
+    }
+
+    private PageData<InventoryDocumentRow> listWarehouseOpeningBalance(InventoryScope scope,
+                                                                       List<InventoryDocumentHeader> headers,
+                                                                       Map<Long, List<InventoryDocumentLine>> lineMap,
+                                                                       Integer pageNum,
+                                                                       Integer pageSize,
+                                                                       LocalDate start,
+                                                                       LocalDate end,
+                                                                       String documentCodeKeyword,
+                                                                       String primaryKeyword,
+                                                                       String itemKeyword,
+                                                                       String statusKeyword,
+                                                                       String remarkKeyword) {
+        Map<String, InventoryDocumentHeader> latestHeaderByWarehouse = new LinkedHashMap<>();
+        for (InventoryDocumentHeader header : headers) {
+            String warehouseName = trimNullable(header.getPrimaryName());
+            if (!StringUtils.hasText(warehouseName) || latestHeaderByWarehouse.containsKey(warehouseName)) {
+                continue;
+            }
+            latestHeaderByWarehouse.put(warehouseName, header);
+        }
+
+        List<WarehouseDO> warehouses = loadScopeWarehouses(scope).stream()
+                .filter(warehouse -> Objects.equals(defaultIfBlank(warehouse.getStatus(), ""), "ENABLED"))
+                .toList();
+
+        List<InventoryDocumentRow> rows = warehouses.stream()
+                .map(warehouse -> {
+                    InventoryDocumentHeader header = latestHeaderByWarehouse.get(warehouse.getWarehouseName());
+                    if (header == null) {
+                        return buildWarehouseOpeningBalancePendingRow(warehouse);
+                    }
+                    return toWarehouseOpeningBalanceRow(warehouse, header, lineMap.getOrDefault(header.getId(), List.of()));
+                })
+                .filter(row -> matchWarehouseOpeningBalanceRow(row, start, end, documentCodeKeyword, primaryKeyword, itemKeyword, statusKeyword, remarkKeyword))
                 .toList();
 
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
@@ -272,7 +338,10 @@ public class InventoryDocumentApplicationService {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         inventoryDocumentPermissionService.ensureReviewPermission(type, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
-        List<InventoryDocumentHeader> headers = requireHeaders(type, scope, request.ids(), operatorId, true);
+        boolean allowReviewAccess = type != InventoryDocumentType.WAREHOUSE_OPENING_BALANCE
+                && type.isWorkflowEnabled();
+        boolean canViewAll = inventoryDocumentPermissionService.canViewAll(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
+        List<InventoryDocumentHeader> headers = requireHeaders(type, scope, request.ids(), operatorId, allowReviewAccess || canViewAll);
         Map<Long, List<InventoryDocumentLine>> lineMap = loadLineMap(type, request.ids());
         for (InventoryDocumentHeader header : headers) {
             approveHeader(type, scope, header, lineMap.getOrDefault(header.getId(), List.of()), operatorId);
@@ -327,9 +396,9 @@ public class InventoryDocumentApplicationService {
         header.setRemark(trimNullable(request.remark()));
         header.setRejectionReason(null);
         header.setCreatedBy(createMode ? operatorId : header.getCreatedBy());
-        header.setPendingOperation(PENDING_OPERATION_NONE);
         header.setStatus(STATUS_SUBMITTED);
         header.setExtraJson(writeJson(request.extraFields()));
+        initializeWorkflowState(type, header);
 
         List<InventoryDocumentLine> lines = normalizeLines(request.items());
         BigDecimal totalAmount = lines.stream()
@@ -365,6 +434,23 @@ public class InventoryDocumentApplicationService {
         return header;
     }
 
+    private void initializeWorkflowState(InventoryDocumentType type, InventoryDocumentHeader header) {
+        if (!type.isWorkflowEnabled()) {
+            header.setWorkflowProcessCode(null);
+            header.setWorkflowDefinitionKey(null);
+            header.setWorkflowDefinitionId(null);
+            header.setWorkflowInstanceId(null);
+            header.setWorkflowTaskId(null);
+            header.setWorkflowTaskName(null);
+        }
+        if (!StringUtils.hasText(header.getWorkflowStatus())) {
+            header.setWorkflowStatus(WORKFLOW_STATUS_NONE);
+        }
+        if (!StringUtils.hasText(header.getPendingOperation())) {
+            header.setPendingOperation(PENDING_OPERATION_NONE);
+        }
+    }
+
     private void approveHeader(InventoryDocumentType type,
                                InventoryScope scope,
                                InventoryDocumentHeader header,
@@ -373,15 +459,16 @@ public class InventoryDocumentApplicationService {
         if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
             return;
         }
-        String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
-                type,
-                scope.scopeType(),
-                scope.scopeId(),
-                scope.groupId(),
-                operatorId,
-                header.getWorkflowTaskName()
-        );
+        String approverRole = null;
         if (type.isWorkflowEnabled()) {
+            approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
+                    type,
+                    scope.scopeType(),
+                    scope.scopeId(),
+                    scope.groupId(),
+                    operatorId,
+                    header.getWorkflowTaskName()
+            );
             InventoryDocumentWorkflowService.ApprovalResult workflowResult = inventoryDocumentWorkflowService.completeCurrentTask(
                     type,
                     header,
@@ -399,7 +486,9 @@ public class InventoryDocumentApplicationService {
         header.setApprovedAt(LocalDateTime.now());
         header.setPendingOperation(PENDING_OPERATION_NONE);
         inventoryDocumentRepository.updateHeader(type, header);
-        inventoryDocumentNotificationService.recordApproved(type, scope.scopeType(), scope.scopeId(), header, approverRole, header.getApprovedAt());
+        if (type.isWorkflowEnabled()) {
+            inventoryDocumentNotificationService.recordApproved(type, scope.scopeType(), scope.scopeId(), header, approverRole, header.getApprovedAt());
+        }
     }
 
     private void unapproveHeader(InventoryDocumentType type,
@@ -439,6 +528,10 @@ public class InventoryDocumentApplicationService {
                                      List<InventoryDocumentLine> lines,
                                      Long operatorId,
                                      boolean reverse) {
+        if (type == InventoryDocumentType.WAREHOUSE_OPENING_BALANCE) {
+            applyWarehouseOpeningBalance(scope, header, lines, operatorId, reverse);
+            return;
+        }
         if (type.getStockDirection() == InventoryDocumentType.StockDirection.NONE) {
             return;
         }
@@ -465,6 +558,44 @@ public class InventoryDocumentApplicationService {
                     operatorId
             );
         }
+    }
+
+    private void applyWarehouseOpeningBalance(InventoryScope scope,
+                                              InventoryDocumentHeader header,
+                                              List<InventoryDocumentLine> lines,
+                                              Long operatorId,
+                                              boolean reverse) {
+        if (reverse) {
+            throw new BusinessException("仓库期初不支持反确认");
+        }
+        String warehouseName = resolveStockLocation(InventoryDocumentType.WAREHOUSE_OPENING_BALANCE, header);
+        for (InventoryDocumentLine line : lines) {
+            inventoryStockMutationService.applyAbsolute(
+                    scope.scopeType(),
+                    scope.scopeId(),
+                    warehouseName,
+                    header.getId(),
+                    line.getId(),
+                    line.getItemCode(),
+                    line.getItemName(),
+                    resolveWarehouseOpeningBalanceQuantity(line),
+                    InventoryDocumentType.WAREHOUSE_OPENING_BALANCE.getBusinessCode() + "_CONFIRM",
+                    operatorId
+            );
+        }
+    }
+
+    private BigDecimal resolveWarehouseOpeningBalanceQuantity(InventoryDocumentLine line) {
+        Map<String, String> extraFields = parseExtraJson(line.getExtraJson());
+        String baseUnitQuantity = trimNullable(extraFields.get("baseUnitQuantity"));
+        if (StringUtils.hasText(baseUnitQuantity)) {
+            try {
+                return normalizeNonNegative(new BigDecimal(baseUnitQuantity));
+            } catch (NumberFormatException ex) {
+                throw new BusinessException("基准单位数量格式不正确");
+            }
+        }
+        return line.getQuantity() == null ? BigDecimal.ZERO : line.getQuantity();
     }
 
     private String resolveStockLocation(InventoryDocumentType type, InventoryDocumentHeader header) {
@@ -576,6 +707,8 @@ public class InventoryDocumentApplicationService {
                 header.getId(),
                 defaultIfBlank(header.getDocumentCode(), ""),
                 header.getDocumentDate() == null ? "" : header.getDocumentDate().toString(),
+                null,
+                "",
                 defaultIfBlank(header.getPrimaryName(), ""),
                 defaultIfBlank(header.getSecondaryName(), ""),
                 defaultIfBlank(header.getCounterpartyName(), ""),
@@ -586,6 +719,101 @@ public class InventoryDocumentApplicationService {
                 creator,
                 defaultIfBlank(header.getRemark(), "")
         );
+    }
+
+    private InventoryDocumentRow toWarehouseOpeningBalanceRow(WarehouseDO warehouse, InventoryDocumentHeader header, List<InventoryDocumentLine> lines) {
+        String creator = header.getCreatedBy() == null ? "" : String.valueOf(header.getCreatedBy());
+        BigDecimal amount = header.getTotalAmount() == null
+                ? lines.stream()
+                .map(InventoryDocumentLine::getAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                : header.getTotalAmount();
+        return new InventoryDocumentRow(
+                header.getId(),
+                defaultIfBlank(header.getDocumentCode(), ""),
+                header.getDocumentDate() == null ? "" : header.getDocumentDate().toString(),
+                warehouse.getId(),
+                defaultIfBlank(warehouse.getWarehouseCode(), ""),
+                defaultIfBlank(header.getPrimaryName(), defaultIfBlank(warehouse.getWarehouseName(), "")),
+                defaultIfBlank(header.getSecondaryName(), ""),
+                defaultIfBlank(header.getCounterpartyName(), ""),
+                defaultIfBlank(header.getStatus(), STATUS_SUBMITTED),
+                Objects.equals(defaultIfBlank(header.getStatus(), STATUS_DRAFT), STATUS_APPROVED) ? "已复审" : "未复审",
+                amount == null ? "0.00" : amount.setScale(2, RoundingMode.HALF_UP).toPlainString(),
+                formatDateTime(header.getCreatedAt()),
+                creator,
+                defaultIfBlank(header.getRemark(), "")
+        );
+    }
+
+    private InventoryDocumentRow buildWarehouseOpeningBalancePendingRow(WarehouseDO warehouse) {
+        return new InventoryDocumentRow(
+                0L,
+                "",
+                "",
+                warehouse.getId(),
+                defaultIfBlank(warehouse.getWarehouseCode(), ""),
+                defaultIfBlank(warehouse.getWarehouseName(), ""),
+                "",
+                "",
+                "UNINITIALIZED",
+                "未复审",
+                "0.00",
+                "",
+                "",
+                ""
+        );
+    }
+
+    private boolean matchWarehouseOpeningBalanceRow(InventoryDocumentRow row,
+                                                    LocalDate start,
+                                                    LocalDate end,
+                                                    String documentCodeKeyword,
+                                                    String primaryKeyword,
+                                                    String itemKeyword,
+                                                    String statusKeyword,
+                                                    String remarkKeyword) {
+        if (StringUtils.hasText(documentCodeKeyword)
+                && !toLower(defaultIfBlank(row.documentCode(), "")).contains(documentCodeKeyword)) {
+            return false;
+        }
+        if (StringUtils.hasText(primaryKeyword)
+                && !toLower(defaultIfBlank(row.primaryName(), "")).contains(primaryKeyword)) {
+            return false;
+        }
+        if (StringUtils.hasText(itemKeyword)) {
+            return false;
+        }
+        if (StringUtils.hasText(statusKeyword)
+                && !Objects.equals(defaultIfBlank(row.status(), "UNINITIALIZED"), statusKeyword)) {
+            return false;
+        }
+        if (StringUtils.hasText(remarkKeyword)
+                && !toLower(defaultIfBlank(row.remark(), "")).contains(remarkKeyword)) {
+            return false;
+        }
+        if (!StringUtils.hasText(row.documentDate())) {
+            return start == null && end == null;
+        }
+        LocalDate rowDate = parseDateNullable(row.documentDate(), "业务日期格式不正确");
+        if (rowDate == null) {
+            return start == null && end == null;
+        }
+        if (start != null && rowDate.isBefore(start)) {
+            return false;
+        }
+        return end == null || !rowDate.isAfter(end);
+    }
+
+    private List<WarehouseDO> loadScopeWarehouses(InventoryScope scope) {
+        if (Objects.equals(scope.scopeType(), OrgScopeService.SCOPE_STORE)) {
+            return warehouseRepository.findByStoreId(scope.scopeId());
+        }
+        if (Objects.equals(scope.scopeType(), OrgScopeService.SCOPE_GROUP)) {
+            return warehouseRepository.findByGroupId(scope.scopeId());
+        }
+        return List.of();
     }
 
     private InventoryDocumentDetailLine toDetailLine(InventoryDocumentLine line) {
@@ -753,6 +981,8 @@ public class InventoryDocumentApplicationService {
      * @param id 主键
      * @param documentCode 单据编号
      * @param documentDate 业务日期
+     * @param primaryId 主体主键
+     * @param primaryCode 主体编码
      * @param primaryName 主体一
      * @param secondaryName 主体二
      * @param counterpartyName 对方主体
@@ -766,6 +996,8 @@ public class InventoryDocumentApplicationService {
     public record InventoryDocumentRow(Long id,
                                        String documentCode,
                                        String documentDate,
+                                       Long primaryId,
+                                       String primaryCode,
                                        String primaryName,
                                        String secondaryName,
                                        String counterpartyName,

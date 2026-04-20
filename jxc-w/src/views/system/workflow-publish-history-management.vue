@@ -51,6 +51,8 @@ const bindStoreForm = reactive({
 const bindStoreSearch = ref('');
 const bindStoreSelectedRows = ref<WorkflowProcessStoreOption[]>([]);
 const bindStoreTableRef = ref<InstanceType<typeof import('element-plus').ElTable> | null>(null);
+const preferredBusinessCode = computed(() => String(route.query.businessCode ?? '').trim());
+const preferredWorkflowCode = computed(() => String(route.query.workflowCode ?? '').trim());
 
 const filteredStoreOptions = computed(() => {
   const kw = bindStoreSearch.value.trim().toLowerCase();
@@ -69,11 +71,16 @@ const historyMap = computed(() => {
   });
   grouped.forEach((list) => {
     list.sort((a, b) => {
-      const byVersion = (b.versionNo ?? 0) - (a.versionNo ?? 0);
-      if (byVersion !== 0) {
-        return byVersion;
+      const aPreferred = a.businessCode === preferredBusinessCode.value && a.workflowCode === preferredWorkflowCode.value;
+      const bPreferred = b.businessCode === preferredBusinessCode.value && b.workflowCode === preferredWorkflowCode.value;
+      if (aPreferred !== bPreferred) {
+        return aPreferred ? -1 : 1;
       }
-      return String(b.savedAt).localeCompare(String(a.savedAt));
+      const bySavedAt = String(b.savedAt).localeCompare(String(a.savedAt));
+      if (bySavedAt !== 0) {
+        return bySavedAt;
+      }
+      return (b.versionNo ?? 0) - (a.versionNo ?? 0);
     });
   });
   return grouped;

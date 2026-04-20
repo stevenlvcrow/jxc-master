@@ -289,20 +289,33 @@ const handleConfirm = () => {
 }
 
 .selector-content {
+  --selector-body-height: 350px;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  min-height: 350px;
+  height: var(--selector-body-height);
   border-bottom: 1px solid #ebeef5;
+  overflow: hidden;
 }
 
 .selector-tree-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   border-right: 1px solid #ebeef5;
   padding: 8px;
   overflow: auto;
 }
 
+.selector-tree-panel :deep(.category-tree) {
+  height: 100%;
+}
+
 .selector-table-panel {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .selector-selected-panel {
@@ -366,6 +379,7 @@ const handleConfirm = () => {
 @media (max-width: 960px) {
   .selector-content {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .selector-tree-panel {

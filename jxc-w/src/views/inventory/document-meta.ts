@@ -1,4 +1,4 @@
-import type { GenericInventoryDocumentType } from '@/api/modules/inventory';
+import type { GenericInventoryDocumentRow, GenericInventoryDocumentType } from '@/api/modules/inventory';
 
 export type InventoryDocumentFieldKind = 'warehouse' | 'text' | 'select';
 
@@ -8,6 +8,30 @@ export type InventoryDocumentFieldMeta = {
   kind: InventoryDocumentFieldKind;
   options?: string[];
 };
+
+export type InventoryDocumentQueryOption = {
+  label: string;
+  value: string;
+};
+
+export type InventoryDocumentListColumn = {
+  key: string;
+  label: string;
+  prop?: keyof GenericInventoryDocumentRow;
+  minWidth?: number;
+  width?: number;
+  fixed?: 'left' | 'right';
+  type?: 'index' | 'operation';
+  formatter?: (row: GenericInventoryDocumentRow, context: { warehouseCodeByName: Record<string, string> }) => string;
+};
+
+export type InventoryDocumentListQueryField =
+  | 'dateRange'
+  | 'documentCode'
+  | 'primaryName'
+  | 'itemName'
+  | 'status'
+  | 'remark';
 
 export type InventoryDocumentMeta = {
   type: GenericInventoryDocumentType;
@@ -25,6 +49,21 @@ export type InventoryDocumentMeta = {
   extraFields?: InventoryDocumentFieldMeta[];
   showAvailableQty?: boolean;
   workflowEnabled?: boolean;
+  noticeLines?: string[];
+  listTableHeight?: number;
+  listPrimaryQueryKind?: 'input' | 'select';
+  listStatusOptions?: InventoryDocumentQueryOption[];
+  listStatusLabelMap?: Record<string, string>;
+  showToolbar?: boolean;
+  listQueryFields?: InventoryDocumentListQueryField[];
+  listColumns?: InventoryDocumentListColumn[];
+  showSummary?: boolean;
+  summaryFields?: Array<keyof GenericInventoryDocumentRow>;
+  summaryLabel?: string;
+  showDocumentCode?: boolean;
+  remarkInputType?: 'input' | 'textarea';
+  showUpstreamCode?: boolean;
+  itemTableStyle?: 'default' | 'purchase-inbound';
 };
 
 export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
@@ -179,6 +218,46 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     editRouteName: 'WarehouseOpeningBalanceEdit',
     dateLabel: '期初日期',
     primaryField: { key: 'primaryName', label: '仓库', kind: 'warehouse' },
+    noticeLines: [
+      '仓库期初指仓库初始化。新建仓库时，需要对仓库物品的默认数量进行更新。',
+      '注：请及时完成期初，未启用会计期限制补录近3个月的期初，启用会计期时月结后无法补录期初',
+    ],
+    listPrimaryQueryKind: 'select',
+    listStatusOptions: [
+      { label: '待确认', value: '已提交' },
+      { label: '已完成', value: '已审核' },
+      { label: '待初始化', value: 'UNINITIALIZED' },
+      { label: '全部', value: '' },
+    ],
+    listStatusLabelMap: {
+      UNINITIALIZED: '待初始化',
+      已提交: '待确认',
+      已审核: '已完成',
+    },
+    showToolbar: false,
+    listQueryFields: ['primaryName', 'status'],
+    showSummary: true,
+    summaryFields: ['amount'],
+    summaryLabel: '合计',
+    showDocumentCode: false,
+    remarkInputType: 'input',
+    showUpstreamCode: false,
+    itemTableStyle: 'purchase-inbound',
+    listColumns: [
+      { key: 'index', label: '序号', type: 'index', width: 70 },
+      { key: 'documentDate', label: '期初日期', prop: 'documentDate', minWidth: 110 },
+      {
+        key: 'warehouseCode',
+        label: '仓库编码',
+        minWidth: 120,
+        formatter: (row, context) => row.primaryCode ?? context.warehouseCodeByName[row.primaryName] ?? '',
+      },
+      { key: 'primaryName', label: '仓库名称', prop: 'primaryName', minWidth: 140 },
+      { key: 'amount', label: '金额', prop: 'amount', minWidth: 100 },
+      { key: 'status', label: '状态', prop: 'status', minWidth: 100 },
+      { key: 'createdAt', label: '创建时间', prop: 'createdAt', minWidth: 160 },
+      { key: 'operation', label: '操作', type: 'operation', width: 160, fixed: 'right' },
+    ],
   },
   storeTransfer: {
     type: 'store-transfer',

@@ -1,10 +1,16 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
+import CommonFormSection from '@/components/CommonFormSection.vue';
+import CommonNumberInput from '@/components/CommonNumberInput.vue';
+import CommonPageNotice from '@/components/CommonPageNotice.vue';
 import CommonSelectorDialog, { type SelectorColumn, type SelectorTreeNode } from '@/components/CommonSelectorDialog.vue';
+import CommonTableSection from '@/components/CommonTableSection.vue';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
 import {
+  batchApproveGenericInventoryDocumentApi,
+  batchUnapproveGenericInventoryDocumentApi,
   createGenericInventoryDocumentApi,
   fetchGenericInventoryDocumentDetailApi,
   fetchGenericInventoryDocumentPermissionApi,
@@ -12,7 +18,7 @@ import {
   type GenericInventoryDocumentLinePayload,
   type GenericInventoryDocumentSavePayload,
 } from '@/api/modules/inventory';
-import { fetchItemCategoryTreeApi, fetchItemsApi, type ItemCategoryTreeNode, type ItemVO } from '@/api/modules/item';
+import { fetchItemCategoryTreeApi, fetchItemDetailApi, fetchItemsApi, type ItemCategoryTreeNode, type ItemCreatePayload, type ItemVO } from '@/api/modules/item';
 import { fetchCurrentUserRolesApi } from '@/api/modules/auth';
 import { fetchStoreSalesmenApi, type SalesmanCandidateItem } from '@/api/modules/system-admin';
 import { fetchStoreWarehousesApi, type WarehouseRow } from '@/api/modules/warehouse';
@@ -42,7 +48,14 @@ type ItemCandidate = {
   spec: string;
   category: string;
   stockUnit: string;
+  baseUnit: string;
   status: string;
+};
+
+type ItemUnitOption = {
+  label: string;
+  value: string;
+  rate: number | null;
 };
 
 type DocumentItemRow = {
@@ -52,6 +65,10 @@ type DocumentItemRow = {
   spec: string;
   category: string;
   unitName: string;
+  unitOptions: ItemUnitOption[];
+  unitRate: number | null;
+  baseUnit: string;
+  baseUnitQuantity: number | null;
   availableQty: number | null;
   quantity: number | null;
   unitPrice: number | null;
@@ -67,6 +84,8 @@ const saving = ref(false);
 const loading = ref(false);
 const canCreate = ref(false);
 const canUpdate = ref(false);
+const canApprove = ref(false);
+const canUnapprove = ref(false);
 const detailStatus = ref('');
 const activeNav = ref('basic');
 const warehouses = ref<WarehouseOption[]>([]);
@@ -107,7 +126,16 @@ const documentId = computed(() => {
 const isCreateMode = computed(() => route.name === props.meta.createRouteName);
 const isViewMode = computed(() => route.name === props.meta.viewRouteName);
 const isEditMode = computed(() => route.name === props.meta.editRouteName);
+const isApprovalMode = computed(() => String(route.query.approvalMode ?? '').trim() === '1' && documentId.value != null);
+const showApprovalActions = computed(() =>
+  isApprovalMode.value
+    && detailStatus.value === '已提交'
+    && (canApprove.value || canUnapprove.value),
+);
 const isReadonlyMode = computed(() => {
+  if (isApprovalMode.value) {
+    return true;
+  }
   if (isViewMode.value || detailStatus.value === '已审核') {
     return true;
   }
@@ -119,6 +147,22 @@ const isReadonlyMode = computed(() => {
   }
   return true;
 });
+const showDocumentCode = computed(() => props.meta.showDocumentCode !== false);
+const remarkInputType = computed(() => props.meta.remarkInputType ?? 'textarea');
+const showUpstreamCode = computed(() => props.meta.showUpstreamCode === true);
+const usePurchaseInboundItemTableStyle = computed(() => props.meta.itemTableStyle === 'purchase-inbound');
+const isWarehouseOpeningBalance = computed(() => props.meta.type === 'warehouse-opening-balance');
+const totalQuantity = computed(() => rows.value.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0));
+const totalAmount = computed(() => rows.value.reduce((sum, row) => sum + Number(row.amount ?? 0), 0));
+const totalBaseUnitQuantity = computed(() => rows.value.reduce((sum, row) => sum + Number(row.baseUnitQuantity ?? 0), 0));
+const itemTableHeight = computed(() => {
+  const headerHeight = 20;
+  const rowHeight = 20;
+  const summaryHeight = isWarehouseOpeningBalance.value ? 20 : 0;
+  return Math.max(200, headerHeight + rows.value.length * rowHeight + summaryHeight);
+});
+const actionPrimaryText = computed(() => (showApprovalActions.value ? '审核通过' : '保存'));
+const actionSecondaryText = computed(() => (showApprovalActions.value ? '审核不通过' : '保存草稿'));
 
 const form = reactive({
   documentCode: '',
@@ -138,6 +182,17 @@ const form = reactive({
 const rows = ref<DocumentItemRow[]>([]);
 
 const currentOrgId = computed(() => normalizeOrgId(sessionStore.currentOrgId));
+const presetWarehouseId = computed(() => {
+  const raw = route.query.warehouseId;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+});
+const presetWarehouseName = computed(() => {
+  const raw = route.query.warehouseName;
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === 'string' ? value : '';
+});
 
 const initExtraFields = () => {
   const target: Record<string, string> = {};
@@ -154,6 +209,10 @@ const createEmptyRow = (): DocumentItemRow => ({
   spec: '',
   category: '',
   unitName: '',
+  unitOptions: [],
+  unitRate: null,
+  baseUnit: '',
+  baseUnitQuantity: null,
   availableQty: null,
   quantity: null,
   unitPrice: null,
@@ -162,10 +221,70 @@ const createEmptyRow = (): DocumentItemRow => ({
   remark: '',
 });
 
+const syncWarehouseOpeningBalanceQuantities = (row: DocumentItemRow) => {
+  if (row.quantity == null || row.unitRate == null) {
+    row.baseUnitQuantity = null;
+    return;
+  }
+  const quantity = Number(row.quantity);
+  const unitRate = Number(row.unitRate);
+  row.baseUnitQuantity = Number.isFinite(quantity * unitRate)
+    ? Number((quantity * unitRate).toFixed(4))
+    : null;
+};
+
 const syncRowAmount = (row: DocumentItemRow) => {
   const quantity = Number(row.quantity ?? 0);
   const unitPrice = Number(row.unitPrice ?? 0);
   row.amount = Number.isFinite(quantity * unitPrice) ? Number((quantity * unitPrice).toFixed(2)) : 0;
+};
+
+const formatUnitRateValue = (value: number | null) => {
+  if (value == null || !Number.isFinite(Number(value))) {
+    return '';
+  }
+  return Number(value).toFixed(4).replace(/\.?0+$/, '');
+};
+
+const formatWarehouseOpeningBalanceUnitRateText = (row: DocumentItemRow) => {
+  if (!row.unitName || !row.baseUnit || row.unitRate == null) {
+    return '-';
+  }
+  return `1${row.unitName}=${formatUnitRateValue(row.unitRate)}${row.baseUnit}`;
+};
+
+const getItemTableSummaries = ({ columns }: { columns: Array<{ property?: string; type?: string }> }) => {
+  let summaryLabelFilled = false;
+  return columns.map((column) => {
+    if (!summaryLabelFilled && column.type !== 'selection') {
+      summaryLabelFilled = true;
+      return '合计';
+    }
+    const property = column.property;
+    if (property === 'quantity') {
+      return totalQuantity.value.toFixed(4);
+    }
+    if (property === 'amount') {
+      return totalAmount.value.toFixed(2);
+    }
+    if (property === 'baseUnitQuantity' && isWarehouseOpeningBalance.value) {
+      return totalBaseUnitQuantity.value.toFixed(4);
+    }
+    return '';
+  });
+};
+
+const addRow = (index: number) => {
+  const targetIndex = Number.isInteger(index) ? index + 1 : rows.value.length;
+  rows.value.splice(targetIndex, 0, createEmptyRow());
+};
+
+const removeRow = (index: number) => {
+  if (rows.value.length <= 1) {
+    rows.value = [createEmptyRow()];
+    return;
+  }
+  rows.value.splice(index, 1);
 };
 
 const normalizeItemTreeNodes = (nodes: ItemCategoryTreeNode[]): SelectorTreeNode[] => nodes.map((node) => ({
@@ -194,6 +313,7 @@ const mapItemCandidate = (row: ItemVO): ItemCandidate => ({
   spec: row.spec,
   category: row.category,
   stockUnit: row.stockUnit,
+  baseUnit: row.baseUnit,
   status: row.status,
 });
 
@@ -253,15 +373,139 @@ const handleItemClear = () => {
   selectedItemCandidates.value = [];
 };
 
-const applyItemToRow = (row: DocumentItemRow, item: ItemCandidate) => {
+const buildUnitOptionsFromItemDetail = (detail: ItemCreatePayload, fallbackUnit = '') => {
+  const baseUnit = detail.unitSettingRows?.[0]?.unit?.trim() || fallbackUnit;
+  const unitOptions = (detail.unitSettingRows ?? [])
+    .map((row, index) => {
+      const unit = row.unit?.trim() || '';
+      if (!unit) {
+        return null;
+      }
+      if (index === 0 || unit === baseUnit) {
+        return {
+          label: unit,
+          value: unit,
+          rate: 1,
+        } satisfies ItemUnitOption;
+      }
+      const convertFrom = Number(row.convertFrom ?? 0);
+      const convertTo = Number(row.convertTo ?? 0);
+      return {
+        label: unit,
+        value: unit,
+        rate: convertFrom > 0 && convertTo > 0 ? Number((convertTo / convertFrom).toFixed(4)) : null,
+      } satisfies ItemUnitOption;
+    })
+    .filter((option): option is ItemUnitOption => Boolean(option));
+  return {
+    baseUnit,
+    unitOptions,
+  };
+};
+
+const parseUnitOptions = (raw: string | undefined, currentUnitName = '') => {
+  if (!raw) {
+    return currentUnitName ? [{ label: currentUnitName, value: currentUnitName, rate: null }] : [];
+  }
+  try {
+    const parsed = JSON.parse(raw) as Array<{ label?: string; value?: string; rate?: number | null }>;
+    const options = Array.isArray(parsed)
+      ? parsed
+        .map((option) => {
+          const value = String(option?.value ?? '').trim();
+          if (!value) {
+            return null;
+          }
+          return {
+            label: String(option?.label ?? value),
+            value,
+            rate: typeof option?.rate === 'number' ? option.rate : null,
+          } satisfies ItemUnitOption;
+        })
+        .filter((option): option is ItemUnitOption => Boolean(option))
+      : [];
+    if (options.length) {
+      return options;
+    }
+  } catch {
+    // Ignore invalid stored data and fall back to current value.
+  }
+  return currentUnitName ? [{ label: currentUnitName, value: currentUnitName, rate: null }] : [];
+};
+
+const resolveUnitRateFromOptions = (unitOptions: ItemUnitOption[], unitName: string) => (
+  unitOptions.find((option) => option.value === unitName)?.rate ?? null
+);
+
+const updateWarehouseOpeningBalanceUnit = (row: DocumentItemRow, unitName: string) => {
+  row.unitName = unitName;
+  row.unitRate = resolveUnitRateFromOptions(row.unitOptions, unitName);
+  syncWarehouseOpeningBalanceQuantities(row);
+};
+
+const handleWarehouseOpeningBalanceUnitChange = (
+  row: DocumentItemRow,
+  value: string | number | boolean | undefined,
+) => {
+  updateWarehouseOpeningBalanceUnit(row, String(value ?? ''));
+};
+
+const resolveItemUnitMeta = async (item: ItemCandidate) => {
+  const fallbackBaseUnit = item.baseUnit || item.stockUnit || '';
+  const fallbackOptions = [item.stockUnit || fallbackBaseUnit]
+    .filter(Boolean)
+    .map((unit) => ({
+      label: unit,
+      value: unit,
+      rate: unit === fallbackBaseUnit ? 1 : null,
+    }));
+  if (!currentOrgId.value) {
+    return {
+      baseUnit: fallbackBaseUnit,
+      unitOptions: fallbackOptions,
+      unitName: item.stockUnit || fallbackBaseUnit,
+    };
+  }
+  try {
+    const detail = await fetchItemDetailApi(item.id, currentOrgId.value);
+    const resolved = buildUnitOptionsFromItemDetail(detail, fallbackBaseUnit);
+    const preferredUnitName = detail.defaultStockUnit?.trim()
+      || item.stockUnit
+      || resolved.unitOptions[0]?.value
+      || fallbackBaseUnit;
+    const unitName = resolved.unitOptions.some((option) => option.value === preferredUnitName)
+      ? preferredUnitName
+      : (resolved.unitOptions[0]?.value || preferredUnitName);
+    return {
+      baseUnit: resolved.baseUnit,
+      unitOptions: resolved.unitOptions.length ? resolved.unitOptions : fallbackOptions,
+      unitName,
+    };
+  } catch {
+    return {
+      baseUnit: fallbackBaseUnit,
+      unitOptions: fallbackOptions,
+      unitName: item.stockUnit || fallbackBaseUnit,
+    };
+  }
+};
+
+const applyItemToRow = async (row: DocumentItemRow, item: ItemCandidate) => {
   row.itemCode = item.code;
   row.itemName = item.name;
   row.spec = item.spec;
   row.category = item.category;
+  if (isWarehouseOpeningBalance.value) {
+    const unitMeta = await resolveItemUnitMeta(item);
+    row.baseUnit = unitMeta.baseUnit;
+    row.unitOptions = unitMeta.unitOptions;
+    updateWarehouseOpeningBalanceUnit(row, unitMeta.unitName);
+    return;
+  }
   row.unitName = item.stockUnit || '';
 };
 
-const handleItemSelectorConfirm = (selectedRows: Array<Record<string, unknown>>) => {
+const handleItemSelectorConfirm = async (selectedRows: Array<Record<string, unknown>>) => {
   const picked = selectedRows as ItemCandidate[];
   if (!picked.length) {
     ElMessage.warning('请至少选择一个物品');
@@ -277,7 +521,7 @@ const handleItemSelectorConfirm = (selectedRows: Array<Record<string, unknown>>)
     ElMessage.warning('未找到目标行，请重试');
     return;
   }
-  applyItemToRow(targetRow, picked[0]);
+  await applyItemToRow(targetRow, picked[0]);
   itemSelectorVisible.value = false;
 };
 
@@ -297,6 +541,27 @@ const loadWarehouses = async () => {
   } catch {
     warehouses.value = [];
     ElMessage.error('仓库列表加载失败');
+  }
+};
+
+const applyPresetWarehouse = () => {
+  if (!isCreateMode.value || !props.meta.primaryField || props.meta.primaryField.kind !== 'warehouse' || form.primaryName) {
+    return;
+  }
+  const matchedById = presetWarehouseId.value == null
+    ? null
+    : warehouses.value.find((item) => item.id === presetWarehouseId.value);
+  if (matchedById) {
+    form.primaryName = matchedById.name;
+    return;
+  }
+  if (presetWarehouseName.value) {
+    const matchedByName = warehouses.value.find((item) => item.name === presetWarehouseName.value);
+    if (matchedByName) {
+      form.primaryName = matchedByName.name;
+      return;
+    }
+    form.primaryName = presetWarehouseName.value;
   }
 };
 
@@ -324,15 +589,21 @@ const loadPermission = async () => {
   if (!currentOrgId.value) {
     canCreate.value = false;
     canUpdate.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
     return;
   }
   try {
     const result = await fetchGenericInventoryDocumentPermissionApi(props.meta.type, currentOrgId.value || undefined);
     canCreate.value = Boolean(result.canCreate);
     canUpdate.value = Boolean(result.canUpdate);
+    canApprove.value = Boolean(result.canApprove);
+    canUnapprove.value = Boolean(result.canUnapprove);
   } catch {
     canCreate.value = false;
     canUpdate.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
     ElMessage.error('权限信息加载失败');
   }
 };
@@ -374,20 +645,34 @@ const fillDetail = async () => {
     Object.entries(detail.extraFields ?? {}).forEach(([key, value]) => {
       form.extraFields[key] = value;
     });
-    rows.value = detail.items.map((item) => ({
-      id: rowSeed.value++,
-      itemCode: item.itemCode,
-      itemName: item.itemName,
-      spec: item.spec,
-      category: item.category,
-      unitName: item.unitName,
-      availableQty: item.availableQty,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      amount: item.amount,
-      lineReason: item.lineReason,
-      remark: item.remark,
-    }));
+    rows.value = detail.items.map((item) => {
+      const unitOptions = parseUnitOptions(item.extraFields?.unitOptions, item.unitName);
+      const unitRate = item.extraFields?.unitRate
+        ? Number(item.extraFields.unitRate)
+        : resolveUnitRateFromOptions(unitOptions, item.unitName);
+      return {
+        id: rowSeed.value++,
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        spec: item.spec,
+        category: item.category,
+        unitName: item.unitName,
+        unitOptions,
+        unitRate,
+        baseUnit: item.extraFields?.baseUnit ?? '',
+        baseUnitQuantity: item.extraFields?.baseUnitQuantity
+          ? Number(item.extraFields.baseUnitQuantity)
+          : ((item.quantity != null && unitRate != null)
+            ? Number((Number(item.quantity) * Number(unitRate)).toFixed(4))
+            : null),
+        availableQty: item.availableQty,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        amount: item.amount,
+        lineReason: item.lineReason,
+        remark: item.remark,
+      };
+    });
     if (!rows.value.length) {
       rows.value = [createEmptyRow()];
     }
@@ -412,12 +697,23 @@ const validateRows = () => {
     ElMessage.warning('请完善物品编码、名称和数量');
     return null;
   }
+  if (isWarehouseOpeningBalance.value) {
+    const invalidWarehouseOpeningBalanceRow = validRows.some((item) => !String(item.unitName ?? '').trim());
+    if (invalidWarehouseOpeningBalanceRow) {
+      ElMessage.warning('请完善库存单位');
+      return null;
+    }
+  }
   return validRows;
 };
 
 const buildPayload = (): GenericInventoryDocumentSavePayload | null => {
   if (!form.documentDate) {
     ElMessage.warning(`请填写${props.meta.dateLabel}`);
+    return null;
+  }
+  if (props.meta.primaryField && !String(form.primaryName ?? '').trim()) {
+    ElMessage.warning(`请选择${props.meta.primaryField.label}`);
     return null;
   }
   const validRows = validateRows();
@@ -448,6 +744,12 @@ const buildPayload = (): GenericInventoryDocumentSavePayload | null => {
       amount: item.amount,
       lineReason: item.lineReason || undefined,
       remark: item.remark || undefined,
+      extraFields: {
+        ...(item.unitOptions.length ? { unitOptions: JSON.stringify(item.unitOptions) } : {}),
+        ...(item.unitRate != null ? { unitRate: String(item.unitRate) } : {}),
+        ...(item.baseUnit ? { baseUnit: item.baseUnit } : {}),
+        ...(item.baseUnitQuantity != null ? { baseUnitQuantity: String(item.baseUnitQuantity) } : {}),
+      },
     })),
   };
   return payload;
@@ -466,24 +768,104 @@ const handleSubmit = async () => {
     if (documentId.value && isEditMode.value) {
       await updateGenericInventoryDocumentApi(props.meta.type, documentId.value, payload, currentOrgId.value || undefined);
       ElMessage.success('保存成功');
-      router.push({ name: props.meta.listRouteName });
+      await navigateToList();
       return;
     }
     await createGenericInventoryDocumentApi(props.meta.type, payload, currentOrgId.value || undefined);
     ElMessage.success('保存成功');
-    router.push({ name: props.meta.listRouteName });
-  } catch {
-    ElMessage.error('保存失败');
+    await navigateToList();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (!message) {
+      ElMessage.error('保存失败');
+    }
   } finally {
     saving.value = false;
   }
 };
 
-const handleCancel = () => {
-  router.push({ name: props.meta.listRouteName });
+const handleApproveAction = async () => {
+  if (!documentId.value) {
+    return;
+  }
+  if (!canApprove.value) {
+    ElMessage.warning('当前账号无审核权限');
+    return;
+  }
+  saving.value = true;
+  try {
+    await batchApproveGenericInventoryDocumentApi(props.meta.type, [documentId.value], currentOrgId.value || undefined);
+    ElMessage.success('审核通过成功');
+    await navigateToList();
+  } finally {
+    saving.value = false;
+  }
+};
+
+const handleRejectAction = async () => {
+  if (!documentId.value) {
+    return;
+  }
+  if (!canUnapprove.value) {
+    ElMessage.warning('当前账号无审核权限');
+    return;
+  }
+  try {
+    const { value } = await ElMessageBox.prompt('请输入不通过原因', '审核不通过', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '请输入不通过原因',
+      inputValidator: (input: string) => input.trim() ? true : '请填写不通过原因',
+    });
+    saving.value = true;
+    try {
+      await batchUnapproveGenericInventoryDocumentApi(
+        props.meta.type,
+        [documentId.value],
+        value.trim(),
+        currentOrgId.value || undefined,
+      );
+      ElMessage.success('审核不通过成功');
+      await navigateToList();
+    } finally {
+      saving.value = false;
+    }
+  } catch {
+    // 用户取消时不提示
+  }
+};
+
+const navigateToList = async () => {
+  const activeMenuPath = typeof route.meta.activeMenu === 'string' ? route.meta.activeMenu.trim() : '';
+  if (activeMenuPath) {
+    await router.push(activeMenuPath);
+    return;
+  }
+  if (router.hasRoute(props.meta.listRouteName)) {
+    await router.push({ name: props.meta.listRouteName });
+    return;
+  }
+  await router.back();
+};
+
+const handleCancel = async () => {
+  await navigateToList();
 };
 
 const handleSaveDraft = () => {
+  if (showApprovalActions.value) {
+    void handleRejectAction();
+    return;
+  }
+  void handleSubmit();
+};
+
+const handlePrimaryAction = () => {
+  if (showApprovalActions.value) {
+    void handleApproveAction();
+    return;
+  }
   void handleSubmit();
 };
 
@@ -508,10 +890,11 @@ const reloadPageContext = async () => {
   itemCandidateSource.value = [];
   await Promise.all([loadPermission(), loadWarehouses(), loadSalesmen()]);
   await fillDetail();
+  applyPresetWarehouse();
 };
 
 watch(
-  () => [sessionStore.currentOrgId, route.name, route.params.id],
+  () => [sessionStore.currentOrgId, route.name, route.params.id, route.query.warehouseId, route.query.warehouseName],
   () => {
     void reloadPageContext();
   },
@@ -523,217 +906,293 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section v-loading="loading" class="inventory-document-create-page">
-    <FixedActionBreadcrumb
-      :navs="navs"
-      :active-key="activeNav"
-      :show-actions="!isReadonlyMode"
-      @back="handleCancel"
-      @save-draft="handleSaveDraft"
-      @save="handleSubmit"
-      @navigate="(key) => { activeNav = key; }"
-    />
+  <div class="item-create-page">
+    <section v-loading="loading" class="panel form-panel inventory-document-create-page">
+      <FixedActionBreadcrumb
+        :navs="navs"
+        :active-key="activeNav"
+        :show-actions="showApprovalActions || !isReadonlyMode"
+        :primary-action-text="actionPrimaryText"
+        :secondary-action-text="actionSecondaryText"
+        :show-primary-action="showApprovalActions ? canApprove : true"
+        :show-secondary-action="showApprovalActions ? canUnapprove : true"
+        @back="handleCancel"
+        @save-draft="handleSaveDraft"
+        @save="handlePrimaryAction"
+        @navigate="(key) => { activeNav = key; }"
+      />
 
-    <el-card shadow="never" class="form-card">
-      <template #header>
-        <span>{{ props.meta.title }}</span>
-      </template>
-      <el-form label-width="110px">
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item label="单据编号">
-              <el-input :model-value="form.documentCode || '保存后生成'" disabled />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item :label="props.meta.dateLabel">
-              <el-date-picker
-                v-model="form.documentDate"
-                type="date"
-                value-format="YYYY-MM-DD"
-                :disabled="isReadonlyMode"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="业务员">
-              <el-select v-model="form.salesmanUserId" :disabled="isReadonlyMode" clearable filterable style="width: 100%" @change="updateSalesmanName">
-                <el-option v-for="item in salesmen" :key="item.userId" :label="item.label" :value="item.userId" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col v-if="props.meta.primaryField" :span="8">
-            <el-form-item :label="props.meta.primaryField.label">
-              <el-select
-                v-if="props.meta.primaryField.kind === 'warehouse'"
-                v-model="form.primaryName"
-                :disabled="isReadonlyMode"
-                clearable
-                filterable
-                style="width: 100%"
-              >
-                <el-option v-for="item in warehouses" :key="item.id" :label="item.label" :value="item.name" />
-              </el-select>
-              <el-select
-                v-else-if="props.meta.primaryField.kind === 'select'"
-                v-model="form.primaryName"
-                :disabled="isReadonlyMode"
-                clearable
-                filterable
-                style="width: 100%"
-              >
-                <el-option v-for="item in props.meta.primaryField.options ?? []" :key="item" :label="item" :value="item" />
-              </el-select>
-              <el-input v-else v-model="form.primaryName" :disabled="isReadonlyMode" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col v-if="props.meta.secondaryField" :span="8">
-            <el-form-item :label="props.meta.secondaryField.label">
-              <el-select
-                v-if="props.meta.secondaryField.kind === 'warehouse'"
-                v-model="form.secondaryName"
-                :disabled="isReadonlyMode"
-                clearable
-                filterable
-                style="width: 100%"
-              >
-                <el-option v-for="item in warehouses" :key="item.id" :label="item.label" :value="item.name" />
-              </el-select>
-              <el-input v-else v-model="form.secondaryName" :disabled="isReadonlyMode" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col v-if="props.meta.counterpartyField" :span="8">
-            <el-form-item :label="props.meta.counterpartyField.label">
-              <el-select
-                v-if="props.meta.counterpartyField.kind === 'select'"
-                v-model="form.counterpartyName"
-                :disabled="isReadonlyMode"
-                clearable
-                filterable
-                style="width: 100%"
-              >
-                <el-option v-for="item in props.meta.counterpartyField.options ?? []" :key="item" :label="item" :value="item" />
-              </el-select>
-              <el-input v-else v-model="form.counterpartyName" :disabled="isReadonlyMode" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col v-if="props.meta.counterpartyField2" :span="8">
-            <el-form-item :label="props.meta.counterpartyField2.label">
-              <el-input v-model="form.counterpartyName2" :disabled="isReadonlyMode" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col v-if="props.meta.reasonField" :span="8">
-            <el-form-item :label="props.meta.reasonField.label">
-              <el-select
-                v-if="props.meta.reasonField.kind === 'select'"
-                v-model="form.reason"
-                :disabled="isReadonlyMode"
-                clearable
-                filterable
-                style="width: 100%"
-              >
-                <el-option v-for="item in props.meta.reasonField.options ?? []" :key="item" :label="item" :value="item" />
-              </el-select>
-              <el-input v-else v-model="form.reason" :disabled="isReadonlyMode" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col v-for="field in props.meta.extraFields ?? []" :key="field.key" :span="8">
-            <el-form-item :label="field.label">
-              <el-input v-model="form.extraFields[field.key]" :disabled="isReadonlyMode" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="上游单号">
-              <el-input v-model="form.upstreamCode" :disabled="isReadonlyMode" clearable />
-            </el-form-item>
-          </el-col>
-          <el-col :span="24">
-            <el-form-item label="备注">
-              <el-input v-model="form.remark" type="textarea" :disabled="isReadonlyMode" :rows="3" maxlength="500" show-word-limit />
-            </el-form-item>
-          </el-col>
-        </el-row>
-      </el-form>
-    </el-card>
+      <CommonFormSection title="基础信息">
+        <CommonPageNotice v-if="props.meta.noticeLines?.length" :lines="props.meta.noticeLines" />
+        <el-form label-width="110px" class="item-create-form">
+          <el-row :gutter="16">
+            <el-col v-if="showDocumentCode" :span="8">
+              <el-form-item label="单据编号">
+                <el-input :model-value="form.documentCode || '保存后生成'" disabled />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item :label="props.meta.dateLabel">
+                <el-date-picker
+                  v-model="form.documentDate"
+                  type="date"
+                  value-format="YYYY-MM-DD"
+                  :disabled="isReadonlyMode"
+                  style="width: 100%"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="业务员">
+                <el-select v-model="form.salesmanUserId" :disabled="isReadonlyMode" clearable filterable style="width: 100%" @change="updateSalesmanName">
+                  <el-option v-for="item in salesmen" :key="item.userId" :label="item.label" :value="item.userId" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col v-if="props.meta.primaryField" :span="8">
+              <el-form-item :label="props.meta.primaryField.label">
+                <el-select
+                  v-if="props.meta.primaryField.kind === 'warehouse'"
+                  v-model="form.primaryName"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  style="width: 100%"
+                >
+                  <el-option v-for="item in warehouses" :key="item.id" :label="item.label" :value="item.name" />
+                </el-select>
+                <el-select
+                  v-else-if="props.meta.primaryField.kind === 'select'"
+                  v-model="form.primaryName"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  style="width: 100%"
+                >
+                  <el-option v-for="item in props.meta.primaryField.options ?? []" :key="item" :label="item" :value="item" />
+                </el-select>
+                <el-input v-else v-model="form.primaryName" :disabled="isReadonlyMode" clearable />
+              </el-form-item>
+            </el-col>
+            <el-col v-if="props.meta.secondaryField" :span="8">
+              <el-form-item :label="props.meta.secondaryField.label">
+                <el-select
+                  v-if="props.meta.secondaryField.kind === 'warehouse'"
+                  v-model="form.secondaryName"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  style="width: 100%"
+                >
+                  <el-option v-for="item in warehouses" :key="item.id" :label="item.label" :value="item.name" />
+                </el-select>
+                <el-input v-else v-model="form.secondaryName" :disabled="isReadonlyMode" clearable />
+              </el-form-item>
+            </el-col>
+            <el-col v-if="props.meta.counterpartyField" :span="8">
+              <el-form-item :label="props.meta.counterpartyField.label">
+                <el-select
+                  v-if="props.meta.counterpartyField.kind === 'select'"
+                  v-model="form.counterpartyName"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  style="width: 100%"
+                >
+                  <el-option v-for="item in props.meta.counterpartyField.options ?? []" :key="item" :label="item" :value="item" />
+                </el-select>
+                <el-input v-else v-model="form.counterpartyName" :disabled="isReadonlyMode" clearable />
+              </el-form-item>
+            </el-col>
+            <el-col v-if="props.meta.counterpartyField2" :span="8">
+              <el-form-item :label="props.meta.counterpartyField2.label">
+                <el-input v-model="form.counterpartyName2" :disabled="isReadonlyMode" clearable />
+              </el-form-item>
+            </el-col>
+            <el-col v-if="props.meta.reasonField" :span="8">
+              <el-form-item :label="props.meta.reasonField.label">
+                <el-select
+                  v-if="props.meta.reasonField.kind === 'select'"
+                  v-model="form.reason"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  style="width: 100%"
+                >
+                  <el-option v-for="item in props.meta.reasonField.options ?? []" :key="item" :label="item" :value="item" />
+                </el-select>
+                <el-input v-else v-model="form.reason" :disabled="isReadonlyMode" clearable />
+              </el-form-item>
+            </el-col>
+            <el-col v-for="field in props.meta.extraFields ?? []" :key="field.key" :span="8">
+              <el-form-item :label="field.label">
+                <el-input v-model="form.extraFields[field.key]" :disabled="isReadonlyMode" clearable />
+              </el-form-item>
+            </el-col>
+            <el-col v-if="showUpstreamCode" :span="8">
+              <el-form-item label="上游单号">
+                <el-input v-model="form.upstreamCode" :disabled="isReadonlyMode" clearable />
+              </el-form-item>
+            </el-col>
+            <el-col :span="24">
+              <el-form-item label="备注">
+                <el-input
+                  v-if="remarkInputType === 'textarea'"
+                  v-model="form.remark"
+                  type="textarea"
+                  :disabled="isReadonlyMode"
+                  :rows="3"
+                  maxlength="500"
+                  show-word-limit
+                />
+                <el-input v-else v-model="form.remark" :disabled="isReadonlyMode" clearable maxlength="500" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </el-form>
+      </CommonFormSection>
 
-    <el-card shadow="never" class="form-card">
-      <template #header>
-        <div class="card-header">
-          <span>物品信息</span>
+      <CommonFormSection title="物品信息">
+        <template v-if="!usePurchaseInboundItemTableStyle" #action>
           <el-button v-if="!isReadonlyMode" type="primary" link @click="rows.push(createEmptyRow())">新增明细</el-button>
-        </div>
-      </template>
-      <el-table :data="rows" border stripe class="erp-table" :fit="false">
-        <el-table-column label="物品编码" min-width="130">
-          <template #default="{ row, $index }">
-            <el-input
-              :model-value="row.itemCode"
-              placeholder="点击选择物品"
-              readonly
-              :disabled="isReadonlyMode"
-              class="item-code-picker"
-              @click="openItemSelector($index)"
-            />
+        </template>
+        <CommonTableSection
+          :data="rows"
+          :height="itemTableHeight"
+          :show-summary="isWarehouseOpeningBalance"
+          :summary-method="getItemTableSummaries"
+          :class="{ 'purchase-inbound-item-table': usePurchaseInboundItemTableStyle }"
+        >
+          <el-table-column v-if="usePurchaseInboundItemTableStyle" type="index" label="序号" width="56" fixed="left" />
+          <el-table-column v-if="usePurchaseInboundItemTableStyle" label="操作" width="96" fixed="left">
+            <template #default="{ $index }">
+              <el-button text type="primary" :disabled="isReadonlyMode" @click="addRow($index)">+</el-button>
+              <el-button text :disabled="isReadonlyMode" @click="removeRow($index)">-</el-button>
+            </template>
+          </el-table-column>
+          <el-table-column prop="itemCode" label="物品编码" min-width="130">
+            <template #default="{ row, $index }">
+              <el-input
+                :model-value="row.itemCode"
+                placeholder="点击选择物品"
+                readonly
+                :disabled="isReadonlyMode"
+                class="item-code-picker"
+                @click="openItemSelector($index)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column prop="itemName" label="物品名称" min-width="140">
+            <template #default="{ row }">
+              {{ row.itemName || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="spec" label="规格型号" min-width="120">
+            <template #default="{ row }">
+              {{ row.spec || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column v-if="!isWarehouseOpeningBalance" prop="category" label="物品类别" min-width="120">
+            <template #default="{ row }">
+              {{ row.category || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="unitName" :label="isWarehouseOpeningBalance ? '库存单位' : '单位'" min-width="100">
+            <template #default="{ row }">
+              <template v-if="isWarehouseOpeningBalance">
+                <el-select
+                  v-model="row.unitName"
+                  :disabled="isReadonlyMode || !row.itemCode"
+                  clearable
+                  filterable
+                  style="width: 100%"
+                  @change="handleWarehouseOpeningBalanceUnitChange(row, $event)"
+                >
+                  <el-option
+                    v-for="option in row.unitOptions"
+                    :key="`${row.id}-${option.value}`"
+                    :label="option.label"
+                    :value="option.value"
+                  />
+                </el-select>
+              </template>
+              <el-input v-else v-model="row.unitName" :disabled="isReadonlyMode" />
+            </template>
+          </el-table-column>
+          <el-table-column v-if="isWarehouseOpeningBalance" prop="unitRate" label="库存单位换算率" min-width="160">
+            <template #default="{ row }">
+              {{ formatWarehouseOpeningBalanceUnitRateText(row) }}
+            </template>
+          </el-table-column>
+          <el-table-column v-if="props.meta.showAvailableQty" label="可用数量" min-width="100">
+            <template #default="{ row }">
+              <CommonNumberInput v-model="row.availableQty" :disabled="isReadonlyMode" :precision="4" :min="0" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="quantity" :label="isWarehouseOpeningBalance ? '入库数量' : '数量'" min-width="100">
+            <template #default="{ row }">
+              <CommonNumberInput
+                v-model="row.quantity"
+                :disabled="isReadonlyMode"
+                :precision="4"
+                :min="0"
+                @change="isWarehouseOpeningBalance ? syncWarehouseOpeningBalanceQuantities(row) : syncRowAmount(row)"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column v-if="!isWarehouseOpeningBalance" prop="unitPrice" label="单价" min-width="100">
+            <template #default="{ row }">
+              <CommonNumberInput v-model="row.unitPrice" :disabled="isReadonlyMode" :precision="4" :min="0" @change="syncRowAmount(row)" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="amount" label="金额" min-width="110">
+            <template #default="{ row }">
+              <CommonNumberInput
+                v-if="isWarehouseOpeningBalance"
+                v-model="row.amount"
+                :disabled="isReadonlyMode"
+                :precision="2"
+                :min="0"
+              />
+              <span v-else>{{ Number(row.amount ?? 0).toFixed(2) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="isWarehouseOpeningBalance" prop="baseUnit" label="基准单位" min-width="100">
+            <template #default="{ row }">
+              {{ row.baseUnit || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column v-if="isWarehouseOpeningBalance" prop="baseUnitQuantity" label="基准单位数量" min-width="130">
+            <template #default="{ row }">
+              {{ row.baseUnitQuantity != null ? Number(row.baseUnitQuantity).toFixed(4) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column v-if="!isWarehouseOpeningBalance" label="原因" min-width="140">
+            <template #default="{ row }">
+              <el-input v-model="row.lineReason" :disabled="isReadonlyMode" />
+            </template>
+          </el-table-column>
+          <el-table-column label="备注" min-width="160">
+            <template #default="{ row }">
+              <el-input v-model="row.remark" :disabled="isReadonlyMode" />
+            </template>
+          </el-table-column>
+          <el-table-column v-if="!usePurchaseInboundItemTableStyle && !isReadonlyMode" label="操作" width="100" fixed="right">
+            <template #default="{ $index }">
+              <el-button type="danger" link @click="removeRow($index)">删除</el-button>
+            </template>
+          </el-table-column>
+          <template v-if="usePurchaseInboundItemTableStyle && !isWarehouseOpeningBalance" #append>
+            <div class="purchase-inbound-summary-row">
+              <span class="summary-title">合计</span>
+              <span class="summary-cell">{{ isWarehouseOpeningBalance ? '入库数量' : '数量' }}：{{ totalQuantity.toFixed(4) }}</span>
+              <span class="summary-cell">金额：{{ totalAmount.toFixed(2) }}</span>
+              <span v-if="isWarehouseOpeningBalance" class="summary-cell">基准单位数量：{{ totalBaseUnitQuantity.toFixed(4) }}</span>
+            </div>
           </template>
-        </el-table-column>
-        <el-table-column label="物品名称" min-width="140">
-          <template #default="{ row }">
-            {{ row.itemName || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="规格型号" min-width="120">
-          <template #default="{ row }">
-            {{ row.spec || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="物品类别" min-width="120">
-          <template #default="{ row }">
-            {{ row.category || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="单位" min-width="100">
-          <template #default="{ row }">
-            <el-input v-model="row.unitName" :disabled="isReadonlyMode" />
-          </template>
-        </el-table-column>
-        <el-table-column v-if="props.meta.showAvailableQty" label="可用数量" min-width="100">
-          <template #default="{ row }">
-            <el-input-number v-model="row.availableQty" :disabled="isReadonlyMode" :precision="4" :min="0" controls-position="right" style="width: 100%" />
-          </template>
-        </el-table-column>
-        <el-table-column label="数量" min-width="100">
-          <template #default="{ row }">
-            <el-input-number v-model="row.quantity" :disabled="isReadonlyMode" :precision="4" :min="0" controls-position="right" style="width: 100%" @change="syncRowAmount(row)" />
-          </template>
-        </el-table-column>
-        <el-table-column label="单价" min-width="100">
-          <template #default="{ row }">
-            <el-input-number v-model="row.unitPrice" :disabled="isReadonlyMode" :precision="4" :min="0" controls-position="right" style="width: 100%" @change="syncRowAmount(row)" />
-          </template>
-        </el-table-column>
-        <el-table-column label="金额" min-width="110">
-          <template #default="{ row }">
-            <span>{{ Number(row.amount ?? 0).toFixed(2) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="原因" min-width="140">
-          <template #default="{ row }">
-            <el-input v-model="row.lineReason" :disabled="isReadonlyMode" />
-          </template>
-        </el-table-column>
-        <el-table-column label="备注" min-width="160">
-          <template #default="{ row }">
-            <el-input v-model="row.remark" :disabled="isReadonlyMode" />
-          </template>
-        </el-table-column>
-        <el-table-column v-if="!isReadonlyMode" label="操作" width="100" fixed="right">
-          <template #default="{ $index }">
-            <el-button type="danger" link @click="rows.splice($index, 1)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+        </CommonTableSection>
+      </CommonFormSection>
+    </section>
 
     <CommonSelectorDialog
       v-model="itemSelectorVisible"
@@ -766,27 +1225,108 @@ onMounted(async () => {
       @page-size-change="(size) => { itemSelectorPageSize = size; itemSelectorCurrentPage = 1; loadItemCandidates(); }"
       @confirm="handleItemSelectorConfirm"
     />
-  </section>
+  </div>
 </template>
 
 <style scoped>
 .inventory-document-create-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 
-.form-card {
-  border-radius: 8px;
-}
-
-.card-header {
+.purchase-inbound-summary-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: flex-end;
+  gap: 32px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #334155;
+}
+
+.summary-title {
+  margin-right: auto;
+  color: #0f172a;
+  font-weight: 600;
 }
 
 .item-code-picker {
+  cursor: pointer;
+}
+
+:deep(.purchase-inbound-item-table .common-number-input) {
+  width: 100%;
+  height: 20px !important;
+  margin: 0 !important;
+}
+
+:deep(.purchase-inbound-item-table .el-input),
+:deep(.purchase-inbound-item-table .el-select) {
+  --el-input-height: 20px;
+  height: 20px !important;
+  margin: 0 !important;
+}
+
+:deep(.purchase-inbound-item-table .el-input__wrapper),
+:deep(.purchase-inbound-item-table .el-select__wrapper) {
+  min-height: 20px !important;
+  height: 20px !important;
+  padding: 0 6px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+:deep(.purchase-inbound-item-table .el-input__inner),
+:deep(.purchase-inbound-item-table .el-select__placeholder),
+:deep(.purchase-inbound-item-table .el-select__selected-item),
+:deep(.purchase-inbound-item-table .el-select__selection-text) {
+  height: 20px !important;
+  line-height: 20px !important;
+}
+
+:deep(.purchase-inbound-item-table .el-select__selection) {
+  min-height: 20px !important;
+  height: 20px !important;
+  margin: 0 !important;
+}
+
+:deep(.purchase-inbound-item-table .el-table__header-wrapper th.el-table__cell),
+:deep(.purchase-inbound-item-table .el-table__body-wrapper td.el-table__cell),
+:deep(.purchase-inbound-item-table .el-table__footer-wrapper td.el-table__cell) {
+  height: 20px !important;
+  line-height: 20px !important;
+}
+
+:deep(.purchase-inbound-item-table .el-table__header-wrapper .cell),
+:deep(.purchase-inbound-item-table .el-table__body-wrapper .cell),
+:deep(.purchase-inbound-item-table .el-table__footer-wrapper .cell) {
+  display: flex;
+  align-items: center;
+  height: 20px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 20px !important;
+}
+
+:deep(.purchase-inbound-item-table .el-table__body-wrapper .cell .el-input),
+:deep(.purchase-inbound-item-table .el-table__body-wrapper .cell .el-select),
+:deep(.purchase-inbound-item-table .el-table__body-wrapper .cell .common-number-input) {
+  align-self: stretch;
+}
+
+:deep(.purchase-inbound-item-table .el-table__body-wrapper .el-button) {
+  min-height: 20px !important;
+  height: 20px !important;
+  margin: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 20px !important;
+}
+
+:deep(.purchase-inbound-item-table .item-code-picker .el-input__wrapper) {
   cursor: pointer;
 }
 </style>

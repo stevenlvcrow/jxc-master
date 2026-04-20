@@ -10,8 +10,16 @@ withDefaults(defineProps<{
   navs: BreadcrumbNav[];
   activeKey: string;
   showActions?: boolean;
+  primaryActionText?: string;
+  secondaryActionText?: string;
+  showPrimaryAction?: boolean;
+  showSecondaryAction?: boolean;
 }>(), {
   showActions: true,
+  primaryActionText: '保存',
+  secondaryActionText: '保存草稿',
+  showPrimaryAction: true,
+  showSecondaryAction: true,
 });
 
 const emit = defineEmits<{
@@ -30,8 +38,8 @@ const emit = defineEmits<{
         返回列表
       </el-button>
       <div v-if="showActions !== false" class="form-actions-right">
-        <el-button @click="emit('save-draft')">保存草稿</el-button>
-        <el-button type="primary" @click="emit('save')">保存</el-button>
+        <el-button v-if="showSecondaryAction !== false" @click="emit('save-draft')">{{ secondaryActionText }}</el-button>
+        <el-button v-if="showPrimaryAction !== false" type="primary" @click="emit('save')">{{ primaryActionText }}</el-button>
       </div>
     </div>
     <div class="item-create-breadcrumb-wrap">

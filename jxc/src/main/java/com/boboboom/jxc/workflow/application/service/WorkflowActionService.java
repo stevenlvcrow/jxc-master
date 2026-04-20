@@ -1,14 +1,10 @@
 package com.boboboom.jxc.workflow.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
+import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView;
-import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
-import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
-import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
-import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -27,19 +23,16 @@ public class WorkflowActionService {
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
 
-    private final WorkflowProcessRegistryRepository processRegistryRepository;
-    private final WorkflowDefinitionConfigRepository definitionConfigRepository;
+    private final WorkflowBindingResolverService workflowBindingResolverService;
     private final UserAccountRepository userAccountRepository;
     private final RoleRepository roleRepository;
     private final ObjectMapper objectMapper;
 
-    public WorkflowActionService(WorkflowProcessRegistryRepository processRegistryRepository,
-                                 WorkflowDefinitionConfigRepository definitionConfigRepository,
+    public WorkflowActionService(WorkflowBindingResolverService workflowBindingResolverService,
                                  UserAccountRepository userAccountRepository,
                                  RoleRepository roleRepository,
                                  ObjectMapper objectMapper) {
-        this.processRegistryRepository = processRegistryRepository;
-        this.definitionConfigRepository = definitionConfigRepository;
+        this.workflowBindingResolverService = workflowBindingResolverService;
         this.userAccountRepository = userAccountRepository;
         this.roleRepository = roleRepository;
         this.objectMapper = objectMapper;
@@ -54,16 +47,12 @@ public class WorkflowActionService {
             return false;
         }
         try {
-            Optional<WorkflowBinding> binding = resolveBinding(scopeType, scopeId, groupId, businessCode);
-            if (binding.isEmpty()) {
+            JsonNode root = readNodeConfig(scopeType, scopeId, groupId, businessCode);
+            if (root == null) {
                 return false;
             }
-            WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, binding.get().processCode(), binding.get().workflowCode());
-            if (config == null || !StringUtils.hasText(config.getNodeConfigJson())) {
-                return false;
-            }
-            return hasConfiguredAction(config.getNodeConfigJson(), action)
-                    && !collectConfiguredRoleCodes(config.getNodeConfigJson(), action).isEmpty();
+            return hasConfiguredAction(root, action)
+                    && !collectConfiguredRoleCodes(root, action).isEmpty();
         } catch (BusinessException ex) {
             return false;
         }
@@ -79,16 +68,12 @@ public class WorkflowActionService {
             return false;
         }
         try {
-            Optional<WorkflowBinding> binding = resolveBinding(scopeType, scopeId, groupId, businessCode);
-            if (binding.isEmpty()) {
+            JsonNode root = readNodeConfig(scopeType, scopeId, groupId, businessCode);
+            if (root == null) {
                 return true;
             }
-            WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, binding.get().processCode(), binding.get().workflowCode());
-            if (config == null || !StringUtils.hasText(config.getNodeConfigJson())) {
-                return false;
-            }
-            Set<String> configuredRoleCodes = collectConfiguredRoleCodes(config.getNodeConfigJson(), action);
-            if (!hasConfiguredAction(config.getNodeConfigJson(), action)) {
+            Set<String> configuredRoleCodes = collectConfiguredRoleCodes(root, action);
+            if (!hasConfiguredAction(root, action)) {
                 return false;
             }
             if (configuredRoleCodes.isEmpty()) {
@@ -118,16 +103,12 @@ public class WorkflowActionService {
             return false;
         }
         try {
-            Optional<WorkflowBinding> binding = resolveBinding(scopeType, scopeId, groupId, businessCode);
-            if (binding.isEmpty()) {
-                return false;
-            }
-            WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, binding.get().processCode(), binding.get().workflowCode());
-            if (config == null || !StringUtils.hasText(config.getNodeConfigJson())) {
+            JsonNode root = readNodeConfig(scopeType, scopeId, groupId, businessCode);
+            if (root == null) {
                 return false;
             }
             Set<String> userRoleCodes = collectUserRoleCodes(operatorId, scopeType, scopeId, groupId);
-            return hasConditionNodePermission(config.getNodeConfigJson(), operatorId, userRoleCodes);
+            return hasConditionNodePermission(root, operatorId, userRoleCodes);
         } catch (BusinessException ex) {
             return false;
         }
@@ -143,16 +124,8 @@ public class WorkflowActionService {
             return "普通审核";
         }
         try {
-            Optional<WorkflowBinding> binding = resolveBinding(scopeType, scopeId, groupId, businessCode);
-            if (binding.isEmpty()) {
-                return "普通审核";
-            }
-            WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, binding.get().processCode(), binding.get().workflowCode());
-            if (config == null || !StringUtils.hasText(config.getNodeConfigJson())) {
-                return "普通审核";
-            }
-            JsonNode root = objectMapper.readTree(config.getNodeConfigJson());
-            if (root == null || !root.isArray()) {
+            JsonNode root = readNodeConfig(scopeType, scopeId, groupId, businessCode);
+            if (root == null) {
                 return "普通审核";
             }
             String normalizedTaskName = trimToNull(taskName);
@@ -190,16 +163,8 @@ public class WorkflowActionService {
             return Optional.empty();
         }
         try {
-            Optional<WorkflowBinding> binding = resolveBinding(scopeType, scopeId, groupId, businessCode);
-            if (binding.isEmpty()) {
-                return Optional.empty();
-            }
-            WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, binding.get().processCode(), binding.get().workflowCode());
-            if (config == null || !StringUtils.hasText(config.getNodeConfigJson())) {
-                return Optional.empty();
-            }
-            JsonNode root = objectMapper.readTree(config.getNodeConfigJson());
-            if (root == null || !root.isArray()) {
+            JsonNode root = readNodeConfig(scopeType, scopeId, groupId, businessCode);
+            if (root == null) {
                 return Optional.empty();
             }
             String normalizedTaskName = trimToNull(taskName);
@@ -239,116 +204,59 @@ public class WorkflowActionService {
         return userRoleCodes.contains(target.roleCode());
     }
 
-    private Optional<WorkflowBinding> resolveBinding(String scopeType, Long scopeId, Long groupId, String businessCode) {
-        if (!SCOPE_GROUP.equalsIgnoreCase(scopeType) && !SCOPE_STORE.equalsIgnoreCase(scopeType)) {
-            return Optional.empty();
-        }
-        if (groupId == null) {
-            return Optional.empty();
-        }
-
-        WorkflowProcessRegistryDO registry = processRegistryRepository
-                .findByScopeAndProcessCode(SCOPE_GROUP, groupId, businessCode)
-                .orElse(null);
-        if (registry == null) {
-            return Optional.empty();
-        }
-
-        String workflowCode = trimToNull(registry.getTemplateId());
-        if (!StringUtils.hasText(workflowCode)) {
-            throw new BusinessException("流程尚未绑定模板，请先在流程管理中绑定模板");
-        }
-
-        WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, registry.getProcessCode(), workflowCode);
-        if (config == null) {
-            throw new BusinessException("流程模板未发布，请先发布流程");
-        }
-        if (!"PUBLISHED".equals(config.getStatus())) {
-            throw new BusinessException("流程模板未发布，请先发布流程");
-        }
-        if (!StringUtils.hasText(config.getProcessDefinitionKey()) || !StringUtils.hasText(config.getProcessDefinitionId())) {
-            throw new BusinessException("流程定义缺失，请重新发布流程");
-        }
-
-        return Optional.of(new WorkflowBinding(
-                registry.getProcessCode(),
-                workflowCode,
-                config.getProcessDefinitionKey(),
-                config.getProcessDefinitionId()
-        ));
-    }
-
-    private WorkflowDefinitionConfigDO findConfig(String scopeType, Long scopeId, Long groupId, String businessCode, String workflowCode) {
-        WorkflowDefinitionConfigDO config = selectConfig(scopeType, scopeId, businessCode, workflowCode);
-        if (config != null) {
-            return config;
-        }
-        if (SCOPE_STORE.equalsIgnoreCase(scopeType)) {
-            return selectConfig(SCOPE_GROUP, groupId, businessCode, workflowCode);
-        }
-        return null;
-    }
-
-    private WorkflowDefinitionConfigDO selectConfig(String scopeType, Long scopeId, String businessCode, String workflowCode) {
-        if (!StringUtils.hasText(scopeType) || scopeId == null || !StringUtils.hasText(businessCode) || !StringUtils.hasText(workflowCode)) {
+    private JsonNode readNodeConfig(String scopeType,
+                                    Long scopeId,
+                                    Long groupId,
+                                    String businessCode) {
+        Optional<WorkflowBindingResolverService.ResolvedWorkflowBinding> binding =
+                workflowBindingResolverService.resolvePublishedBinding(scopeType, scopeId, groupId, businessCode, "流程");
+        if (binding.isEmpty()) {
             return null;
         }
-        return definitionConfigRepository.findByScopeBusinessAndWorkflow(
-                scopeType.toUpperCase(Locale.ROOT),
-                scopeId,
-                businessCode,
-                workflowCode
-        ).orElse(null);
-    }
-
-    private Set<String> collectConfiguredRoleCodes(String nodeConfigJson, String action) {
         try {
+            String nodeConfigJson = trimToNull(binding.get().nodeConfigJson());
+            if (!StringUtils.hasText(nodeConfigJson)) {
+                return null;
+            }
             JsonNode root = objectMapper.readTree(nodeConfigJson);
-            if (root == null || !root.isArray()) {
-                return Set.of();
-            }
-            String normalizedAction = normalizeAction(action);
-            Set<String> roleCodes = new LinkedHashSet<>();
-            for (JsonNode node : root) {
-                String nodeType = trimToNull(node.path("nodeType").asText(null));
-                if (!"NORMAL".equalsIgnoreCase(nodeType)) {
-                    continue;
-                }
-                Set<String> triggerActions = collectTriggerActions(node.path("triggerActions"));
-                if (!triggerActions.contains(normalizedAction)) {
-                    continue;
-                }
-                String roleCode = trimToNull(node.path("approverRoleCode").asText(null));
-                if (StringUtils.hasText(roleCode)) {
-                    roleCodes.add(roleCode);
-                }
-            }
-            return roleCodes;
+            return root != null && root.isArray() ? root : null;
         } catch (Exception ex) {
-            return Set.of();
+            return null;
         }
     }
 
-    private boolean hasConfiguredAction(String nodeConfigJson, String action) {
-        try {
-            JsonNode root = objectMapper.readTree(nodeConfigJson);
-            if (root == null || !root.isArray()) {
-                return false;
+    private Set<String> collectConfiguredRoleCodes(JsonNode root, String action) {
+        String normalizedAction = normalizeAction(action);
+        Set<String> roleCodes = new LinkedHashSet<>();
+        for (JsonNode node : root) {
+            String nodeType = trimToNull(node.path("nodeType").asText(null));
+            if (!"NORMAL".equalsIgnoreCase(nodeType)) {
+                continue;
             }
-            String normalizedAction = normalizeAction(action);
-            for (JsonNode node : root) {
-                String nodeType = trimToNull(node.path("nodeType").asText(null));
-                if (!"NORMAL".equalsIgnoreCase(nodeType)) {
-                    continue;
-                }
-                if (collectTriggerActions(node.path("triggerActions")).contains(normalizedAction)) {
-                    return true;
-                }
+            Set<String> triggerActions = collectTriggerActions(node.path("triggerActions"));
+            if (!triggerActions.contains(normalizedAction)) {
+                continue;
             }
-            return false;
-        } catch (Exception ex) {
-            return false;
+            String roleCode = trimToNull(node.path("approverRoleCode").asText(null));
+            if (StringUtils.hasText(roleCode)) {
+                roleCodes.add(roleCode);
+            }
         }
+        return roleCodes;
+    }
+
+    private boolean hasConfiguredAction(JsonNode root, String action) {
+        String normalizedAction = normalizeAction(action);
+        for (JsonNode node : root) {
+            String nodeType = trimToNull(node.path("nodeType").asText(null));
+            if (!"NORMAL".equalsIgnoreCase(nodeType)) {
+                continue;
+            }
+            if (collectTriggerActions(node.path("triggerActions")).contains(normalizedAction)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Set<String> collectTriggerActions(JsonNode triggerActionsNode) {
@@ -409,32 +317,24 @@ public class WorkflowActionService {
         return roleCodes;
     }
 
-    private boolean hasConditionNodePermission(String nodeConfigJson, Long operatorId, Set<String> userRoleCodes) {
-        try {
-            JsonNode root = objectMapper.readTree(nodeConfigJson);
-            if (root == null || !root.isArray()) {
-                return false;
+    private boolean hasConditionNodePermission(JsonNode root, Long operatorId, Set<String> userRoleCodes) {
+        for (JsonNode node : root) {
+            String nodeType = trimToNull(node.path("nodeType").asText(null));
+            if (!"CONDITION".equalsIgnoreCase(nodeType)) {
+                continue;
             }
-            for (JsonNode node : root) {
-                String nodeType = trimToNull(node.path("nodeType").asText(null));
-                if (!"CONDITION".equalsIgnoreCase(nodeType)) {
-                    continue;
-                }
-                Long approverUserId = node.path("approverUserId").isNumber()
-                        ? node.path("approverUserId").asLong()
-                        : null;
-                if (approverUserId != null && approverUserId.equals(operatorId)) {
-                    return true;
-                }
-                String approverRoleCode = trimToNull(node.path("approverRoleCode").asText(null));
-                if (StringUtils.hasText(approverRoleCode) && userRoleCodes.contains(approverRoleCode)) {
-                    return true;
-                }
+            Long approverUserId = node.path("approverUserId").isNumber()
+                    ? node.path("approverUserId").asLong()
+                    : null;
+            if (approverUserId != null && approverUserId.equals(operatorId)) {
+                return true;
             }
-            return false;
-        } catch (Exception ex) {
-            return false;
+            String approverRoleCode = trimToNull(node.path("approverRoleCode").asText(null));
+            if (StringUtils.hasText(approverRoleCode) && userRoleCodes.contains(approverRoleCode)) {
+                return true;
+            }
         }
+        return false;
     }
 
     private String normalizeAction(String action) {
@@ -460,12 +360,6 @@ public class WorkflowActionService {
             return null;
         }
         return value.trim();
-    }
-
-    private record WorkflowBinding(String processCode,
-                                   String workflowCode,
-                                   String processDefinitionKey,
-                                   String processDefinitionId) {
     }
 
     public record ApprovalTarget(Long userId, String roleCode, String roleName) {

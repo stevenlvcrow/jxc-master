@@ -4,6 +4,7 @@ public class CurrentUserResult {
 
     private Long userId;
     private String userName;
+    private String account;
     private String phone;
 
     public Long getUserId() {
@@ -20,6 +21,14 @@ public class CurrentUserResult {
 
     public void setUserName(String userName) {
         this.userName = userName;
+    }
+
+    public String getAccount() {
+        return account;
+    }
+
+    public void setAccount(String account) {
+        this.account = account;
     }
 
     public String getPhone() {

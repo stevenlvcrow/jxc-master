@@ -48,6 +48,7 @@ public class WorkflowConfigApplicationService {
     private static final String ROLE_SIGN_MODE_OR = "OR";
     private static final String ROLE_SIGN_MODE_AND = "AND";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
+    private static final String UNSUPPORTED_ADVANCED_FIELD_MESSAGE = "当前版本暂不支持条件表达式、会签方式、允许驳回或允许反审核配置";
 
     private final WorkflowDefinitionConfigRepository configRepository;
     private final ObjectMapper objectMapper;
@@ -227,19 +228,18 @@ public class WorkflowConfigApplicationService {
     private NodeView toNodeView(NodeConfig node) {
         String nodeType = normalizeNodeType(node.nodeType());
         boolean roleNode = supportsRoleAssignment(nodeType);
-        boolean conditionNode = NODE_TYPE_CONDITION.equals(nodeType);
         return new NodeView(
                 node.nodeKey(),
                 node.nodeName(),
                 node.x(),
                 node.y(),
                 roleNode ? trimNullable(node.approverRoleCode()) : "",
-                conditionNode ? normalizeRoleSignMode(node.roleSignMode()) : ROLE_SIGN_MODE_OR,
+                ROLE_SIGN_MODE_OR,
                 supportsApproverUser(nodeType) ? node.approverUserId() : null,
                 false,
-                node.allowUnapprove(),
+                false,
                 nodeType,
-                node.conditionExpression() == null ? "" : node.conditionExpression(),
+                "",
                 node.triggerActions() == null ? List.of() : node.triggerActions()
         );
     }
@@ -296,9 +296,8 @@ public class WorkflowConfigApplicationService {
             String nodeType = normalizeNodeType(node.nodeType());
             String nodeName = requiredTrim(node.nodeName(), "节点名称不能为空");
             boolean roleNode = supportsRoleAssignment(nodeType);
-            boolean conditionNode = NODE_TYPE_CONDITION.equals(nodeType);
+            validateUnsupportedAdvancedFields(node);
             String roleCode = roleNode && trimNullable(node.approverRoleCode()) != null ? trimNullable(node.approverRoleCode()) : "";
-            String roleSignMode = conditionNode ? normalizeRoleSignMode(node.roleSignMode()) : ROLE_SIGN_MODE_OR;
             Long approverUserId = supportsApproverUser(nodeType) ? node.approverUserId() : null;
             List<String> triggerActions = normalizeTriggerActions(node.triggerActions(), nodeType);
             if (NODE_TYPE_NORMAL.equals(nodeType) && !triggerActions.isEmpty() && !StringUtils.hasText(roleCode)) {
@@ -314,12 +313,12 @@ public class WorkflowConfigApplicationService {
                     node.x(),
                     node.y(),
                     roleCode,
-                    roleSignMode,
+                    ROLE_SIGN_MODE_OR,
                     approverUserId,
                     false,
-                    NODE_TYPE_SUCCESS.equals(nodeType) && Boolean.TRUE.equals(node.allowUnapprove()),
+                    false,
                     nodeType,
-                    trimNullable(node.conditionExpression()) == null ? "" : trimNullable(node.conditionExpression()),
+                    "",
                     triggerActions
             ));
         }
@@ -383,10 +382,7 @@ public class WorkflowConfigApplicationService {
             userTask.setName(node.nodeName());
             userTask.setDocumentation(
                     "nodeType=" + nodeType
-                            + ";allowReject=" + node.allowReject()
-                            + ";allowUnapprove=" + node.allowUnapprove()
                             + ";approverRoleCode=" + (node.approverRoleCode() == null ? "" : node.approverRoleCode())
-                            + ";roleSignMode=" + normalizeRoleSignMode(node.roleSignMode())
                             + ";approverUserId=" + (node.approverUserId() == null ? "" : node.approverUserId())
                             + ";triggerActions=" + String.join(",", node.triggerActions() == null ? List.of() : node.triggerActions())
             );
@@ -487,6 +483,21 @@ public class WorkflowConfigApplicationService {
             return ROLE_SIGN_MODE_AND;
         }
         return ROLE_SIGN_MODE_OR;
+    }
+
+    private void validateUnsupportedAdvancedFields(WorkflowConfigSaveRequest.NodeItem node) {
+        if (node == null) {
+            return;
+        }
+        if (Boolean.TRUE.equals(node.allowReject())
+                || Boolean.TRUE.equals(node.allowUnapprove())
+                || StringUtils.hasText(trimNullable(node.conditionExpression()))) {
+            throw new BusinessException(UNSUPPORTED_ADVANCED_FIELD_MESSAGE);
+        }
+        String roleSignMode = trimNullable(node.roleSignMode());
+        if (roleSignMode != null && !ROLE_SIGN_MODE_OR.equalsIgnoreCase(roleSignMode)) {
+            throw new BusinessException(UNSUPPORTED_ADVANCED_FIELD_MESSAGE);
+        }
     }
 
     private boolean supportsRoleAssignment(String nodeType) {

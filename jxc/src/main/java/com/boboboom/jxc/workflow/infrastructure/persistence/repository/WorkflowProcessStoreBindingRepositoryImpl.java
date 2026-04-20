@@ -63,4 +63,15 @@ public class WorkflowProcessStoreBindingRepositoryImpl implements WorkflowProces
                 .eq(WorkflowProcessStoreBindingDO::getGroupId, groupId)
                 .eq(WorkflowProcessStoreBindingDO::getProcessRegistryId, processRegistryId));
     }
+
+    @Override
+    public void deleteByGroupAndProcessRegistryIdAndStoreId(Long groupId, Long processRegistryId, Long storeId) {
+        if (groupId == null || processRegistryId == null || storeId == null) {
+            return;
+        }
+        workflowProcessStoreBindingMapper.delete(new LambdaQueryWrapper<WorkflowProcessStoreBindingDO>()
+                .eq(WorkflowProcessStoreBindingDO::getGroupId, groupId)
+                .eq(WorkflowProcessStoreBindingDO::getProcessRegistryId, processRegistryId)
+                .eq(WorkflowProcessStoreBindingDO::getStoreId, storeId));
+    }
 }

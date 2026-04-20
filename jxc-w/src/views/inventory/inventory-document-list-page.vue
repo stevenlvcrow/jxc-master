@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { Delete, Plus, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRouter } from 'vue-router';
+import CommonPageNotice from '@/components/CommonPageNotice.vue';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import {
   batchApproveGenericInventoryDocumentApi,
@@ -13,9 +14,10 @@ import {
   fetchGenericInventoryDocumentPermissionApi,
   type GenericInventoryDocumentRow,
 } from '@/api/modules/inventory';
+import { fetchStoreWarehousesApi, type WarehouseRow } from '@/api/modules/warehouse';
 import { useSessionStore } from '@/stores/session';
-import type { InventoryDocumentMeta } from '@/views/inventory/document-meta';
-import { normalizeOrgId } from '@/utils/org';
+import type { InventoryDocumentListColumn, InventoryDocumentMeta } from '@/views/inventory/document-meta';
+import { normalizeOrgId, parseStoreId } from '@/utils/org';
 
 const props = defineProps<{
   meta: InventoryDocumentMeta;
@@ -47,6 +49,120 @@ const query = reactive({
 });
 
 const orgId = computed(() => normalizeOrgId(sessionStore.currentOrgId) || undefined);
+const tableHeight = computed(() => props.meta.listTableHeight ?? 350);
+const showToolbar = computed(() => props.meta.showToolbar !== false);
+const primaryQueryUsesSelect = computed(() => props.meta.listPrimaryQueryKind === 'select');
+const visibleQueryFields = computed(() => props.meta.listQueryFields ?? [
+  'dateRange',
+  'documentCode',
+  'primaryName',
+  'itemName',
+  'status',
+  'remark',
+]);
+const statusOptions = computed(() => props.meta.listStatusOptions ?? [
+  { label: '草稿', value: '草稿' },
+  { label: '已提交', value: '已提交' },
+  { label: '已审核', value: '已审核' },
+]);
+const showSelectionColumn = computed(() =>
+  showToolbar.value && (permissions.canDelete || permissions.canApprove || permissions.canUnapprove),
+);
+const warehouseOptions = ref<Array<{ id: number; code: string; name: string; label: string }>>([]);
+const warehouseCodeByName = computed<Record<string, string>>(() =>
+  warehouseOptions.value.reduce<Record<string, string>>((result, item) => {
+    result[item.name] = item.code;
+    return result;
+  }, {}),
+);
+const statusLabelMap = computed(() => props.meta.listStatusLabelMap ?? {});
+const defaultColumns = computed<InventoryDocumentListColumn[]>(() => {
+  const columns: InventoryDocumentListColumn[] = [
+    { key: 'documentCode', label: '单据编号', prop: 'documentCode', minWidth: 150 },
+    { key: 'documentDate', label: props.meta.dateLabel, prop: 'documentDate', minWidth: 110 },
+    { key: 'primaryName', label: props.meta.primaryField?.label ?? '主体一', prop: 'primaryName', minWidth: 140 },
+  ];
+  if (props.meta.secondaryField) {
+    columns.push({ key: 'secondaryName', label: props.meta.secondaryField.label, prop: 'secondaryName', minWidth: 140 });
+  }
+  if (props.meta.counterpartyField) {
+    columns.push({ key: 'counterpartyName', label: props.meta.counterpartyField.label, prop: 'counterpartyName', minWidth: 140 });
+  }
+  columns.push(
+    { key: 'status', label: '单据状态', prop: 'status', minWidth: 100 },
+    { key: 'reviewStatus', label: '审核状态', prop: 'reviewStatus', minWidth: 100 },
+    { key: 'amount', label: '金额', prop: 'amount', minWidth: 100 },
+    { key: 'createdAt', label: '创建时间', prop: 'createdAt', minWidth: 160 },
+    { key: 'creator', label: '创建人', prop: 'creator', minWidth: 100 },
+    { key: 'remark', label: '备注', prop: 'remark', minWidth: 180 },
+    { key: 'operation', label: '操作', type: 'operation', width: 160, fixed: 'right' },
+  );
+  return columns;
+});
+const resolvedColumns = computed(() => props.meta.listColumns ?? defaultColumns.value);
+const isWarehouseOpeningBalance = computed(() => props.meta.type === 'warehouse-opening-balance');
+const canConfirmCurrentType = computed(() => isWarehouseOpeningBalance.value || permissions.canApprove);
+const showSummary = computed(() => props.meta.showSummary === true);
+const summaryFields = computed(() => new Set(props.meta.summaryFields ?? []));
+
+const indexMethod = (index: number) => (currentPage.value - 1) * pageSize.value + index + 1;
+
+const formatColumnValue = (column: InventoryDocumentListColumn, row: GenericInventoryDocumentRow) => {
+  if (column.formatter) {
+    return column.formatter(row, { warehouseCodeByName: warehouseCodeByName.value });
+  }
+  if (!column.prop) {
+    return '';
+  }
+  const rawValue = row[column.prop];
+  if (column.prop === 'status') {
+    return statusLabelMap.value[String(rawValue ?? '')] ?? String(rawValue ?? '');
+  }
+  return rawValue == null ? '' : String(rawValue);
+};
+
+const getSummaries = ({ columns, data }: { columns: Array<{ property?: string; type?: string }>; data: GenericInventoryDocumentRow[] }) => {
+  let summaryLabelFilled = false;
+  return columns.map((column) => {
+    if (!summaryLabelFilled && column.type !== 'selection') {
+      summaryLabelFilled = true;
+      return props.meta.summaryLabel ?? '合计';
+    }
+    const property = column.property as keyof GenericInventoryDocumentRow | undefined;
+    if (!property || !summaryFields.value.has(property)) {
+      return '';
+    }
+    const totalAmount = data.reduce((sum, row) => {
+      const value = Number(row[property] ?? 0);
+      return Number.isFinite(value) ? sum + value : sum;
+    }, 0);
+    return totalAmount.toFixed(2);
+  });
+};
+
+const loadWarehouseOptions = async () => {
+  if (!primaryQueryUsesSelect.value) {
+    warehouseOptions.value = [];
+    return;
+  }
+  const storeId = parseStoreId(orgId.value);
+  if (!storeId) {
+    warehouseOptions.value = [];
+    return;
+  }
+  try {
+    const result = await fetchStoreWarehousesApi(storeId, { status: 'ENABLED' });
+    warehouseOptions.value = result.map((item: WarehouseRow) => ({
+      id: item.id,
+      code: item.warehouseCode,
+      name: item.warehouseName,
+      label: `${item.warehouseName}（${item.warehouseCode}）`,
+    }));
+  } catch {
+    warehouseOptions.value = [];
+    ElMessage.error('仓库列表加载失败');
+  }
+};
 
 const loadPermissions = async () => {
   if (!orgId.value) {
@@ -107,7 +223,7 @@ const loadRows = async () => {
 };
 
 const refreshAll = async () => {
-  await Promise.all([loadPermissions(), loadRows()]);
+  await Promise.all([loadPermissions(), loadRows(), loadWarehouseOptions()]);
 };
 
 const handleSearch = async () => {
@@ -203,11 +319,40 @@ const handleDelete = async (row: GenericInventoryDocumentRow) => {
   }
 };
 
+const handleApprove = async (row: GenericInventoryDocumentRow) => {
+  try {
+    await ElMessageBox.confirm('确认期初后，会改变库存数量，是否确认？', '确认期初', {
+      type: 'warning',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+    });
+  } catch {
+    return;
+  }
+  try {
+    await batchApproveGenericInventoryDocumentApi(props.meta.type, [row.id], orgId.value);
+    ElMessage.success('确认期初成功');
+    await loadRows();
+  } catch {
+    ElMessage.error('确认期初失败');
+  }
+};
+
 const handleSelectionChange = (items: GenericInventoryDocumentRow[]) => {
   selectedIds.value = items.map((item) => item.id);
 };
 
 const handleView = (row: GenericInventoryDocumentRow) => {
+  if (isWarehouseOpeningBalance.value && row.status === 'UNINITIALIZED') {
+    router.push({
+      name: props.meta.createRouteName,
+      query: {
+        warehouseId: row.primaryId != null ? String(row.primaryId) : undefined,
+        warehouseName: row.primaryName || undefined,
+      },
+    });
+    return;
+  }
   router.push({ name: props.meta.viewRouteName, params: { id: row.id } });
 };
 
@@ -230,8 +375,9 @@ onMounted(() => {
 
 <template>
   <section class="panel item-main-panel">
+    <CommonPageNotice v-if="props.meta.noticeLines?.length" :lines="props.meta.noticeLines" />
     <CommonQuerySection :model="query">
-      <el-form-item :label="props.meta.dateLabel">
+      <el-form-item v-if="visibleQueryFields.includes('dateRange')" :label="props.meta.dateLabel">
         <el-date-picker
           v-model="query.dateRange"
           type="daterange"
@@ -242,23 +388,30 @@ onMounted(() => {
           style="width: 240px"
         />
       </el-form-item>
-      <el-form-item label="单据编号">
+      <el-form-item v-if="visibleQueryFields.includes('documentCode')" label="单据编号">
         <el-input v-model="query.documentCode" placeholder="请输入单据编号" clearable style="width: 180px" />
       </el-form-item>
-      <el-form-item :label="props.meta.primaryField?.label ?? '主体'">
-        <el-input v-model="query.primaryName" :placeholder="`请输入${props.meta.primaryField?.label ?? '主体'}`" clearable style="width: 180px" />
+      <el-form-item v-if="visibleQueryFields.includes('primaryName')" :label="props.meta.primaryField?.label ?? '主体'">
+        <el-select
+          v-if="primaryQueryUsesSelect"
+          v-model="query.primaryName"
+          clearable
+          filterable
+          style="width: 180px"
+        >
+          <el-option v-for="item in warehouseOptions" :key="item.id" :label="item.label" :value="item.name" />
+        </el-select>
+        <el-input v-else v-model="query.primaryName" :placeholder="`请输入${props.meta.primaryField?.label ?? '主体'}`" clearable style="width: 180px" />
       </el-form-item>
-      <el-form-item label="物品">
+      <el-form-item v-if="visibleQueryFields.includes('itemName')" label="物品">
         <el-input v-model="query.itemName" placeholder="请输入物品编码/名称" clearable style="width: 180px" />
       </el-form-item>
-      <el-form-item label="状态">
+      <el-form-item v-if="visibleQueryFields.includes('status')" label="状态">
         <el-select v-model="query.status" clearable style="width: 140px">
-          <el-option label="草稿" value="草稿" />
-          <el-option label="已提交" value="已提交" />
-          <el-option label="已审核" value="已审核" />
+          <el-option v-for="item in statusOptions" :key="`${item.label}-${item.value}`" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
-      <el-form-item label="备注">
+      <el-form-item v-if="visibleQueryFields.includes('remark')" label="备注">
         <el-input v-model="query.remark" placeholder="请输入备注" clearable style="width: 180px" />
       </el-form-item>
       <el-form-item>
@@ -273,7 +426,7 @@ onMounted(() => {
       </el-form-item>
     </CommonQuerySection>
 
-    <div class="table-toolbar">
+    <div v-if="showToolbar" class="table-toolbar">
       <div class="table-toolbar-left">
         <el-button v-if="permissions.canCreate" type="primary" @click="handleToolbarAction('新增')">
           <el-icon><Plus /></el-icon>
@@ -295,28 +448,62 @@ onMounted(() => {
       stripe
       class="erp-table"
       :fit="false"
-      :height="420"
+      :height="tableHeight"
+      :show-summary="showSummary"
+      :summary-method="getSummaries"
       @selection-change="handleSelectionChange"
     >
-      <el-table-column type="selection" width="48" />
-      <el-table-column prop="documentCode" label="单据编号" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="documentDate" :label="props.meta.dateLabel" min-width="110" show-overflow-tooltip />
-      <el-table-column prop="primaryName" :label="props.meta.primaryField?.label ?? '主体一'" min-width="140" show-overflow-tooltip />
-      <el-table-column v-if="props.meta.secondaryField" prop="secondaryName" :label="props.meta.secondaryField.label" min-width="140" show-overflow-tooltip />
-      <el-table-column v-if="props.meta.counterpartyField" prop="counterpartyName" :label="props.meta.counterpartyField.label" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="status" label="单据状态" min-width="100" show-overflow-tooltip />
-      <el-table-column prop="reviewStatus" label="审核状态" min-width="100" show-overflow-tooltip />
-      <el-table-column prop="amount" label="金额" min-width="100" show-overflow-tooltip />
-      <el-table-column prop="createdAt" label="创建时间" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="creator" label="创建人" min-width="100" show-overflow-tooltip />
-      <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <el-button text type="primary" @click="handleView(row)">查看</el-button>
-          <el-button v-if="permissions.canUpdate" text @click="handleEdit(row)">编辑</el-button>
-          <el-button v-if="permissions.canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
-        </template>
-      </el-table-column>
+      <el-table-column v-if="showSelectionColumn" type="selection" width="48" />
+      <template v-for="column in resolvedColumns" :key="column.key">
+        <el-table-column
+          v-if="column.type === 'index'"
+          type="index"
+          :label="column.label"
+          :width="column.width ?? 60"
+          :index="indexMethod"
+        />
+        <el-table-column
+          v-else-if="column.type === 'operation'"
+          :label="column.label"
+          :width="isWarehouseOpeningBalance ? 240 : (column.width ?? 160)"
+          :fixed="column.fixed ?? 'right'"
+        >
+          <template #default="{ row }">
+            <template v-if="isWarehouseOpeningBalance">
+              <el-button
+                v-if="row.status === 'UNINITIALIZED'"
+                text
+                type="primary"
+                @click="handleView(row)"
+              >
+                添加期初
+              </el-button>
+              <template v-else-if="row.status === '已提交'">
+                <el-button v-if="permissions.canUpdate" text @click="handleEdit(row)">编辑</el-button>
+                <el-button v-if="permissions.canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
+                <el-button v-if="canConfirmCurrentType" text type="primary" @click="handleApprove(row)">确认期初</el-button>
+              </template>
+            </template>
+            <template v-else>
+              <el-button text type="primary" @click="handleView(row)">查看</el-button>
+              <el-button v-if="permissions.canUpdate" text @click="handleEdit(row)">编辑</el-button>
+              <el-button v-if="permissions.canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
+            </template>
+          </template>
+        </el-table-column>
+        <el-table-column
+          v-else
+          :prop="column.prop"
+          :label="column.label"
+          :min-width="column.minWidth"
+          :width="column.width"
+          show-overflow-tooltip
+        >
+          <template #default="{ row }">
+            {{ formatColumnValue(column, row) }}
+          </template>
+        </el-table-column>
+      </template>
     </el-table>
 
     <div class="table-pagination">

@@ -15,12 +15,15 @@ export type OrgNode = {
 };
 
 const STORAGE_LOGIN_KEY = 'jxc-login';
+const STORAGE_USER_NAME_KEY = 'jxc-user-name';
 const STORAGE_LOGIN_ACCOUNT_KEY = 'jxc-login-account';
+const STORAGE_USER_PHONE_KEY = 'jxc-user-phone';
 const STORAGE_ORG_KEY = 'jxc-current-org';
 const STORAGE_PLATFORM_ADMIN_MODE_KEY = 'jxc-platform-admin-mode';
 
 type LoginOptions = {
   platformAdminMode?: boolean;
+  phone?: string;
 };
 
 const defaultOrgTree: OrgNode[] = [
@@ -115,25 +118,54 @@ const normalizeOrgTree = (nodes: OrgNode[]): OrgNode[] => nodes.map((node) => {
 
 export const useSessionStore = defineStore('session', () => {
   const useRealAuthApi = import.meta.env.VITE_USE_REAL_AUTH_API === '1';
+  const useRealOrgApi = import.meta.env.VITE_USE_REAL_ORG_API === '1';
   const accessToken = ref(authStorage.getAccessToken());
   const refreshToken = ref(authStorage.getRefreshToken());
+  const userName = ref((localStorage.getItem(STORAGE_USER_NAME_KEY) ?? '').trim());
   const loginAccount = ref((localStorage.getItem(STORAGE_LOGIN_ACCOUNT_KEY) ?? '').trim());
+  const userPhone = ref((localStorage.getItem(STORAGE_USER_PHONE_KEY) ?? '').trim());
   const isLoggedIn = ref(
     useRealAuthApi ? Boolean(accessToken.value) : localStorage.getItem(STORAGE_LOGIN_KEY) === '1',
   );
-  const userName = ref('李智杰');
   const orgTree = ref<OrgNode[]>(normalizeOrgTree(defaultOrgTree));
   const currentOrgId = ref((localStorage.getItem(STORAGE_ORG_KEY) ?? '').trim().toLowerCase());
   const platformAdminMode = ref(localStorage.getItem(STORAGE_PLATFORM_ADMIN_MODE_KEY) === '1');
+  const orgTreeLoaded = ref(!useRealOrgApi);
 
   const flatOrgs = computed(() => flattenNodes(orgTree.value));
   const rootGroups = computed(() => orgTree.value);
   const currentOrg = computed(() => flatOrgs.value.find((item) => item.id === currentOrgId.value) ?? null);
-  const hasSelectedOrg = computed(() => Boolean(currentOrg.value));
+  const hasSelectedOrg = computed(() => {
+    if (!currentOrgId.value) {
+      return false;
+    }
+    if (!orgTreeLoaded.value) {
+      return true;
+    }
+    return Boolean(currentOrg.value);
+  });
   const requiresOrgSelection = computed(() => !platformAdminMode.value);
 
   const persistLogin = () => {
     localStorage.setItem(STORAGE_LOGIN_KEY, isLoggedIn.value ? '1' : '0');
+  };
+
+  const persistProfile = () => {
+    if (userName.value) {
+      localStorage.setItem(STORAGE_USER_NAME_KEY, userName.value);
+    } else {
+      localStorage.removeItem(STORAGE_USER_NAME_KEY);
+    }
+    if (loginAccount.value) {
+      localStorage.setItem(STORAGE_LOGIN_ACCOUNT_KEY, loginAccount.value);
+    } else {
+      localStorage.removeItem(STORAGE_LOGIN_ACCOUNT_KEY);
+    }
+    if (userPhone.value) {
+      localStorage.setItem(STORAGE_USER_PHONE_KEY, userPhone.value);
+    } else {
+      localStorage.removeItem(STORAGE_USER_PHONE_KEY);
+    }
   };
 
   const persistOrg = () => {
@@ -152,20 +184,18 @@ export const useSessionStore = defineStore('session', () => {
     localStorage.removeItem(STORAGE_PLATFORM_ADMIN_MODE_KEY);
   };
 
-  const login = (name = '李智杰', account = '', options: LoginOptions = {}) => {
+  const login = (name = '', account = '', options: LoginOptions = {}) => {
     isLoggedIn.value = true;
-    userName.value = name;
-    loginAccount.value = String(account ?? '').trim();
+    const normalizedAccount = String(account ?? '').trim();
+    userName.value = String(name ?? '').trim() || normalizedAccount;
+    loginAccount.value = normalizedAccount;
+    userPhone.value = String(options.phone ?? '').trim();
     platformAdminMode.value = Boolean(options.platformAdminMode);
     currentOrgId.value = '';
     persistOrg();
     persistPlatformAdminMode();
     persistLogin();
-    if (loginAccount.value) {
-      localStorage.setItem(STORAGE_LOGIN_ACCOUNT_KEY, loginAccount.value);
-    } else {
-      localStorage.removeItem(STORAGE_LOGIN_ACCOUNT_KEY);
-    }
+    persistProfile();
   };
 
   const setAuth = (tokens: { accessToken: string; refreshToken?: string }) => {
@@ -176,6 +206,9 @@ export const useSessionStore = defineStore('session', () => {
 
   const logout = () => {
     isLoggedIn.value = false;
+    userName.value = '';
+    loginAccount.value = '';
+    userPhone.value = '';
     currentOrgId.value = '';
     platformAdminMode.value = false;
     accessToken.value = '';
@@ -183,8 +216,23 @@ export const useSessionStore = defineStore('session', () => {
     persistLogin();
     persistOrg();
     persistPlatformAdminMode();
+    localStorage.removeItem(STORAGE_USER_NAME_KEY);
     localStorage.removeItem(STORAGE_LOGIN_ACCOUNT_KEY);
+    localStorage.removeItem(STORAGE_USER_PHONE_KEY);
     authStorage.clearTokens();
+  };
+
+  const setProfile = (profile: { userName?: string; account?: string; phone?: string }) => {
+    if (typeof profile.userName === 'string') {
+      userName.value = profile.userName.trim();
+    }
+    if (typeof profile.account === 'string') {
+      loginAccount.value = profile.account.trim();
+    }
+    if (typeof profile.phone === 'string') {
+      userPhone.value = profile.phone.trim();
+    }
+    persistProfile();
   };
 
   const selectOrg = (orgId: string | number) => {
@@ -202,6 +250,7 @@ export const useSessionStore = defineStore('session', () => {
 
   const setOrgTree = (tree: OrgNode[]) => {
     orgTree.value = normalizeOrgTree(tree);
+    orgTreeLoaded.value = true;
     if (currentOrgId.value && !flatOrgs.value.some((item) => item.id === currentOrgId.value)) {
       currentOrgId.value = '';
       persistOrg();
@@ -211,7 +260,9 @@ export const useSessionStore = defineStore('session', () => {
   return {
     isLoggedIn,
     userName,
+    userPhone,
     orgTree,
+    orgTreeLoaded,
     rootGroups,
     flatOrgs,
     currentOrgId,
@@ -224,6 +275,7 @@ export const useSessionStore = defineStore('session', () => {
     loginAccount,
     login,
     setAuth,
+    setProfile,
     logout,
     selectOrg,
     setOrgTree,

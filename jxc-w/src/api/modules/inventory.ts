@@ -165,6 +165,8 @@ export type GenericInventoryDocumentRow = {
   id: number;
   documentCode: string;
   documentDate: string;
+  primaryId?: number | null;
+  primaryCode?: string;
   primaryName: string;
   secondaryName: string;
   counterpartyName: string;
