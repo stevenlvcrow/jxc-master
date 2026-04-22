@@ -158,6 +158,7 @@ public class InventoryCheckApplicationService {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         InventoryCheckPermissionService.PermissionSnapshot permissionSnapshot = inventoryCheckPermissionService.resolvePermissions(
+                kind,
                 scope.scopeType(),
                 scope.scopeId(),
                 scope.groupId(),
@@ -184,7 +185,7 @@ public class InventoryCheckApplicationService {
     public IdPayload create(InventoryCheckKind kind, String orgId, InventoryCheckSaveRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryCheckPermissionService.ensureOperationPermission(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "CREATE");
+        inventoryCheckPermissionService.ensureOperationPermission(kind, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "CREATE");
         InventoryCheckHeader header = saveDocument(kind, scope, null, request, true, operatorId);
         return new IdPayload(header.getId(), header.getDocumentCode());
     }
@@ -218,7 +219,7 @@ public class InventoryCheckApplicationService {
     public void update(InventoryCheckKind kind, Long id, String orgId, InventoryCheckSaveRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryCheckPermissionService.ensureOperationPermission(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "UPDATE");
+        inventoryCheckPermissionService.ensureOperationPermission(kind, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "UPDATE");
         saveDocument(kind, scope, id, request, false, operatorId);
     }
 
@@ -233,7 +234,7 @@ public class InventoryCheckApplicationService {
     public void delete(InventoryCheckKind kind, Long id, String orgId) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryCheckPermissionService.ensureOperationPermission(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "DELETE");
+        inventoryCheckPermissionService.ensureOperationPermission(kind, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "DELETE");
         boolean canViewAll = inventoryCheckPermissionService.canViewAll(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
         InventoryCheckHeader header = requireHeader(kind, scope, id, operatorId, canViewAll);
         deleteInternal(kind, header);
@@ -250,7 +251,7 @@ public class InventoryCheckApplicationService {
     public void batchDelete(InventoryCheckKind kind, String orgId, InventoryCheckBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryCheckPermissionService.ensureOperationPermission(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "DELETE");
+        inventoryCheckPermissionService.ensureOperationPermission(kind, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "DELETE");
         boolean canViewAll = inventoryCheckPermissionService.canViewAll(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
         List<InventoryCheckHeader> headers = requireHeaders(kind, scope, request.ids(), operatorId, canViewAll);
         for (InventoryCheckHeader header : headers) {
@@ -269,7 +270,7 @@ public class InventoryCheckApplicationService {
     public void batchSubmit(InventoryCheckKind kind, String orgId, InventoryCheckBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryCheckPermissionService.ensureOperationPermission(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "UPDATE");
+        inventoryCheckPermissionService.ensureOperationPermission(kind, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "UPDATE");
         List<InventoryCheckHeader> headers = requireHeaders(kind, scope, request.ids(), operatorId, true);
         Map<Long, List<InventoryCheckLine>> lineMap = loadLineMap(kind, request.ids());
         for (InventoryCheckHeader header : headers) {
@@ -288,7 +289,7 @@ public class InventoryCheckApplicationService {
     public void batchApprove(InventoryCheckKind kind, String orgId, InventoryCheckBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryCheckPermissionService.ensureReviewPermission(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
+        inventoryCheckPermissionService.ensureReviewPermission(kind, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
         List<InventoryCheckHeader> headers = requireHeaders(kind, scope, request.ids(), operatorId, true);
         Map<Long, List<InventoryCheckLine>> lineMap = loadLineMap(kind, request.ids());
         for (InventoryCheckHeader header : headers) {
@@ -307,7 +308,7 @@ public class InventoryCheckApplicationService {
     public void batchUnapprove(InventoryCheckKind kind, String orgId, InventoryCheckBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryCheckPermissionService.ensureReviewPermission(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
+        inventoryCheckPermissionService.ensureReviewPermission(kind, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
         String rejectionReason = requiredTrim(request.rejectionReason(), "拒审原因不能为空");
         List<InventoryCheckHeader> headers = requireHeaders(kind, scope, request.ids(), operatorId, true);
         Map<Long, List<InventoryCheckLine>> lineMap = loadLineMap(kind, request.ids());
@@ -327,7 +328,7 @@ public class InventoryCheckApplicationService {
     public void batchPrint(InventoryCheckKind kind, String orgId, InventoryCheckBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryCheckPermissionService.ensureOperationPermission(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "UPDATE");
+        inventoryCheckPermissionService.ensureOperationPermission(kind, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "UPDATE");
         List<InventoryCheckHeader> headers = requireHeaders(kind, scope, request.ids(), operatorId, true);
         for (InventoryCheckHeader header : headers) {
             header.setPrintStatus(printStatusPrinted());
@@ -349,7 +350,7 @@ public class InventoryCheckApplicationService {
         }
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        inventoryCheckPermissionService.ensureOperationPermission(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "UPDATE");
+        inventoryCheckPermissionService.ensureOperationPermission(kind, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, "UPDATE");
         List<InventoryCheckHeader> headers = requireHeaders(kind, scope, request.ids(), operatorId, true);
         for (InventoryCheckHeader header : headers) {
             header.setGeneratedStatus(generatedStatusGenerated());

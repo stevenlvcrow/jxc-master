@@ -56,4 +56,8 @@ public enum InventoryCheckKind {
     public boolean isMulti() {
         return multi;
     }
+
+    public String getBusinessCode() {
+        return name();
+    }
 }
