@@ -141,16 +141,18 @@ public class PurchaseInboundController {
      *
      * @param warehouse 仓库
      * @param itemName 商品名称
+     * @param checkDate 盘点日期
      * @param orgId 机构标识
      * @return 库存余额列表
      */
     @GetMapping("/balances")
     public CodeDataResponse<PageData<InventoryBalanceRow>> listBalances(@RequestParam(defaultValue = "1") Integer pageNum,
-                                                                        @RequestParam(defaultValue = "10") Integer pageSize,
-                                                                        @RequestParam(required = false) String warehouse,
-                                                                        @RequestParam(required = false) String itemName,
-                                                                        @RequestParam(required = false) String orgId) {
-        return CodeDataResponse.ok(purchaseInboundApplicationService.listBalances(pageNum, pageSize, warehouse, itemName, orgId));
+                                                                         @RequestParam(defaultValue = "10") Integer pageSize,
+                                                                         @RequestParam(required = false) String warehouse,
+                                                                         @RequestParam(required = false) String itemName,
+                                                                         @RequestParam(required = false) String checkDate,
+                                                                         @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(purchaseInboundApplicationService.listBalances(pageNum, pageSize, warehouse, itemName, checkDate, orgId));
     }
 
     @GetMapping("/purchase-inbound/{id:\\d+}")

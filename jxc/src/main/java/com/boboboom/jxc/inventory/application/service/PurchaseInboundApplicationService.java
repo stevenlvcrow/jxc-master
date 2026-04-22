@@ -13,6 +13,8 @@ import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.Purchase
 import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundBatchRequest;
 import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundCreateRequest;
 import jakarta.validation.Valid;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -22,6 +24,7 @@ import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -50,6 +53,7 @@ public class PurchaseInboundApplicationService {
     private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
     private final OrgScopeService orgScopeService;
     private final DictionaryLookupService dictionaryLookupService;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
     public PurchaseInboundApplicationService(InventoryBalanceRepository inventoryBalanceRepository,
                                              PurchaseInboundRepository purchaseInboundRepository,
@@ -57,10 +61,11 @@ public class PurchaseInboundApplicationService {
                                              InventoryStockMutationService inventoryStockMutationService,
                                              PurchaseInboundPermissionService purchaseInboundPermissionService,
                                              PurchaseInboundNotificationService purchaseInboundNotificationService,
-                                             PurchaseInboundUnapproveService purchaseInboundUnapproveService,
-                                             InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
-                                             OrgScopeService orgScopeService,
-                                             DictionaryLookupService dictionaryLookupService) {
+                                              PurchaseInboundUnapproveService purchaseInboundUnapproveService,
+                                              InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
+                                              OrgScopeService orgScopeService,
+                                              DictionaryLookupService dictionaryLookupService,
+                                              NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
         this.inventoryBalanceRepository = inventoryBalanceRepository;
         this.purchaseInboundRepository = purchaseInboundRepository;
         this.purchaseInboundLineRepository = purchaseInboundLineRepository;
@@ -71,6 +76,7 @@ public class PurchaseInboundApplicationService {
         this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowService;
         this.orgScopeService = orgScopeService;
         this.dictionaryLookupService = dictionaryLookupService;
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
     public PageData<PurchaseInboundRow> listPurchaseInbound(Integer pageNo,
@@ -268,29 +274,71 @@ public class PurchaseInboundApplicationService {
         }
     }
 
-    public PageData<InventoryBalanceRow> listBalances(Integer pageNum, Integer pageSize, String warehouse, String itemName, String orgId) {
+    public PageData<InventoryBalanceRow> listBalances(Integer pageNum,
+                                                      Integer pageSize,
+                                                      String warehouse,
+                                                      String itemName,
+                                                      String checkDate,
+                                                      String orgId) {
         InventoryScope scope = resolveInventoryScope(orgId);
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
         int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
         String warehouseValue = trimNullable(warehouse);
         String itemKeyword = toLower(trimNullable(itemName));
-        List<InventoryBalanceRow> filtered = inventoryBalanceRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId())
+        LocalDate snapshotDate = parseDateNullable(checkDate, "盘点日期格式不正确");
+        List<InventoryBalanceRow> source = snapshotDate == null
+                ? inventoryBalanceRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId())
+                    .stream()
+                    .map(this::toBalanceRow)
+                    .toList()
+                : findHistoricalBalances(scope.scopeType(), scope.scopeId(), warehouseValue, snapshotDate.atTime(LocalTime.MAX));
+        List<InventoryBalanceRow> filtered = source
                 .stream()
-                .filter(row -> !StringUtils.hasText(warehouseValue) || Objects.equals(row.getWarehouseName(), warehouseValue))
+                .filter(row -> !StringUtils.hasText(warehouseValue) || Objects.equals(row.warehouse(), warehouseValue))
                 .filter(row -> !StringUtils.hasText(itemKeyword)
-                        || toLower(row.getItemName()).contains(itemKeyword)
-                        || toLower(row.getItemCode()).contains(itemKeyword))
-                .map(row -> new InventoryBalanceRow(
-                        row.getWarehouseName(),
-                        row.getItemCode(),
-                        row.getItemName(),
-                        row.getQuantity() == null ? "0" : row.getQuantity().stripTrailingZeros().toPlainString(),
-                        formatDateTime(row.getUpdatedAt())
-                ))
+                        || toLower(row.itemName()).contains(itemKeyword)
+                        || toLower(row.itemCode()).contains(itemKeyword))
                 .toList();
         int fromIndex = Math.min((safePageNum - 1) * safePageSize, filtered.size());
         int toIndex = Math.min(fromIndex + safePageSize, filtered.size());
         return new PageData<>(filtered.subList(fromIndex, toIndex), filtered.size(), safePageNum, safePageSize);
+    }
+
+    private InventoryBalanceRow toBalanceRow(com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO row) {
+        return new InventoryBalanceRow(
+                row.getWarehouseName(),
+                row.getItemCode(),
+                row.getItemName(),
+                row.getQuantity() == null ? "0" : row.getQuantity().stripTrailingZeros().toPlainString(),
+                formatDateTime(row.getUpdatedAt())
+        );
+    }
+
+    private List<InventoryBalanceRow> findHistoricalBalances(String scopeType,
+                                                             Long scopeId,
+                                                             String warehouse,
+                                                             LocalDateTime cutoff) {
+        String sql = "SELECT warehouse_name, item_code, item_name, quantity, updated_at FROM ("
+                + " SELECT warehouse_name, item_code, item_name, after_qty AS quantity, created_at AS updated_at,"
+                + " ROW_NUMBER() OVER (PARTITION BY warehouse_name, item_code ORDER BY created_at DESC, id DESC) rn"
+                + " FROM dev.inventory_transaction"
+                + " WHERE scope_type = :scopeType AND scope_id = :scopeId AND created_at <= :cutoff"
+                + (StringUtils.hasText(warehouse) ? " AND warehouse_name = :warehouse" : "")
+                + " ) t WHERE rn = 1 ORDER BY warehouse_name, item_code";
+        MapSqlParameterSource source = new MapSqlParameterSource()
+                .addValue("scopeType", scopeType)
+                .addValue("scopeId", scopeId)
+                .addValue("cutoff", cutoff);
+        if (StringUtils.hasText(warehouse)) {
+            source.addValue("warehouse", warehouse);
+        }
+        return namedParameterJdbcTemplate.query(sql, source, (rs, rowNum) -> new InventoryBalanceRow(
+                rs.getString("warehouse_name"),
+                rs.getString("item_code"),
+                rs.getString("item_name"),
+                rs.getBigDecimal("quantity") == null ? "0" : rs.getBigDecimal("quantity").stripTrailingZeros().toPlainString(),
+                formatDateTime(rs.getObject("updated_at", LocalDateTime.class))
+        ));
     }
 
     private List<PurchaseInboundDO> requireHeaders(InventoryScope scope, List<Long> ids) {

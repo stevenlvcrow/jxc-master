@@ -104,6 +104,8 @@ const activeNav = ref('basic');
 const basicSectionRef = ref<HTMLElement | null>(null);
 const itemSectionRef = ref<HTMLElement | null>(null);
 const pageLoading = ref(false);
+const snapshotRefreshing = ref(false);
+const hydratingDetail = ref(false);
 
 const sectionNavs = [
   { key: 'basic', label: '基础信息' },
@@ -440,6 +442,7 @@ const fetchAllBalances = async () => fetchAllPages<ApiInventoryBalanceRow>(async
     pageNum,
     pageSize: pageSizeValue,
     warehouse: form.warehouseName,
+    checkDate: form.checkDate,
   }, resolveOrgId());
   return {
     list: page.list,
@@ -458,7 +461,7 @@ const parseNumberOrNull = (value: string | number | null | undefined) => {
 
 const loadBookSnapshot = async (item: ItemCandidate) => {
   const orgId = resolveOrgId();
-  if (!orgId || !form.warehouseName) {
+  if (!orgId || !form.warehouseName || !form.checkDate) {
     return {
       bookQty: null as number | null,
       bookPrice: parseNumberOrNull(item.productionCost),
@@ -478,6 +481,10 @@ const loadFullWarehouseRows = async () => {
   }
   if (!form.warehouseName) {
     ElMessage.warning('请选择仓库');
+    return;
+  }
+  if (!form.checkDate) {
+    ElMessage.warning('请选择盘点日期');
     return;
   }
   autoFillLoading.value = true;
@@ -519,6 +526,37 @@ const applyItemToRow = async (row: InventoryCheckItemRow, item: ItemCandidate) =
   row.bookPrice = snapshot.bookPrice;
   row.unit1ActualQty = null;
   syncRowDerived(row);
+};
+
+const refreshBookSnapshots = async () => {
+  if (snapshotRefreshing.value || isReadonlyMode.value || hydratingDetail.value) {
+    return;
+  }
+  if (!form.checkDate || !form.warehouseName) {
+    return;
+  }
+  const targetRows = rows.value.filter((row) => row.itemCode);
+  if (!targetRows.length) {
+    return;
+  }
+  snapshotRefreshing.value = true;
+  try {
+    const balances = await fetchAllBalances();
+    const balanceMap = new Map(balances.map((balance) => [balance.itemCode, balance]));
+    rows.value.forEach((row) => {
+      if (!row.itemCode) {
+        return;
+      }
+      const matched = balanceMap.get(row.itemCode);
+      row.bookQty = parseNumberOrNull(matched?.quantity ?? null);
+      if (matched?.itemName) {
+        row.itemName = matched.itemName;
+      }
+      syncRowDerived(row);
+    });
+  } finally {
+    snapshotRefreshing.value = false;
+  }
 };
 
 const toCsvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -649,6 +687,7 @@ const loadPermissions = async () => {
 
 const loadPageData = async () => {
   pageLoading.value = true;
+  hydratingDetail.value = true;
   try {
     await Promise.all([
       loadPermissions(),
@@ -661,6 +700,7 @@ const loadPageData = async () => {
       applyDetail(detail);
     }
   } finally {
+    hydratingDetail.value = false;
     pageLoading.value = false;
   }
 };
@@ -726,6 +766,14 @@ const openItemSelector = async (index?: number) => {
   if (isReadonlyMode.value) {
     return;
   }
+  if (!form.warehouseName) {
+    ElMessage.warning('请选择仓库');
+    return;
+  }
+  if (!form.checkDate) {
+    ElMessage.warning('请选择盘点日期');
+    return;
+  }
   selectingItemRowIndex.value = typeof index === 'number' ? index : null;
   itemSelectorMode.value = typeof index === 'number' ? 'replace' : 'append';
   selectedItemCandidates.value = [];
@@ -757,14 +805,14 @@ const handleItemClear = () => {
   selectedItemCandidates.value = [];
 };
 
-const handleItemSelectorConfirm = (selectedRows: Array<Record<string, unknown>>) => {
+const handleItemSelectorConfirm = async (selectedRows: Array<Record<string, unknown>>) => {
   const picked = selectedRows as ItemCandidate[];
   if (!picked.length) {
     ElMessage.warning('请至少选择一个物品');
     return;
   }
   if (itemSelectorMode.value === 'append') {
-    appendItems(picked);
+    await appendItems(picked);
     itemSelectorVisible.value = false;
     return;
   }
@@ -782,7 +830,7 @@ const handleItemSelectorConfirm = (selectedRows: Array<Record<string, unknown>>)
     ElMessage.warning('未找到目标行，请重试');
     return;
   }
-  void applyItemToRow(targetRow, picked[0]);
+  await applyItemToRow(targetRow, picked[0]);
   itemSelectorVisible.value = false;
 };
 
@@ -953,6 +1001,19 @@ watch(
     });
   },
   { immediate: true },
+);
+
+watch(
+  () => [form.checkDate, form.warehouseName],
+  () => {
+    if (!isCreateMode.value && !isEditMode.value) {
+      return;
+    }
+    if (hydratingDetail.value) {
+      return;
+    }
+    void refreshBookSnapshots();
+  },
 );
 </script>
 

@@ -360,6 +360,7 @@ export type InventoryBalanceQueryParams = {
   pageSize: number;
   warehouse?: string;
   itemName?: string;
+  checkDate?: string;
 };
 
 export type InventoryBalanceRow = {
