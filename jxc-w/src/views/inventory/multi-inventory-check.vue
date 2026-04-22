@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ArrowDown, Delete, Download, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import {
   batchApproveInventoryCheckApi,
@@ -23,6 +24,7 @@ type TimeType = '盘点日期' | '创建时间';
 type PrintFilter = '' | 'UNPRINTED' | 'PRINTED';
 
 const sessionStore = useSessionStore();
+const router = useRouter();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
 const INVENTORY_CHECK_RANGE_TYPE_DICT = 'inventory.check_range_type';
@@ -258,7 +260,11 @@ const handleReset = async () => {
   await loadRows();
 };
 
-const handleToolbarAction = async (action: '生成盘点单' | '批量打印' | '批量删除' | '批量提交' | '批量审核' | '批量反审核') => {
+const handleToolbarAction = async (action: '新增' | '生成盘点单' | '批量打印' | '批量删除' | '批量提交' | '批量审核' | '批量反审核') => {
+  if (action === '新增') {
+    router.push({ name: 'InventoryCheckCreate' });
+    return;
+  }
   if (action === '生成盘点单') {
     if (!selectedIds.value.length) {
       ElMessage.warning('请先选择单据');
@@ -447,6 +453,10 @@ onMounted(() => {
     </CommonQuerySection>
 
     <div class="table-toolbar">
+      <el-button v-if="permissions.canCreate" type="primary" @click="handleToolbarAction('新增')">
+        <el-icon><Plus /></el-icon>
+        新增
+      </el-button>
       <el-button @click="handleToolbarAction('生成盘点单')">生成盘点单</el-button>
       <el-button @click="handleToolbarAction('批量打印')">
         <el-icon><Printer /></el-icon>
