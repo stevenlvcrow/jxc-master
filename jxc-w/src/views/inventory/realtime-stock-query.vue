@@ -279,10 +279,15 @@ const buildReportRows = async () => {
       loadWarehouseTree(),
     ]);
 
+    const balanceItemCodes = Array.from(new Set(balances.map((row) => row.itemCode).filter((code) => Boolean(code))));
     const detailPairs = await Promise.all(
-      items.map(async (item) => {
+      balanceItemCodes.map(async (code) => {
+        const item = items.find((row) => row.code === code);
+        if (!item) {
+          return [code, null] as const;
+        }
         const detail = await fetchItemDetailApi(item.id, orgId).catch(() => null);
-        return [item.code, detail] as const;
+        return [code, detail] as const;
       }),
     );
     const detailMap = new Map<string, ItemCreatePayload>();
