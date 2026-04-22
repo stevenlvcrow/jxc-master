@@ -32,7 +32,7 @@ public class InventoryCheckPermissionService {
      */
     public PermissionSnapshot resolvePermissions(String scopeType, Long scopeId, Long groupId, Long operatorId) {
         boolean canManageAll = canViewAll(scopeType, scopeId, groupId, operatorId);
-        return new PermissionSnapshot(canManageAll, canManageAll, canManageAll, canManageAll, canManageAll);
+        return new PermissionSnapshot(true, canManageAll, canManageAll, canManageAll, canManageAll);
     }
 
     /**
@@ -73,6 +73,9 @@ public class InventoryCheckPermissionService {
                                           Long groupId,
                                           Long operatorId,
                                           String action) {
+        if ("CREATE".equals(action)) {
+            return;
+        }
         if (canViewAll(scopeType, scopeId, groupId, operatorId)) {
             return;
         }
