@@ -751,6 +751,17 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'inventory/inventory-checks',
+        name: 'InventoryCheckIndex',
+        component: () => import('@/views/inventory/inventory-check.vue'),
+        meta: {
+          title: '盘点单',
+          activeMenu: '/inventory/inventory-checks',
+          breadcrumbs: ['库存管理', '盘点管理', '盘点单'],
+          openKeys: ['m4', 'm4-m2'],
+        },
+      },
+      {
         path: 'inventory/inventory-checks/view/:id',
         name: 'InventoryCheckView',
         component: () => import('@/views/inventory/inventory-check-create.vue'),
@@ -758,6 +769,17 @@ const routes: RouteRecordRaw[] = [
           title: '查看盘点单',
           activeMenu: '/inventory/inventory-checks',
           breadcrumbs: ['库存管理', '盘点管理', '盘点单', '查看盘点单'],
+          openKeys: ['m4', 'm4-m2'],
+        },
+      },
+      {
+        path: 'inventory/multi-inventory-checks',
+        name: 'MultiInventoryCheckIndex',
+        component: () => import('@/views/inventory/multi-inventory-check.vue'),
+        meta: {
+          title: '多人盘点单',
+          activeMenu: '/inventory/multi-inventory-checks',
+          breadcrumbs: ['库存管理', '盘点管理', '多人盘点单'],
           openKeys: ['m4', 'm4-m2'],
         },
       },
