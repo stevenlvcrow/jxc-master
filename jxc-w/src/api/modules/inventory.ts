@@ -537,3 +537,226 @@ export const fetchInventoryInoutDetailReportApi = (
 ) => apiClient.get<InventoryInoutDetailReportPage>('/api/inventory/inout-detail/report', {
   params: withOrgParams(params, orgId),
 });
+
+export type InventoryCheckRow = {
+  id: number;
+  documentCode: string;
+  checkDate: string;
+  warehouseName: string;
+  itemCount: number;
+  totalBookAmount: string;
+  totalActualAmount: string;
+  totalDiffAmount: string;
+  checkRangeType: string;
+  status: string;
+  diffStatus: string;
+  auditDate: string;
+  printStatus: string;
+  generatedStatus: string;
+  createdAt: string;
+  creator: string;
+  remark: string;
+};
+
+export type InventoryCheckListParams = {
+  pageNum: number;
+  pageSize: number;
+  timeType?: string;
+  startDate?: string;
+  endDate?: string;
+  warehouse?: string;
+  documentCode?: string;
+  itemName?: string;
+  status?: string;
+  checkRangeType?: string;
+  printStatus?: string;
+  generatedStatus?: string;
+  remark?: string;
+};
+
+export type InventoryCheckPage = {
+  list: InventoryCheckRow[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
+};
+
+export type InventoryCheckLinePayload = {
+  itemCode: string;
+  itemName: string;
+  spec?: string;
+  category?: string;
+  unitName?: string;
+  availableQty?: number | null;
+  bookQty?: number | null;
+  actualQty?: number | null;
+  bookPrice?: number | null;
+  profitLossReason?: string;
+  remark?: string;
+  extraFields?: Record<string, string>;
+};
+
+export type InventoryCheckSavePayload = {
+  checkDate: string;
+  warehouseName: string;
+  checkRangeType: string;
+  freezeStock?: boolean;
+  collaborativeFlag?: boolean;
+  planName?: string;
+  thirdPartyDocument?: string;
+  salesmanUserId?: number;
+  salesmanName?: string;
+  remark?: string;
+  submitted?: boolean;
+  items: InventoryCheckLinePayload[];
+};
+
+export type InventoryCheckDetail = {
+  id: number;
+  documentCode: string;
+  status: string;
+  checkDate: string;
+  warehouseName: string;
+  checkRangeType: string;
+  freezeStock: boolean;
+  collaborativeFlag: boolean;
+  planName: string;
+  thirdPartyDocument: string;
+  salesmanUserId: number | null;
+  salesmanName: string;
+  remark: string;
+  rejectionReason: string;
+  generatedStatus: string;
+  printStatus: string;
+  extraFields: Record<string, string>;
+  items: Array<{
+    itemCode: string;
+    itemName: string;
+    spec: string;
+    category: string;
+    unitName: string;
+    availableQty: number | null;
+    bookQty: number | null;
+    actualQty: number | null;
+    bookPrice: number | null;
+    bookAmount: number | null;
+    actualAmount: number | null;
+    diffQty: number | null;
+    diffAmount: number | null;
+    profitQty: number | null;
+    lossQty: number | null;
+    profitLossReason: string;
+    profitInboundPrice: number | null;
+    profitAmount: number | null;
+    lossOutboundPrice: number | null;
+    lossAmount: number | null;
+    abnormalFlag: string;
+    remark: string;
+    extraFields: Record<string, string>;
+  }>;
+};
+
+export type InventoryCheckPermission = {
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  canApprove: boolean;
+  canUnapprove: boolean;
+};
+
+const inventoryCheckBasePath = (documentType: 'inventory-checks' | 'multi-inventory-checks') => `/api/inventory/${documentType}`;
+
+export const fetchInventoryCheckPageApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  params: InventoryCheckListParams,
+  orgId?: string,
+) => apiClient.get<InventoryCheckPage>(inventoryCheckBasePath(documentType), {
+  params: withOrgParams(params, orgId),
+});
+
+export const fetchInventoryCheckPermissionApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  orgId?: string,
+) => apiClient.get<InventoryCheckPermission>(`${inventoryCheckBasePath(documentType)}/permissions`, {
+  params: withOrgParams(undefined, orgId),
+});
+
+export const createInventoryCheckApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  payload: InventoryCheckSavePayload,
+  orgId?: string,
+) => apiClient.post<{ id: number; documentCode: string }>(inventoryCheckBasePath(documentType), payload, {
+  params: withOrgParams(undefined, orgId),
+});
+
+export const fetchInventoryCheckDetailApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  id: number,
+  orgId?: string,
+) => apiClient.get<InventoryCheckDetail>(`${inventoryCheckBasePath(documentType)}/${id}`, {
+  params: withOrgParams(undefined, orgId),
+});
+
+export const updateInventoryCheckApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  id: number,
+  payload: InventoryCheckSavePayload,
+  orgId?: string,
+) => apiClient.put<void>(`${inventoryCheckBasePath(documentType)}/${id}`, payload, {
+  params: withOrgParams(undefined, orgId),
+});
+
+export const deleteInventoryCheckApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  id: number,
+  orgId?: string,
+) => apiClient.delete<void>(`${inventoryCheckBasePath(documentType)}/${id}`, {
+  params: withOrgParams(undefined, orgId),
+});
+
+export const batchDeleteInventoryCheckApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  ids: number[],
+  orgId?: string,
+) => apiClient.delete<void>(inventoryCheckBasePath(documentType), {
+  params: withOrgParams(undefined, orgId),
+  data: { ids },
+});
+
+export const batchSubmitInventoryCheckApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  ids: number[],
+  orgId?: string,
+) => apiClient.post<void>(`${inventoryCheckBasePath(documentType)}/batch-submit`, { ids }, {
+  params: withOrgParams(undefined, orgId),
+});
+
+export const batchApproveInventoryCheckApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  ids: number[],
+  orgId?: string,
+) => apiClient.post<void>(`${inventoryCheckBasePath(documentType)}/batch-approve`, { ids }, {
+  params: withOrgParams(undefined, orgId),
+});
+
+export const batchUnapproveInventoryCheckApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  ids: number[],
+  rejectionReason: string,
+  orgId?: string,
+) => apiClient.post<void>(`${inventoryCheckBasePath(documentType)}/batch-unapprove`, { ids, rejectionReason }, {
+  params: withOrgParams(undefined, orgId),
+});
+
+export const batchPrintInventoryCheckApi = (
+  documentType: 'inventory-checks' | 'multi-inventory-checks',
+  ids: number[],
+  orgId?: string,
+) => apiClient.post<void>(`${inventoryCheckBasePath(documentType)}/batch-print`, { ids }, {
+  params: withOrgParams(undefined, orgId),
+});
+
+export const generateMultiInventoryCheckApi = (ids: number[], orgId?: string) =>
+  apiClient.post<void>('/api/inventory/multi-inventory-checks/generate', { ids }, {
+    params: withOrgParams(undefined, orgId),
+  });

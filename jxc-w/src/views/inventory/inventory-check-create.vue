@@ -17,7 +17,18 @@ import {
 import { fetchCurrentUserRolesApi } from '@/api/modules/auth';
 import { fetchStoreSalesmenApi, type SalesmanCandidateItem } from '@/api/modules/system-admin';
 import { fetchStoreWarehousesApi, type WarehouseRow as ApiWarehouseRow } from '@/api/modules/warehouse';
+import {
+  createInventoryCheckApi,
+  fetchInventoryCheckDetailApi,
+  fetchInventoryBalancesApi,
+  fetchInventoryCheckPermissionApi,
+  type InventoryBalanceRow as ApiInventoryBalanceRow,
+  updateInventoryCheckApi,
+  type InventoryCheckDetail,
+  type InventoryCheckSavePayload,
+} from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
+import { normalizeOrgId } from '@/utils/org';
 
 type SalesmanOption = {
   userId: number;
@@ -33,7 +44,7 @@ type WarehouseOption = {
   label: string;
 };
 
-type CheckTypeOption = '指定物品' | '全仓盘点';
+type CheckTypeOption = '指定物品' | '分区盘点' | '全仓盘点';
 type UnitOption = '库存单位';
 
 type ItemCandidate = {
@@ -43,6 +54,7 @@ type ItemCandidate = {
   spec: string;
   category: string;
   stockUnit: string;
+  productionCost: string;
   status: string;
 };
 
@@ -71,31 +83,18 @@ type InventoryCheckItemRow = {
   remark: string;
 };
 
-type MockDetailLine = {
-  itemCode: string;
-  itemName: string;
-  spec: string;
-  category: string;
-  unit1ActualQty: number;
-  unit1: string;
-  bookQty: number;
-  bookPrice: number;
-  profitLossReason: string;
-  remark: string;
-};
-
-type MockDetail = {
-  warehouse: string;
-  checkDate: string;
-  checkType: CheckTypeOption;
-  summaryUnit: UnitOption;
-  salesmanName: string;
-  remark: string;
-  items: MockDetailLine[];
-};
-
-const checkTypeOptions: CheckTypeOption[] = ['指定物品', '全仓盘点'];
+const checkTypeOptions: CheckTypeOption[] = ['指定物品', '分区盘点', '全仓盘点'];
 const summaryUnitOptions: UnitOption[] = ['库存单位'];
+const checkRangeTypeCodeMap: Record<CheckTypeOption, string> = {
+  指定物品: 'SPECIFIC_ITEM',
+  分区盘点: 'PARTITION',
+  全仓盘点: 'FULL_WAREHOUSE',
+};
+const checkRangeTypeLabelMap: Record<string, CheckTypeOption> = {
+  SPECIFIC_ITEM: '指定物品',
+  PARTITION: '分区盘点',
+  FULL_WAREHOUSE: '全仓盘点',
+};
 
 const router = useRouter();
 const route = useRoute();
@@ -119,7 +118,16 @@ const routeId = computed(() => {
 const isCreateMode = computed(() => route.name === 'InventoryCheckCreate');
 const isViewMode = computed(() => route.name === 'InventoryCheckView');
 const isEditMode = computed(() => route.name === 'InventoryCheckEdit');
-const isReadonlyMode = computed(() => isViewMode.value);
+const currentOrgId = computed(() => normalizeOrgId(sessionStore.currentOrgId) || undefined);
+const canCreate = ref(false);
+const canUpdate = ref(false);
+const canApprove = ref(false);
+const canUnapprove = ref(false);
+const detailStatus = ref('');
+const isReadonlyMode = computed(() => isViewMode.value
+  || detailStatus.value === 'APPROVED'
+  || (isCreateMode.value && !canCreate.value)
+  || (isEditMode.value && !canUpdate.value));
 
 const warehouseOptions = ref<WarehouseOption[]>([]);
 const salesmanOptions = ref<SalesmanOption[]>([]);
@@ -147,6 +155,8 @@ const itemSelectorTotal = ref(0);
 const selectedItemCandidates = ref<Array<Record<string, unknown>>>([]);
 const itemTreeData = ref<SelectorTreeNode[]>([]);
 const itemCandidateSource = ref<ItemCandidate[]>([]);
+const selectingItemRowIndex = ref<number | null>(null);
+const itemSelectorMode = ref<'append' | 'replace'>('append');
 
 const itemTableColumns: SelectorColumn[] = [
   { prop: 'code', label: '物品编码', minWidth: 130 },
@@ -172,87 +182,6 @@ const form = reactive({
 
 const rowSeed = ref(2);
 const rows = ref<InventoryCheckItemRow[]>([]);
-
-const mockDetailMap: Record<number, MockDetail> = {
-  1: {
-    warehouse: '中央成品仓',
-    checkDate: '2026-04-13',
-    checkType: '指定物品',
-    summaryUnit: '库存单位',
-    salesmanName: '张敏',
-    remark: '月度盘点',
-    items: [
-      {
-        itemCode: 'ITEM-001',
-        itemName: '鸡胸肉',
-        spec: '2kg/袋',
-        category: '肉类',
-        unit1ActualQty: 32,
-        unit1: '袋',
-        bookQty: 30,
-        bookPrice: 46.5,
-        profitLossReason: '盘盈补录',
-        remark: '冷库复盘',
-      },
-      {
-        itemCode: 'ITEM-004',
-        itemName: '酸梅汤',
-        spec: '500ml*12瓶',
-        category: '饮品',
-        unit1ActualQty: 10,
-        unit1: '箱',
-        bookQty: 12,
-        bookPrice: 72,
-        profitLossReason: '破损报损',
-        remark: '货架清点',
-      },
-    ],
-  },
-  2: {
-    warehouse: '北区原料仓',
-    checkDate: '2026-04-12',
-    checkType: '指定物品',
-    summaryUnit: '库存单位',
-    salesmanName: '李娜',
-    remark: '抽盘复核',
-    items: [
-      {
-        itemCode: 'ITEM-009',
-        itemName: '牛腩',
-        spec: '5kg/箱',
-        category: '冻品',
-        unit1ActualQty: 8,
-        unit1: '箱',
-        bookQty: 9,
-        bookPrice: 168,
-        profitLossReason: '称重损耗',
-        remark: '冻库盘点',
-      },
-    ],
-  },
-  3: {
-    warehouse: '南区包材仓',
-    checkDate: '2026-04-11',
-    checkType: '指定物品',
-    summaryUnit: '库存单位',
-    salesmanName: '王磊',
-    remark: '循环盘点',
-    items: [
-      {
-        itemCode: 'ITEM-015',
-        itemName: '包装盒',
-        spec: '200只/箱',
-        category: '包材',
-        unit1ActualQty: 15,
-        unit1: '箱',
-        bookQty: 15,
-        bookPrice: 68,
-        profitLossReason: '',
-        remark: '包装区复盘',
-      },
-    ],
-  },
-};
 
 const createEmptyRow = (id: number): InventoryCheckItemRow => ({
   id,
@@ -325,11 +254,7 @@ const totalBookAmount = computed(() => rows.value.reduce((sum, row) => sum + (ro
 const totalDiffQty = computed(() => rows.value.reduce((sum, row) => sum + (row.profitQty ?? 0) - (row.lossQty ?? 0), 0));
 
 const resolveOrgId = () => {
-  const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!currentOrgId || !currentOrgId.startsWith('store-')) {
-    return undefined;
-  }
-  return currentOrgId;
+  return currentOrgId.value;
 };
 
 const resolveWarehouseStoreId = () => {
@@ -359,6 +284,7 @@ const resolveWarehouseStoreId = () => {
 };
 
 const resetForm = () => {
+  detailStatus.value = 'DRAFT';
   form.warehouseId = 0;
   form.warehouseName = '';
   form.checkDate = '';
@@ -445,6 +371,7 @@ const mapItemCandidate = (row: ItemVO): ItemCandidate => ({
   spec: row.spec,
   category: row.category,
   stockUnit: row.stockUnit || row.purchaseUnit,
+  productionCost: row.productionCost,
   status: row.status,
 });
 
@@ -471,23 +398,37 @@ const loadItemCandidates = async () => {
   }
 };
 
-const resolveMockBookSnapshot = (itemCode: string, rowIndex: number) => {
-  const detailItems = Object.values(mockDetailMap).flatMap((detail) => detail.items);
-  const matched = detailItems.find((item) => item.itemCode === itemCode);
-  if (matched) {
+const parseNumberOrNull = (value: string | number | null | undefined) => {
+  if (value == null) {
+    return null;
+  }
+  const parsed = typeof value === 'number' ? value : Number.parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const loadBookSnapshot = async (item: ItemCandidate) => {
+  const orgId = resolveOrgId();
+  if (!orgId || !form.warehouseName) {
     return {
-      bookQty: matched.bookQty,
-      bookPrice: matched.bookPrice,
+      bookQty: null as number | null,
+      bookPrice: parseNumberOrNull(item.productionCost),
     };
   }
+  const result = await fetchInventoryBalancesApi({
+    pageNum: 1,
+    pageSize: 100,
+    warehouse: form.warehouseName,
+    itemName: item.name,
+  }, orgId);
+  const matched = result.list.find((row: ApiInventoryBalanceRow) => row.itemCode === item.code);
   return {
-    bookQty: 10 + rowIndex * 2,
-    bookPrice: 20 + rowIndex * 5,
+    bookQty: parseNumberOrNull(matched?.quantity ?? null),
+    bookPrice: parseNumberOrNull(item.productionCost),
   };
 };
 
-const applyItemToRow = (row: InventoryCheckItemRow, item: ItemCandidate, rowIndex: number) => {
-  const snapshot = resolveMockBookSnapshot(item.code, rowIndex);
+const applyItemToRow = async (row: InventoryCheckItemRow, item: ItemCandidate) => {
+  const snapshot = await loadBookSnapshot(item);
   row.itemCode = item.code;
   row.itemName = item.name;
   row.spec = item.spec;
@@ -496,10 +437,11 @@ const applyItemToRow = (row: InventoryCheckItemRow, item: ItemCandidate, rowInde
   row.actualTotalUnit = item.stockUnit;
   row.bookQty = snapshot.bookQty;
   row.bookPrice = snapshot.bookPrice;
+  row.unit1ActualQty = null;
   syncRowDerived(row);
 };
 
-const appendItems = (items: ItemCandidate[]) => {
+const appendItems = async (items: ItemCandidate[]) => {
   if (!items.length) {
     ElMessage.warning('请至少选择一个物品');
     return;
@@ -511,47 +453,51 @@ const appendItems = (items: ItemCandidate[]) => {
     itemSelectorVisible.value = false;
     return;
   }
-  appendable.forEach((item, index) => {
+  const newRows = await Promise.all(appendable.map(async (item) => {
     const row = createEmptyRow(rowSeed.value++);
-    applyItemToRow(row, item, rows.value.length + index);
-    rows.value.push(row);
-  });
+    await applyItemToRow(row, item);
+    return row;
+  }));
+  rows.value.push(...newRows);
   itemSelectorVisible.value = false;
   ElMessage.success(`已添加 ${appendable.length} 条盘点物品`);
 };
 
-const applyDetail = (detail: MockDetail) => {
-  form.warehouseName = detail.warehouse;
-  form.warehouseId = warehouseOptions.value.find((item) => item.name === detail.warehouse)?.id ?? 0;
+const applyDetail = (detail: InventoryCheckDetail) => {
+  form.warehouseName = detail.warehouseName;
+  form.warehouseId = warehouseOptions.value.find((item) => item.name === detail.warehouseName)?.id ?? 0;
   form.checkDate = detail.checkDate;
-  form.checkType = detail.checkType;
-  form.summaryUnit = detail.summaryUnit;
+  form.checkType = checkRangeTypeLabelMap[detail.checkRangeType] ?? '指定物品';
+  form.summaryUnit = '库存单位';
+  form.thirdPartyDocument = detail.thirdPartyDocument || '--';
   form.salesmanName = detail.salesmanName;
-  form.salesmanUserId = salesmanOptions.value.find((item) => item.realName === detail.salesmanName)?.userId;
+  form.salesmanUserId = detail.salesmanUserId ?? salesmanOptions.value.find((item) => item.realName === detail.salesmanName)?.userId;
+  form.planName = detail.planName;
   form.remark = detail.remark;
+  detailStatus.value = detail.status;
   rows.value = detail.items.map((item, index) => {
     const row = {
       id: index + 1,
       itemCode: item.itemCode,
       itemName: item.itemName,
-      abnormalFlag: '',
+      abnormalFlag: item.abnormalFlag || '',
       spec: item.spec,
       category: item.category,
-      unit1ActualQty: item.unit1ActualQty,
-      unit1: item.unit1,
-      actualTotalQty: item.unit1ActualQty,
-      actualTotalUnit: item.unit1,
-      bookQty: item.bookQty,
-      bookPrice: item.bookPrice,
-      profitQty: 0,
-      lossQty: 0,
+      unit1ActualQty: item.actualQty ?? item.bookQty ?? 0,
+      unit1: item.unitName,
+      actualTotalQty: item.actualQty ?? item.bookQty ?? 0,
+      actualTotalUnit: item.unitName,
+      bookQty: item.bookQty ?? 0,
+      bookPrice: item.bookPrice ?? 0,
+      profitQty: item.profitQty ?? 0,
+      lossQty: item.lossQty ?? 0,
       profitLossReason: item.profitLossReason,
-      actualAmount: null,
-      bookAmount: null,
-      profitInboundPrice: null,
-      profitAmount: null,
-      lossOutboundPrice: null,
-      lossAmount: null,
+      actualAmount: item.actualAmount ?? null,
+      bookAmount: item.bookAmount ?? null,
+      profitInboundPrice: item.profitInboundPrice ?? null,
+      profitAmount: item.profitAmount ?? null,
+      lossOutboundPrice: item.lossOutboundPrice ?? null,
+      lossAmount: item.lossAmount ?? null,
       remark: item.remark,
     } as InventoryCheckItemRow;
     syncRowDerived(row);
@@ -560,22 +506,33 @@ const applyDetail = (detail: MockDetail) => {
   rowSeed.value = rows.value.length + 1;
 };
 
+const loadPermissions = async () => {
+  if (!currentOrgId.value) {
+    canCreate.value = false;
+    canUpdate.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
+    return;
+  }
+  const result = await fetchInventoryCheckPermissionApi('inventory-checks', currentOrgId.value);
+  canCreate.value = Boolean(result.canCreate);
+  canUpdate.value = Boolean(result.canUpdate);
+  canApprove.value = Boolean(result.canApprove);
+  canUnapprove.value = Boolean(result.canUnapprove);
+};
+
 const loadPageData = async () => {
   pageLoading.value = true;
   try {
     await Promise.all([
+      loadPermissions(),
       loadWarehouseOptions(),
       loadSalesmanOptions(),
     ]);
     resetForm();
-    if (!isCreateMode.value && routeId.value != null) {
-      const detail = mockDetailMap[routeId.value];
-      if (detail) {
-        applyDetail(detail);
-      } else {
-        ElMessage.warning('未找到对应盘点单，已返回列表');
-        router.replace('/inventory/inventory-checks');
-      }
+    if (!isCreateMode.value && routeId.value != null && currentOrgId.value) {
+      const detail = await fetchInventoryCheckDetailApi('inventory-checks', routeId.value, currentOrgId.value);
+      applyDetail(detail);
     }
   } finally {
     pageLoading.value = false;
@@ -629,10 +586,12 @@ const removeRow = (index: number) => {
   rows.value.splice(index, 1);
 };
 
-const _openItemSelector = async () => {
+const openItemSelector = async (index?: number) => {
   if (isReadonlyMode.value) {
     return;
   }
+  selectingItemRowIndex.value = typeof index === 'number' ? index : null;
+  itemSelectorMode.value = typeof index === 'number' ? 'replace' : 'append';
   selectedItemCandidates.value = [];
   if (!itemTreeData.value.length) {
     await loadItemTree();
@@ -663,11 +622,44 @@ const handleItemClear = () => {
 };
 
 const handleItemSelectorConfirm = (selectedRows: Array<Record<string, unknown>>) => {
-  appendItems(selectedRows as ItemCandidate[]);
+  const picked = selectedRows as ItemCandidate[];
+  if (!picked.length) {
+    ElMessage.warning('请至少选择一个物品');
+    return;
+  }
+  if (itemSelectorMode.value === 'append') {
+    appendItems(picked);
+    itemSelectorVisible.value = false;
+    return;
+  }
+  if (picked.length > 1) {
+    ElMessage.warning('当前仅支持选择一个物品');
+    return;
+  }
+  const targetIndex = selectingItemRowIndex.value;
+  if (targetIndex == null) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  const targetRow = rows.value[targetIndex];
+  if (!targetRow) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  void applyItemToRow(targetRow, picked[0]);
+  itemSelectorVisible.value = false;
 };
 
 const handleToolbarAction = async (action: string) => {
   if (isReadonlyMode.value) {
+    return;
+  }
+  if (action === '选择盘点物品') {
+    await openItemSelector();
+    return;
+  }
+  if (action === '新增空行') {
+    addRow();
     return;
   }
   if (action === '移除账面数为 0 的物品') {
@@ -691,19 +683,10 @@ const handleToolbarAction = async (action: string) => {
     });
     return;
   }
-  if (action === '添加有账未盘物品') {
-    const candidates = itemCandidateSource.value.length ? itemCandidateSource.value : [
-      { id: 'BOOK-001', code: 'BOOK-001', name: '有账未盘物品A', spec: '标准', category: '补盘', stockUnit: '个', status: '启用' },
-      { id: 'BOOK-002', code: 'BOOK-002', name: '有账未盘物品B', spec: '标准', category: '补盘', stockUnit: '箱', status: '启用' },
-    ];
-    appendItems(candidates.slice(0, 2));
-    return;
-  }
   if (action === '排序') {
     rows.value = [...rows.value].sort((left, right) => left.itemCode.localeCompare(right.itemCode));
     return;
   }
-  ElMessage.info(`${action}功能待接入`);
 };
 
 const formatNumber = (value: number | null, digits: number) => {
@@ -739,19 +722,86 @@ const validateForm = () => {
   return true;
 };
 
-const handleSaveDraft = () => {
-  ElMessage.info('草稿功能待接口接入');
+const buildSavePayload = (submitted: boolean): InventoryCheckSavePayload => ({
+  checkDate: form.checkDate,
+  warehouseName: form.warehouseName,
+  checkRangeType: checkRangeTypeCodeMap[form.checkType],
+  freezeStock: false,
+  collaborativeFlag: false,
+  planName: form.planName,
+  thirdPartyDocument: form.thirdPartyDocument,
+  salesmanUserId: form.salesmanUserId,
+  salesmanName: form.salesmanName,
+  remark: form.remark,
+  submitted,
+  items: rows.value
+    .filter((row) => row.itemCode)
+    .map((row) => ({
+      itemCode: row.itemCode,
+      itemName: row.itemName,
+      spec: row.spec,
+      category: row.category,
+      unitName: row.unit1,
+      availableQty: row.bookQty,
+      bookQty: row.bookQty,
+      actualQty: row.unit1ActualQty,
+      bookPrice: row.bookPrice,
+      profitLossReason: row.profitLossReason,
+      remark: row.remark,
+      extraFields: {},
+    })),
+});
+
+const handleItemSelectorPageChange = (page: number) => {
+  itemSelectorCurrentPage.value = page;
+  void loadItemCandidates();
 };
 
-const handleSave = () => {
+const handleItemSelectorPageSizeChange = (size: number) => {
+  itemSelectorPageSize.value = size;
+  itemSelectorCurrentPage.value = 1;
+  void loadItemCandidates();
+};
+
+const handleSaveDraft = async () => {
   if (isReadonlyMode.value) {
     return;
   }
   if (!validateForm()) {
     return;
   }
-  const documentCode = `PD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-001`;
-  ElMessage.success(`${isEditMode.value ? '编辑' : '新增'}盘点单成功：${documentCode}`);
+  if (!currentOrgId.value) {
+    ElMessage.warning('未选择机构');
+    return;
+  }
+  const payload = buildSavePayload(false);
+  if (isCreateMode.value) {
+    await createInventoryCheckApi('inventory-checks', payload, currentOrgId.value);
+  } else if (routeId.value != null) {
+    await updateInventoryCheckApi('inventory-checks', routeId.value, payload, currentOrgId.value);
+  }
+  ElMessage.success('草稿已保存');
+  router.push('/inventory/inventory-checks');
+};
+
+const handleSave = async () => {
+  if (isReadonlyMode.value) {
+    return;
+  }
+  if (!validateForm()) {
+    return;
+  }
+  if (!currentOrgId.value) {
+    ElMessage.warning('未选择机构');
+    return;
+  }
+  const payload = buildSavePayload(true);
+  if (isCreateMode.value) {
+    await createInventoryCheckApi('inventory-checks', payload, currentOrgId.value);
+  } else if (routeId.value != null) {
+    await updateInventoryCheckApi('inventory-checks', routeId.value, payload, currentOrgId.value);
+  }
+  ElMessage.success(`${isEditMode.value ? '编辑' : '新增'}盘点单成功`);
   router.push('/inventory/inventory-checks');
 };
 
@@ -862,15 +912,11 @@ watch(
         <h3 class="form-section-title">盘点明细</h3>
         <div class="table-toolbar">
           <el-button v-for="action in [
-            '导出盘点物品',
-            '导入盘点结果',
-            '通过模板新建',
+            '选择盘点物品',
+            '新增空行',
             '移除账面数为 0 的物品',
             '实盘数设置为账面数',
             '实盘数设置为 0',
-            '添加有账未盘物品',
-            '加工品盘点',
-            '加工品导入',
             '排序',
           ]" :key="action" :disabled="isReadonlyMode" @click="handleToolbarAction(action)">
             {{ action }}
@@ -886,7 +932,11 @@ watch(
             </template>
           </el-table-column>
           <el-table-column label="物品编码" min-width="170">
-            <template #default="{ row }">{{ row.itemCode || '-' }}</template>
+            <template #default="{ row, $index }">
+              <el-button text class="item-code-trigger" :disabled="isReadonlyMode" @click="openItemSelector($index)">
+                {{ row.itemCode || '点击选择物品' }}
+              </el-button>
+            </template>
           </el-table-column>
           <el-table-column label="物品名称" min-width="130">
             <template #default="{ row }">{{ row.itemName || '-' }}</template>
@@ -1003,8 +1053,8 @@ watch(
       @node-change="handleItemNodeChange"
       @selection-change="handleItemSelectionChange"
       @clear-selection="handleItemClear"
-      @page-change="(page) => { itemSelectorCurrentPage = page; loadItemCandidates(); }"
-      @page-size-change="(size) => { itemSelectorPageSize = size; itemSelectorCurrentPage = 1; loadItemCandidates(); }"
+      @page-change="handleItemSelectorPageChange"
+      @page-size-change="handleItemSelectorPageSizeChange"
       @confirm="handleItemSelectorConfirm"
     />
   </div>
@@ -1042,6 +1092,13 @@ watch(
 .inventory-check-item-table :deep(.common-number-input),
 .inventory-check-item-table :deep(.el-select__wrapper) {
   min-height: 24px;
+}
+
+.item-code-trigger {
+  padding: 0;
+  justify-content: flex-start;
+  color: #2563eb;
+  font-weight: 500;
 }
 
 .abnormal-flag {
