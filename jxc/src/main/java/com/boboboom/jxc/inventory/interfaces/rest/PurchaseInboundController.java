@@ -136,7 +136,24 @@ public class PurchaseInboundController {
         return CodeDataResponse.ok(purchaseInboundApplicationService.createPurchaseInbound(orgId, request));
     }
 
-    @GetMapping("/purchase-inbound/{id}")
+    /**
+     * 查询库存余额列表。
+     *
+     * @param warehouse 仓库
+     * @param itemName 商品名称
+     * @param orgId 机构标识
+     * @return 库存余额列表
+     */
+    @GetMapping("/balances")
+    public CodeDataResponse<PageData<InventoryBalanceRow>> listBalances(@RequestParam(defaultValue = "1") Integer pageNum,
+                                                                        @RequestParam(defaultValue = "10") Integer pageSize,
+                                                                        @RequestParam(required = false) String warehouse,
+                                                                        @RequestParam(required = false) String itemName,
+                                                                        @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(purchaseInboundApplicationService.listBalances(pageNum, pageSize, warehouse, itemName, orgId));
+    }
+
+    @GetMapping("/purchase-inbound/{id:\\d+}")
     /**
      * 查询采购入库单详情。
      *
@@ -157,7 +174,7 @@ public class PurchaseInboundController {
      * @param request 更新请求
      * @return 空响应
      */
-    @PutMapping("/purchase-inbound/{id}")
+    @PutMapping("/purchase-inbound/{id:\\d+}")
     @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> updatePurchaseInbound(@PathVariable Long id,
                                                         @RequestParam(required = false) String orgId,
@@ -166,7 +183,7 @@ public class PurchaseInboundController {
         return CodeDataResponse.ok();
     }
 
-    @DeleteMapping("/purchase-inbound/{id}")
+    @DeleteMapping("/purchase-inbound/{id:\\d+}")
     @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 删除采购入库单。
@@ -224,22 +241,5 @@ public class PurchaseInboundController {
                                                   @Valid @RequestBody PurchaseInboundBatchRequest request) {
         purchaseInboundApplicationService.batchUnapprove(orgId, request);
         return CodeDataResponse.ok();
-    }
-
-    /**
-     * 查询库存余额列表。
-     *
-     * @param warehouse 仓库
-     * @param itemName 商品名称
-     * @param orgId 机构标识
-     * @return 库存余额列表
-     */
-    @GetMapping("/balances")
-    public CodeDataResponse<PageData<InventoryBalanceRow>> listBalances(@RequestParam(defaultValue = "1") Integer pageNum,
-                                                                        @RequestParam(defaultValue = "10") Integer pageSize,
-                                                                        @RequestParam(required = false) String warehouse,
-                                                                        @RequestParam(required = false) String itemName,
-                                                                        @RequestParam(required = false) String orgId) {
-        return CodeDataResponse.ok(purchaseInboundApplicationService.listBalances(pageNum, pageSize, warehouse, itemName, orgId));
     }
 }
