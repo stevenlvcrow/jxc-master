@@ -664,7 +664,7 @@ export type InventoryCheckPermission = {
   canUnapprove: boolean;
 };
 
-const inventoryCheckBasePath = (documentType: 'inventory-checks' | 'multi-inventory-checks') => `/api/inventory/${documentType}`;
+const inventoryCheckBasePath = (documentType: 'inventory-checks' | 'multi-inventory-checks') => `/api/inventory/checks/${documentType}`;
 
 export const fetchInventoryCheckPageApi = (
   documentType: 'inventory-checks' | 'multi-inventory-checks',

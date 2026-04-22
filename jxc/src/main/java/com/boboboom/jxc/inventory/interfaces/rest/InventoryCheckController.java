@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Validated
 @RestController
-@RequestMapping("/api/inventory")
+@RequestMapping("/api/inventory/checks")
 public class InventoryCheckController {
 
     private final InventoryCheckApplicationService inventoryCheckApplicationService;
