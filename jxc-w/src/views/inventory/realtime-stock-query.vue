@@ -89,6 +89,7 @@ const query = reactive({
 });
 
 const loading = ref(false);
+const exportLoading = ref(false);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
@@ -168,6 +169,7 @@ const formatCell = (value: unknown) => {
   }
   return String(value ?? '-');
 };
+const toCsvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 const isTruthyFilter = (value: string) => ['1', 'true', '是', 'yes', 'y'].includes(value.trim().toLowerCase());
 
 const fetchAllPages = async <T,>(
@@ -473,6 +475,75 @@ const handleSearch = async () => {
   await buildReportRows();
 };
 
+const handleExport = async () => {
+  exportLoading.value = true;
+  try {
+    const rows = filteredRows.value;
+    const headers = isWarehouseDimension.value
+      ? ['物品编码', '物品名称', '规格型号', '物品类别', '统计类型', '单位', '与基准单位的换算率', '物品体积', '物品重量', '仓库', '库存量', '库存金额', '库存金额（不含税）', '库存税额', '库存均价（不含税）', '预计入库量', '预计出库量', '理论库存量', '理论库存金额', 'D+1 理论库存量', 'D+2 理论库存量']
+      : ['物品编码', '物品名称', '规格型号', '物品类别', '统计类型', '单位', '与基准单位的换算率', '物品体积', '物品重量', '库存量', '库存金额', '库存金额（不含税）', '库存税额', '库存均价（不含税）', '预计入库量', '预计出库量', '理论库存量', '理论库存金额'];
+    const lines = [headers.map(toCsvCell).join(',')];
+    rows.forEach((row) => {
+      const cells = isWarehouseDimension.value
+        ? [
+            row.itemCode,
+            row.itemName,
+            row.spec,
+            row.category,
+            row.statType,
+            row.unit,
+            row.unitRateText,
+            formatNumber(row.volume),
+            formatNumber(row.weight),
+            row.warehouseName,
+            formatNumber(row.stockQty, 4),
+            formatMoney(row.stockAmount),
+            formatMoney(row.stockAmountExTax),
+            formatMoney(row.taxAmount),
+            formatMoney(row.avgPriceExTax),
+            formatNumber(row.expectedInboundQty, 4),
+            formatNumber(row.expectedOutboundQty, 4),
+            formatNumber(row.theoreticalQty, 4),
+            formatMoney(row.theoreticalAmount),
+            formatNumber(row.d1TheoreticalQty, 4),
+            formatNumber(row.d2TheoreticalQty, 4),
+          ]
+        : [
+            row.itemCode,
+            row.itemName,
+            row.spec,
+            row.category,
+            row.statType,
+            row.unit,
+            row.unitRateText,
+            formatNumber(row.volume),
+            formatNumber(row.weight),
+            formatNumber(row.stockQty, 4),
+            formatMoney(row.stockAmount),
+            formatMoney(row.stockAmountExTax),
+            formatMoney(row.taxAmount),
+            formatMoney(row.avgPriceExTax),
+            formatNumber(row.expectedInboundQty, 4),
+            formatNumber(row.expectedOutboundQty, 4),
+            formatNumber(row.theoreticalQty, 4),
+            formatMoney(row.theoreticalAmount),
+          ];
+      lines.push(cells.map(toCsvCell).join(','));
+    });
+    const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = '实时库存查询表.csv';
+    document.body.appendChild(link);
+    link.click();
+    URL.revokeObjectURL(link.href);
+    document.body.removeChild(link);
+    ElMessage.success('导出成功');
+  } finally {
+    exportLoading.value = false;
+  }
+};
+
 const handleReset = async () => {
   query.dimension = '物品维度';
   query.warehouse = '';
@@ -590,6 +661,9 @@ onMounted(async () => {
         <el-button type="primary" :loading="loading" @click="handleSearch">
           <el-icon><Search /></el-icon>
           查询
+        </el-button>
+        <el-button :loading="exportLoading" @click="handleExport">
+          导出
         </el-button>
         <el-button @click="handleReset">
           <el-icon><RefreshRight /></el-icon>
