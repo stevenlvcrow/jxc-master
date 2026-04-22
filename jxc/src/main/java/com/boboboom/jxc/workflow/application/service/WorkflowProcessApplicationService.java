@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 public class WorkflowProcessApplicationService {
@@ -41,6 +42,15 @@ public class WorkflowProcessApplicationService {
     private static final String SCOPE_STORE = "STORE";
     private static final Set<String> PROTECTED_PROCESS_CODES = InventoryDocumentType.workflowTypes().stream()
             .map(InventoryDocumentType::getBusinessCode)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+    private static final Set<String> BUILT_IN_EXTRA_PROCESS_CODES = Stream.of(
+            "INVENTORY_CHECK",
+            "MULTI_INVENTORY_CHECK"
+    ).collect(Collectors.toUnmodifiableSet());
+    private static final Set<String> ALL_PROTECTED_PROCESS_CODES = Stream.concat(
+            PROTECTED_PROCESS_CODES.stream(),
+            BUILT_IN_EXTRA_PROCESS_CODES.stream()
+    )
             .collect(Collectors.toUnmodifiableSet());
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
@@ -203,7 +213,7 @@ public class WorkflowProcessApplicationService {
     public void delete(Long id, String orgId) {
         Long groupId = resolveGroupScope(orgId);
         WorkflowProcessRegistryDO row = requireProcess(id, groupId);
-        if (PROTECTED_PROCESS_CODES.contains(row.getProcessCode())) {
+        if (ALL_PROTECTED_PROCESS_CODES.contains(row.getProcessCode())) {
             throw new BusinessException("内置流程业务不允许删除");
         }
         processStoreBindingRepository.deleteByGroupAndProcessRegistryId(groupId, row.getId());

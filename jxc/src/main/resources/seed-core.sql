@@ -280,7 +280,9 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('OTHER_OUTBOUND', '其他出库流程'),
         ('PRODUCTION_INBOUND', '生产入库流程'),
         ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
-        ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程')
+        ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
+        ('INVENTORY_CHECK', '盘点单流程'),
+        ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
 )
 INSERT INTO workflow_process_registry (scope_type, scope_id, process_code, business_name, created_by, updated_by)
 SELECT 'GROUP',

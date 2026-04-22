@@ -344,4 +344,6 @@ export const workflowBusinessOptions = [
   { processCode: 'PRODUCTION_INBOUND', businessName: '生产入库流程' },
   { processCode: 'CUSTOMER_SALES_OUTBOUND', businessName: '客户销售出库流程' },
   { processCode: 'CUSTOMER_RETURN_INBOUND', businessName: '客户退货入库流程' },
+  { processCode: 'INVENTORY_CHECK', businessName: '盘点单流程' },
+  { processCode: 'MULTI_INVENTORY_CHECK', businessName: '多人盘点单流程' },
 ];
