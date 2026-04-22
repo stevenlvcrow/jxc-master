@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
+import { Download } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
 import CommonNumberInput from '@/components/CommonNumberInput.vue';
@@ -173,6 +174,8 @@ const form = reactive({
   checkDate: '',
   checkType: '指定物品' as CheckTypeOption,
   summaryUnit: '库存单位' as UnitOption,
+  freezeStock: false,
+  collaborativeFlag: false,
   thirdPartyDocument: '--',
   salesmanUserId: undefined as number | undefined,
   salesmanName: '',
@@ -252,6 +255,8 @@ const syncRowDerived = (row: InventoryCheckItemRow) => {
 const totalActualAmount = computed(() => rows.value.reduce((sum, row) => sum + (row.actualAmount ?? 0), 0));
 const totalBookAmount = computed(() => rows.value.reduce((sum, row) => sum + (row.bookAmount ?? 0), 0));
 const totalDiffQty = computed(() => rows.value.reduce((sum, row) => sum + (row.profitQty ?? 0) - (row.lossQty ?? 0), 0));
+const autoFillLoading = ref(false);
+const exportLoading = ref(false);
 
 const resolveOrgId = () => {
   return currentOrgId.value;
@@ -290,6 +295,8 @@ const resetForm = () => {
   form.checkDate = '';
   form.checkType = '指定物品';
   form.summaryUnit = '库存单位';
+  form.freezeStock = false;
+  form.collaborativeFlag = false;
   form.thirdPartyDocument = '--';
   form.salesmanUserId = undefined;
   form.salesmanName = '';
@@ -398,6 +405,49 @@ const loadItemCandidates = async () => {
   }
 };
 
+const fetchAllPages = async <T>(loader: (pageNum: number, pageSize: number) => Promise<{ list: T[]; total: number; pageSize: number }>) => {
+  const collected: T[] = [];
+  let pageNum = 1;
+  let totalCount = 0;
+  do {
+    const page = await loader(pageNum, 200);
+    const list = Array.isArray(page.list) ? page.list : [];
+    collected.push(...list);
+    totalCount = Number(page.total ?? collected.length);
+    if (!list.length || Number(page.pageSize ?? 0) <= 0) {
+      break;
+    }
+    pageNum += 1;
+  } while (collected.length < totalCount);
+  return collected;
+};
+
+const fetchAllItems = async () => fetchAllPages<ItemCandidate>(async (pageNum, pageSizeValue) => {
+  const page = await fetchItemsApi({
+    pageNo: pageNum,
+    pageSize: pageSizeValue,
+    status: '启用',
+  }, resolveOrgId());
+  return {
+    list: page.list.map(mapItemCandidate),
+    total: Number(page.total ?? 0),
+    pageSize: Number(page.pageSize ?? pageSizeValue),
+  };
+});
+
+const fetchAllBalances = async () => fetchAllPages<ApiInventoryBalanceRow>(async (pageNum, pageSizeValue) => {
+  const page = await fetchInventoryBalancesApi({
+    pageNum,
+    pageSize: pageSizeValue,
+    warehouse: form.warehouseName,
+  }, resolveOrgId());
+  return {
+    list: page.list,
+    total: Number(page.total ?? 0),
+    pageSize: Number(page.pageSize ?? pageSizeValue),
+  };
+});
+
 const parseNumberOrNull = (value: string | number | null | undefined) => {
   if (value == null) {
     return null;
@@ -414,17 +464,47 @@ const loadBookSnapshot = async (item: ItemCandidate) => {
       bookPrice: parseNumberOrNull(item.productionCost),
     };
   }
-  const result = await fetchInventoryBalancesApi({
-    pageNum: 1,
-    pageSize: 100,
-    warehouse: form.warehouseName,
-    itemName: item.name,
-  }, orgId);
-  const matched = result.list.find((row: ApiInventoryBalanceRow) => row.itemCode === item.code);
+  const balances = await fetchAllBalances();
+  const matched = balances.find((row: ApiInventoryBalanceRow) => row.itemCode === item.code);
   return {
     bookQty: parseNumberOrNull(matched?.quantity ?? null),
     bookPrice: parseNumberOrNull(item.productionCost),
   };
+};
+
+const loadFullWarehouseRows = async () => {
+  if (form.checkType !== '全仓盘点') {
+    return;
+  }
+  if (!form.warehouseName) {
+    ElMessage.warning('请选择仓库');
+    return;
+  }
+  autoFillLoading.value = true;
+  try {
+    const [balances, items] = await Promise.all([fetchAllBalances(), fetchAllItems()]);
+    const itemMap = new Map(items.map((item) => [item.code, item]));
+    const nextRows = balances.map((balance, index) => {
+      const matched = itemMap.get(balance.itemCode);
+      const row = createEmptyRow(index + 1);
+      row.itemCode = balance.itemCode;
+      row.itemName = balance.itemName || matched?.name || '';
+      row.spec = matched?.spec || '';
+      row.category = matched?.category || '';
+      row.unit1 = matched?.stockUnit || '';
+      row.actualTotalUnit = row.unit1;
+      row.bookQty = parseNumberOrNull(balance.quantity);
+      row.bookPrice = parseNumberOrNull(matched?.productionCost);
+      row.unit1ActualQty = row.bookQty;
+      syncRowDerived(row);
+      return row;
+    });
+    rows.value = nextRows.length ? nextRows : [createEmptyRow(rowSeed.value++)];
+    rowSeed.value = rows.value.length + 1;
+    ElMessage.success('已按全仓盘点自动装载账面库存');
+  } finally {
+    autoFillLoading.value = false;
+  }
 };
 
 const applyItemToRow = async (row: InventoryCheckItemRow, item: ItemCandidate) => {
@@ -439,6 +519,50 @@ const applyItemToRow = async (row: InventoryCheckItemRow, item: ItemCandidate) =
   row.bookPrice = snapshot.bookPrice;
   row.unit1ActualQty = null;
   syncRowDerived(row);
+};
+
+const toCsvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+const handleExportBookList = () => {
+  if (!rows.value.length) {
+    ElMessage.warning('请先加载盘点明细');
+    return;
+  }
+  exportLoading.value = true;
+  try {
+    const lines = [
+      ['物品编码', '物品名称', '规格型号', '物品类别', '单位', '账面数', '账面单价', '实盘数', '盘盈数量', '盘亏数量', '盈亏原因', '备注']
+        .map(toCsvCell)
+        .join(','),
+    ];
+    rows.value.forEach((row) => {
+      lines.push([
+        row.itemCode,
+        row.itemName,
+        row.spec,
+        row.category,
+        row.unit1,
+        row.bookQty ?? '',
+        row.bookPrice ?? '',
+        row.unit1ActualQty ?? '',
+        row.profitQty ?? '',
+        row.lossQty ?? '',
+        row.profitLossReason,
+        row.remark,
+      ].map(toCsvCell).join(','));
+    });
+    const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `盘点账面清单-${form.warehouseName || '未命名'}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    URL.revokeObjectURL(link.href);
+    document.body.removeChild(link);
+    ElMessage.success('导出成功');
+  } finally {
+    exportLoading.value = false;
+  }
 };
 
 const appendItems = async (items: ItemCandidate[]) => {
@@ -469,6 +593,8 @@ const applyDetail = (detail: InventoryCheckDetail) => {
   form.checkDate = detail.checkDate;
   form.checkType = checkRangeTypeLabelMap[detail.checkRangeType] ?? '指定物品';
   form.summaryUnit = '库存单位';
+  form.freezeStock = detail.freezeStock;
+  form.collaborativeFlag = detail.collaborativeFlag;
   form.thirdPartyDocument = detail.thirdPartyDocument || '--';
   form.salesmanName = detail.salesmanName;
   form.salesmanUserId = detail.salesmanUserId ?? salesmanOptions.value.find((item) => item.realName === detail.salesmanName)?.userId;
@@ -555,6 +681,16 @@ const scrollToSection = (key: string) => {
 const handleWarehouseChange = (warehouseId: number) => {
   const matched = warehouseOptions.value.find((item) => item.id === warehouseId);
   form.warehouseName = matched?.name ?? '';
+  if (form.checkType === '全仓盘点') {
+    void loadFullWarehouseRows();
+  }
+};
+
+const handleCheckTypeChange = (checkType: CheckTypeOption) => {
+  form.checkType = checkType;
+  if (checkType === '全仓盘点' && form.warehouseName) {
+    void loadFullWarehouseRows();
+  }
 };
 
 const handleSalesmanChange = (salesmanUserId: number) => {
@@ -651,6 +787,10 @@ const handleItemSelectorConfirm = (selectedRows: Array<Record<string, unknown>>)
 };
 
 const handleToolbarAction = async (action: string) => {
+  if (action === '导出账面清单') {
+    handleExportBookList();
+    return;
+  }
   if (isReadonlyMode.value) {
     return;
   }
@@ -726,8 +866,8 @@ const buildSavePayload = (submitted: boolean): InventoryCheckSavePayload => ({
   checkDate: form.checkDate,
   warehouseName: form.warehouseName,
   checkRangeType: checkRangeTypeCodeMap[form.checkType],
-  freezeStock: false,
-  collaborativeFlag: false,
+  freezeStock: form.freezeStock,
+  collaborativeFlag: form.collaborativeFlag,
   planName: form.planName,
   thirdPartyDocument: form.thirdPartyDocument,
   salesmanUserId: form.salesmanUserId,
@@ -860,7 +1000,7 @@ watch(
               />
             </el-form-item>
             <el-form-item label="盘点类型">
-              <el-select v-model="form.checkType" style="width: 100%" :disabled="isReadonlyMode">
+              <el-select v-model="form.checkType" style="width: 100%" :disabled="isReadonlyMode" @change="handleCheckTypeChange">
                 <el-option
                   v-for="option in checkTypeOptions"
                   :key="option"
@@ -878,6 +1018,12 @@ watch(
                   :value="option"
                 />
               </el-select>
+            </el-form-item>
+            <el-form-item label="冻结库存">
+              <el-switch v-model="form.freezeStock" :disabled="isReadonlyMode" active-text="冻结" inactive-text="不冻结" />
+            </el-form-item>
+            <el-form-item label="协同盘点">
+              <el-switch v-model="form.collaborativeFlag" :disabled="isReadonlyMode" active-text="启用" inactive-text="关闭" />
             </el-form-item>
             <el-form-item label="第三方单据">
               <div class="readonly-field">{{ form.thirdPartyDocument }}</div>
@@ -920,6 +1066,10 @@ watch(
             '排序',
           ]" :key="action" :disabled="isReadonlyMode" @click="handleToolbarAction(action)">
             {{ action }}
+          </el-button>
+          <el-button :loading="exportLoading" @click="handleToolbarAction('导出账面清单')">
+            <el-icon><Download /></el-icon>
+            导出账面清单
           </el-button>
         </div>
 

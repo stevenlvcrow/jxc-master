@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ArrowDown, Delete, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
+import { ArrowDown, Delete, Download, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import {
@@ -81,6 +81,7 @@ const query = reactive({
 });
 
 const loading = ref(false);
+const exportLoading = ref(false);
 const rows = ref<InventoryCheckRow[]>([]);
 const total = ref(0);
 const currentPage = ref(1);
@@ -147,6 +148,88 @@ const loadRows = async () => {
     ElMessage.error('多人盘点单列表加载失败');
   } finally {
     loading.value = false;
+  }
+};
+
+const fetchAllPages = async <T>(loader: (pageNum: number, pageSizeValue: number) => Promise<{ list: T[]; total: number; pageSize: number }>) => {
+  const collected: T[] = [];
+  let pageNum = 1;
+  let totalCount = 0;
+  do {
+    const page = await loader(pageNum, 200);
+    const list = Array.isArray(page.list) ? page.list : [];
+    collected.push(...list);
+    totalCount = Number(page.total ?? collected.length);
+    if (!list.length || Number(page.pageSize ?? 0) <= 0) {
+      break;
+    }
+    pageNum += 1;
+  } while (collected.length < totalCount);
+  return collected;
+};
+
+const toCsvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+const handleExport = async () => {
+  if (!orgId.value) {
+    ElMessage.warning('未选择机构');
+    return;
+  }
+  exportLoading.value = true;
+  try {
+    const exportRows = await fetchAllPages<InventoryCheckRow>(async (pageNum, pageSizeValue) => {
+      const page = await fetchInventoryCheckPageApi('multi-inventory-checks', {
+        pageNum,
+        pageSize: pageSizeValue,
+        timeType: query.timeType,
+        startDate: query.startDate || undefined,
+        endDate: query.endDate || undefined,
+        documentCode: query.documentCode || undefined,
+        warehouse: query.warehouse || undefined,
+        itemName: query.itemName || undefined,
+        status: query.status || undefined,
+        checkRangeType: query.checkRangeType || undefined,
+        printStatus: query.printStatus || undefined,
+        generatedStatus: query.generatedStatus || undefined,
+        remark: query.remark || undefined,
+      }, orgId.value);
+      return {
+        list: page.list,
+        total: Number(page.total ?? 0),
+        pageSize: Number(page.pageSize ?? pageSizeValue),
+      };
+    });
+    const lines = [
+      ['单据编号', '盘点日期', '仓库', '物品数', '状态', '审核日期', '生成状态', '打印状态', '创建时间', '创建人', '备注']
+        .map(toCsvCell)
+        .join(','),
+    ];
+    exportRows.forEach((row) => {
+      lines.push([
+        row.documentCode,
+        row.checkDate,
+        row.warehouseName,
+        row.itemCount,
+        statusLabelMap.value[row.status] ?? row.status,
+        row.auditDate,
+        generatedStatusLabelMap.value[row.generatedStatus] ?? row.generatedStatus,
+        printStatusLabelMap.value[row.printStatus] ?? row.printStatus,
+        row.createdAt,
+        row.creator,
+        row.remark,
+      ].map(toCsvCell).join(','));
+    });
+    const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = '多人盘点单列表.csv';
+    document.body.appendChild(link);
+    link.click();
+    URL.revokeObjectURL(link.href);
+    document.body.removeChild(link);
+    ElMessage.success('导出成功');
+  } finally {
+    exportLoading.value = false;
   }
 };
 
@@ -376,6 +459,10 @@ onMounted(() => {
       <el-button v-if="permissions.canApprove" @click="handleToolbarAction('批量提交')">批量提交</el-button>
       <el-button v-if="permissions.canApprove" @click="handleToolbarAction('批量审核')">批量审核</el-button>
       <el-button v-if="permissions.canUnapprove" @click="handleToolbarAction('批量反审核')">批量反审核</el-button>
+      <el-button :loading="exportLoading" @click="handleExport">
+        <el-icon><Download /></el-icon>
+        导出
+      </el-button>
       <el-dropdown>
         <el-button>
           表格设置
