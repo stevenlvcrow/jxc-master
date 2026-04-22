@@ -1,6 +1,7 @@
 package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
 import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
@@ -21,7 +22,6 @@ public class UserRoleAssignmentService {
 
     private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
     private static final String ADMIN_USERNAME = "admin";
-    private static final String STATUS_ENABLED = "ENABLED";
     private static final String SCOPE_PLATFORM = "PLATFORM";
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
@@ -29,13 +29,16 @@ public class UserRoleAssignmentService {
     private final RoleRepository roleRepository;
     private final UserAccountRepository userAccountRepository;
     private final UserRoleRelRepository userRoleRelRepository;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public UserRoleAssignmentService(RoleRepository roleRepository,
                                      UserAccountRepository userAccountRepository,
-                                     UserRoleRelRepository userRoleRelRepository) {
+                                     UserRoleRelRepository userRoleRelRepository,
+                                     DictionaryLookupService dictionaryLookupService) {
         this.roleRepository = roleRepository;
         this.userAccountRepository = userAccountRepository;
         this.userRoleRelRepository = userRoleRelRepository;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public void assignUserRoles(Long targetUserId,
@@ -87,7 +90,7 @@ public class UserRoleAssignmentService {
             rel.setScopeType(scopeType);
             rel.setScopeId(scopeId);
             rel.setAssignedBy(operatorId);
-            rel.setStatus(STATUS_ENABLED);
+            rel.setStatus(enabledStatus());
             toInsert.add(rel);
         }
 
@@ -179,7 +182,7 @@ public class UserRoleAssignmentService {
             throw new BusinessException("当前账号无该用户操作权限");
         }
 
-        Long matched = userRoleRelRepository.countByUserAndScopedRoles(targetUserId, STATUS_ENABLED, managedGroupIds, managedStoreIds);
+        Long matched = userRoleRelRepository.countByUserAndScopedRoles(targetUserId, enabledStatus(), managedGroupIds, managedStoreIds);
         if (matched == null || matched == 0) {
             throw new BusinessException("当前账号无该用户操作权限");
         }
@@ -189,7 +192,7 @@ public class UserRoleAssignmentService {
         if (userId == null) {
             return false;
         }
-        Long count = userRoleRelRepository.countByUserIdAndStatus(userId, STATUS_ENABLED);
+        Long count = userRoleRelRepository.countByUserIdAndStatus(userId, enabledStatus());
         return count != null && count > 0;
     }
 
@@ -221,5 +224,9 @@ public class UserRoleAssignmentService {
             return SCOPE_STORE + ":" + String.valueOf(scopeId);
         }
         return String.valueOf(roleId) + ":" + scopeType + ":" + String.valueOf(scopeId);
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
     }
 }

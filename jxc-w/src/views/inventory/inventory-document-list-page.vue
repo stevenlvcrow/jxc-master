@@ -18,12 +18,22 @@ import { fetchStoreWarehousesApi, type WarehouseRow } from '@/api/modules/wareho
 import { useSessionStore } from '@/stores/session';
 import type { InventoryDocumentListColumn, InventoryDocumentMeta } from '@/views/inventory/document-meta';
 import { normalizeOrgId, parseStoreId } from '@/utils/org';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 const props = defineProps<{
   meta: InventoryDocumentMeta;
 }>();
 
 const sessionStore = useSessionStore();
+const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
+const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT]);
+const inventoryStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const submittedStatus = computed(() => (
+  inventoryStatusOptions.value.find((item) => item.itemKey === 'SUBMITTED')?.itemCode ?? '已提交'
+));
+const approvedStatus = computed(() => (
+  inventoryStatusOptions.value.find((item) => item.itemKey === 'APPROVED')?.itemCode ?? '已审核'
+));
 const router = useRouter();
 const loading = ref(false);
 const currentPage = ref(1);
@@ -51,6 +61,7 @@ const query = reactive({
 const orgId = computed(() => normalizeOrgId(sessionStore.currentOrgId) || undefined);
 const tableHeight = computed(() => props.meta.listTableHeight ?? 350);
 const showToolbar = computed(() => props.meta.showToolbar !== false);
+const isWarehouseOpeningBalance = computed(() => props.meta.type === 'warehouse-opening-balance');
 const primaryQueryUsesSelect = computed(() => props.meta.listPrimaryQueryKind === 'select');
 const visibleQueryFields = computed(() => props.meta.listQueryFields ?? [
   'dateRange',
@@ -60,11 +71,22 @@ const visibleQueryFields = computed(() => props.meta.listQueryFields ?? [
   'status',
   'remark',
 ]);
-const statusOptions = computed(() => props.meta.listStatusOptions ?? [
-  { label: '草稿', value: '草稿' },
-  { label: '已提交', value: '已提交' },
-  { label: '已审核', value: '已审核' },
-]);
+const statusOptions = computed(() => {
+  if (isWarehouseOpeningBalance.value) {
+    return [
+      { label: '待确认', value: submittedStatus.value },
+      { label: '已完成', value: approvedStatus.value },
+      { label: '待初始化', value: 'UNINITIALIZED' },
+    ];
+  }
+  if (props.meta.listStatusOptions) {
+    return props.meta.listStatusOptions;
+  }
+  return inventoryStatusOptions.value.map((item) => ({
+    label: item.itemLabel,
+    value: item.itemCode,
+  }));
+});
 const showSelectionColumn = computed(() =>
   showToolbar.value && (permissions.canDelete || permissions.canApprove || permissions.canUnapprove),
 );
@@ -75,7 +97,16 @@ const warehouseCodeByName = computed<Record<string, string>>(() =>
     return result;
   }, {}),
 );
-const statusLabelMap = computed(() => props.meta.listStatusLabelMap ?? {});
+const statusLabelMap = computed(() => {
+  if (isWarehouseOpeningBalance.value) {
+    return {
+      UNINITIALIZED: '待初始化',
+      [submittedStatus.value]: '待确认',
+      [approvedStatus.value]: '已完成',
+    };
+  }
+  return props.meta.listStatusLabelMap ?? {};
+});
 const defaultColumns = computed<InventoryDocumentListColumn[]>(() => {
   const columns: InventoryDocumentListColumn[] = [
     { key: 'documentCode', label: '单据编号', prop: 'documentCode', minWidth: 150 },
@@ -100,7 +131,6 @@ const defaultColumns = computed<InventoryDocumentListColumn[]>(() => {
   return columns;
 });
 const resolvedColumns = computed(() => props.meta.listColumns ?? defaultColumns.value);
-const isWarehouseOpeningBalance = computed(() => props.meta.type === 'warehouse-opening-balance');
 const canConfirmCurrentType = computed(() => isWarehouseOpeningBalance.value || permissions.canApprove);
 const showSummary = computed(() => props.meta.showSummary === true);
 const summaryFields = computed(() => new Set(props.meta.summaryFields ?? []));
@@ -478,7 +508,7 @@ onMounted(() => {
               >
                 添加期初
               </el-button>
-              <template v-else-if="row.status === '已提交'">
+              <template v-else-if="row.status === submittedStatus">
                 <el-button v-if="permissions.canUpdate" text @click="handleEdit(row)">编辑</el-button>
                 <el-button v-if="permissions.canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
                 <el-button v-if="canConfirmCurrentType" text type="primary" @click="handleApprove(row)">确认期初</el-button>

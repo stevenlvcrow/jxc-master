@@ -70,6 +70,7 @@ record MenuAdminView(Long id,
                      Long parentId,
                      String menuType,
                      String routePath,
+                     String componentKey,
                      String permissionCode,
                      String status,
                      Integer sortNo) {

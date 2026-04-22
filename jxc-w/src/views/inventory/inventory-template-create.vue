@@ -181,7 +181,7 @@ const removeRow = (index: number) => {
   rows.value.splice(index, 1);
 };
 
-const openDialog = () => {
+const _openDialog = () => {
   dialogSelectedCodes.value = [];
   dialogVisible.value = true;
 };
@@ -243,7 +243,7 @@ const scrollToSection = (key: string) => {
 };
 
 const handleBack = () => {
-  router.push('/inventory/5/1');
+  router.push('/inventory/inventory-templates');
 };
 
 const handleSaveDraft = () => {
@@ -260,7 +260,7 @@ const handleSave = () => {
     return;
   }
   ElMessage.success('库存模板保存成功');
-  router.push('/inventory/5/1');
+  router.push('/inventory/inventory-templates');
 };
 </script>
 
@@ -301,7 +301,6 @@ const handleSave = () => {
       <div ref="contentSectionRef" class="form-section-block">
         <h3 class="form-section-title">模板内容</h3>
         <div class="table-toolbar">
-          <el-button @click="openDialog">添加物品</el-button>
           <el-button @click="handleImport">导入物品</el-button>
         </div>
 

@@ -19,7 +19,7 @@ withDefaults(defineProps<{
   primaryActionText: '保存',
   secondaryActionText: '保存草稿',
   showPrimaryAction: true,
-  showSecondaryAction: true,
+  showSecondaryAction: false,
 });
 
 const emit = defineEmits<{

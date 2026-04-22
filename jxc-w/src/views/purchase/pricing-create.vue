@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import { useSessionStore } from '@/stores/session';
+import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 
 type PricingItemRow = {
   id: number;
@@ -24,6 +26,7 @@ type PricingItemRow = {
 };
 
 const router = useRouter();
+const sessionStore = useSessionStore();
 const activeNav = ref('basic');
 const basicSectionRef = ref<HTMLElement | null>(null);
 const itemSectionRef = ref<HTMLElement | null>(null);
@@ -70,7 +73,6 @@ const sectionNavs = [
 ];
 
 const pricingTypeOptions = ['通用', '非通用'];
-const supplierOptions = ['鲜达食品', '优选农场', '沪上冷链', '盒马包材'];
 const attachmentTree = [
   {
     value: 'contract-root',
@@ -81,6 +83,11 @@ const attachmentTree = [
     ],
   },
 ];
+
+const {
+  supplierOptions,
+  loadSupplierOptions,
+} = useSupplierArchiveOptions();
 
 const form = reactive({
   pricingName: '',
@@ -120,7 +127,7 @@ const scrollToSection = (key: string) => {
 };
 
 const handleBack = () => {
-  router.push('/purchase/1/1');
+  router.push('/purchase/pricing');
 };
 
 const handleSaveDraft = () => {
@@ -134,6 +141,17 @@ const handleSave = () => {
 const handleToolbarAction = (action: string) => {
   ElMessage.info(`${action}功能待接入`);
 };
+
+onMounted(() => {
+  void loadSupplierOptions();
+});
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    void loadSupplierOptions();
+  },
+);
 
 const fillDerivedPricingFields = (row: PricingItemRow) => {
   const keyword = row.itemKeyword.trim().toLowerCase();
@@ -252,9 +270,9 @@ const removeItemRow = (index: number) => {
               <el-select v-model="form.supplier" placeholder="请选择供应商" style="width: 100%">
                 <el-option
                   v-for="option in supplierOptions"
-                  :key="option"
-                  :label="option"
-                  :value="option"
+                  :key="option.id"
+                  :label="option.label"
+                  :value="option.value"
                 />
               </el-select>
             </el-form-item>

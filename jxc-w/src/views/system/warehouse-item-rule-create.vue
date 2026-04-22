@@ -344,13 +344,6 @@ const mapCategoryCandidate = (item: ItemCategoryVO): {
   status: item.status,
 });
 
-const applySelectedItem = (row: ItemRow, item: ItemVO) => {
-  row.itemCode = item.code || '';
-  row.itemName = item.name || '';
-  row.specModel = item.spec || '';
-  row.itemCategory = item.category || item.type || '';
-};
-
 const openItemSelector = async (index: number) => {
   selectingItemRowIndex.value = index;
   selectedItemCandidates.value = [];
@@ -552,7 +545,7 @@ const handleSave = async () => {
     await createItemRuleApi(groupId, payload);
     form.updatedAt = nowTime();
     ElMessage.success('仓库物品规则创建成功');
-    router.push({ path: '/archive/7/2', query: { _t: String(Date.now()) } });
+    router.push({ path: '/archive/warehouse-item-rules', query: { _t: String(Date.now()) } });
   } finally {
     saving.value = false;
   }

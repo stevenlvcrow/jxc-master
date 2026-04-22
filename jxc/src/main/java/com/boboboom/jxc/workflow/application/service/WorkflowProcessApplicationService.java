@@ -1,9 +1,11 @@
 package com.boboboom.jxc.workflow.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.inventory.application.service.InventoryDocumentType;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
@@ -37,8 +39,6 @@ public class WorkflowProcessApplicationService {
 
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
-    private static final String ENABLED_STATUS = "ENABLED";
-    private static final String PUBLISHED_STATUS = "PUBLISHED";
     private static final Set<String> PROTECTED_PROCESS_CODES = InventoryDocumentType.workflowTypes().stream()
             .map(InventoryDocumentType::getBusinessCode)
             .collect(Collectors.toUnmodifiableSet());
@@ -49,17 +49,20 @@ public class WorkflowProcessApplicationService {
     private final WorkflowDefinitionConfigRepository configRepository;
     private final StoreRepository storeRepository;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public WorkflowProcessApplicationService(WorkflowProcessRegistryRepository processRegistryRepository,
                                              WorkflowProcessStoreBindingRepository processStoreBindingRepository,
                                              WorkflowDefinitionConfigRepository configRepository,
                                              StoreRepository storeRepository,
-                                             OrgScopeService orgScopeService) {
+                                             OrgScopeService orgScopeService,
+                                             DictionaryLookupService dictionaryLookupService) {
         this.processRegistryRepository = processRegistryRepository;
         this.processStoreBindingRepository = processStoreBindingRepository;
         this.configRepository = configRepository;
         this.storeRepository = storeRepository;
         this.orgScopeService = orgScopeService;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public List<WorkflowProcessView> list(String orgId) {
@@ -102,7 +105,7 @@ public class WorkflowProcessApplicationService {
     public List<StoreOptionView> listStores(String orgId) {
         Long groupId = resolveGroupScope(orgId);
         return storeRepository.findByGroupId(groupId).stream()
-                .filter(item -> ENABLED_STATUS.equals(item.getStatus()))
+                .filter(item -> enabledStatus().equals(item.getStatus()))
                 .sorted(Comparator.comparing(StoreDO::getId))
                 .map(item -> new StoreOptionView(item.getId(), item.getStoreCode(), item.getStoreName()))
                 .toList();
@@ -212,7 +215,7 @@ public class WorkflowProcessApplicationService {
             return;
         }
         Set<Long> existingStoreIds = storeRepository.findByGroupId(groupId).stream()
-                .filter(store -> ENABLED_STATUS.equals(store.getStatus()))
+                .filter(store -> enabledStatus().equals(store.getStatus()))
                 .map(StoreDO::getId)
                 .filter(storeIds::contains)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -244,7 +247,7 @@ public class WorkflowProcessApplicationService {
         if (config == null) {
             throw new BusinessException("流程模板不存在");
         }
-        if (!PUBLISHED_STATUS.equals(config.getStatus())) {
+        if (!publishedStatus().equals(config.getStatus())) {
             throw new BusinessException("未发布的流程模板不能使用，请先发布流程");
         }
     }
@@ -300,6 +303,14 @@ public class WorkflowProcessApplicationService {
             return "";
         }
         return DATETIME_FORMATTER.format(value);
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
+    }
+
+    private String publishedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.WORKFLOW_DEFINITION_STATUS, DictionaryCodes.PUBLISHED);
     }
 
     public record WorkflowProcessView(Long id,

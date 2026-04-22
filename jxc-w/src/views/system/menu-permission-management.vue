@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, type ElTree } from 'element-plus';
 import {
   assignAdminRoleMenusApi,
   fetchAdminMenusApi,
@@ -25,7 +25,7 @@ const roles = ref<RoleAdminItem[]>([]);
 const menus = ref<MenuAdminItem[]>([]);
 const selectedRoleId = ref<number>();
 const checkedMenuIds = ref<number[]>([]);
-const menuTreeRef = ref<any>();
+const menuTreeRef = ref<InstanceType<typeof ElTree>>();
 const route = useRoute();
 const sessionStore = useSessionStore();
 const currentOrgId = computed(() => {

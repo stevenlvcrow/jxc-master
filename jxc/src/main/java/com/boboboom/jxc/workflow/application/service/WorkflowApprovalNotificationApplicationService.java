@@ -9,6 +9,8 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
@@ -94,10 +96,7 @@ public class WorkflowApprovalNotificationApplicationService {
     public long pendingCount(String orgId) {
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, orgId);
-        List<WorkflowApprovalNotificationDO> rows = notificationRepository.findByScopeOrdered(
-                scope.scopeType(),
-                scope.scopeId()
-        );
+        List<WorkflowApprovalNotificationDO> rows = loadAccessibleNotifications(scope);
         if (rows.isEmpty()) {
             return 0L;
         }
@@ -120,10 +119,7 @@ public class WorkflowApprovalNotificationApplicationService {
         );
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
         int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
-        List<WorkflowApprovalNotificationDO> rows = notificationRepository.findByScopeOrdered(
-                scope.scopeType(),
-                scope.scopeId()
-        );
+        List<WorkflowApprovalNotificationDO> rows = loadAccessibleNotifications(scope);
         if (rows.isEmpty()) {
             return new PageData<>(List.of(), 0, safePageNum, safePageSize);
         }
@@ -164,6 +160,43 @@ public class WorkflowApprovalNotificationApplicationService {
 
     private boolean isPendingNotification(WorkflowApprovalNotificationDO row) {
         return row != null && "待审核".equals(row.getResult());
+    }
+
+    private List<WorkflowApprovalNotificationDO> loadAccessibleNotifications(OrgScopeService.AccessibleScope scope) {
+        if (scope == null || scope.scopeType() == null || scope.scopeId() == null) {
+            return List.of();
+        }
+        List<WorkflowApprovalNotificationDO> rows = new ArrayList<>(
+                notificationRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId())
+        );
+        if ("STORE".equalsIgnoreCase(scope.scopeType()) && scope.groupId() != null) {
+            rows.addAll(notificationRepository.findByScopeOrdered(OrgScopeService.SCOPE_GROUP, scope.groupId()));
+        }
+        rows.sort(notificationComparator());
+        return rows;
+    }
+
+    private Comparator<WorkflowApprovalNotificationDO> notificationComparator() {
+        return (left, right) -> {
+            int byAuditedAt = compareDesc(left == null ? null : left.getAuditedAt(), right == null ? null : right.getAuditedAt());
+            if (byAuditedAt != 0) {
+                return byAuditedAt;
+            }
+            return compareDesc(left == null ? null : left.getId(), right == null ? null : right.getId());
+        };
+    }
+
+    private <T extends Comparable<T>> int compareDesc(T left, T right) {
+        if (left == null && right == null) {
+            return 0;
+        }
+        if (left == null) {
+            return 1;
+        }
+        if (right == null) {
+            return -1;
+        }
+        return right.compareTo(left);
     }
 
     private WorkflowActionService.ApprovalTarget toApprovalTarget(WorkflowApprovalNotificationDO row) {

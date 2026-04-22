@@ -1,6 +1,8 @@
 package com.boboboom.jxc.inventory.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.inventory.domain.repository.InventoryDocumentRepository;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
@@ -26,10 +28,6 @@ import java.util.Optional;
 public class InventoryDocumentWorkflowService {
 
     private static final String SCOPE_GROUP = "GROUP";
-    private static final String WORKFLOW_STATUS_NONE = "NONE";
-    private static final String WORKFLOW_STATUS_RUNNING = "RUNNING";
-    private static final String WORKFLOW_STATUS_COMPLETED = "COMPLETED";
-    private static final String WORKFLOW_STATUS_REVOKED = "REVOKED";
     private static final String PENDING_OPERATION_NONE = "NONE";
 
     private final WorkflowBindingResolverService workflowBindingResolverService;
@@ -39,6 +37,7 @@ public class InventoryDocumentWorkflowService {
     private final TaskService taskService;
     private final InventoryDocumentRepository inventoryDocumentRepository;
     private final PurchaseInboundRepository purchaseInboundRepository;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public InventoryDocumentWorkflowService(WorkflowBindingResolverService workflowBindingResolverService,
                                             WorkflowActionService workflowActionService,
@@ -46,7 +45,8 @@ public class InventoryDocumentWorkflowService {
                                             RuntimeService runtimeService,
                                             TaskService taskService,
                                             InventoryDocumentRepository inventoryDocumentRepository,
-                                            PurchaseInboundRepository purchaseInboundRepository) {
+                                            PurchaseInboundRepository purchaseInboundRepository,
+                                            DictionaryLookupService dictionaryLookupService) {
         this.workflowBindingResolverService = workflowBindingResolverService;
         this.workflowActionService = workflowActionService;
         this.repositoryService = repositoryService;
@@ -54,6 +54,7 @@ public class InventoryDocumentWorkflowService {
         this.taskService = taskService;
         this.inventoryDocumentRepository = inventoryDocumentRepository;
         this.purchaseInboundRepository = purchaseInboundRepository;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public boolean hasBusinessOperationPermission(InventoryDocumentType type,
@@ -270,7 +271,7 @@ public class InventoryDocumentWorkflowService {
         header.setWorkflowDefinitionKey(binding.get().processDefinitionKey());
         header.setWorkflowDefinitionId(binding.get().processDefinitionId());
         header.setWorkflowInstanceId(activeInstance.getId());
-        header.setWorkflowStatus(WORKFLOW_STATUS_RUNNING);
+        header.setWorkflowStatus(workflowRunningStatus());
         header.setPendingOperation(StringUtils.hasText(action) ? action : PENDING_OPERATION_NONE);
         refreshCurrentTask(header, activeInstance.getId());
         persistAction.run();
@@ -310,7 +311,7 @@ public class InventoryDocumentWorkflowService {
         ));
         ProcessInstance nextInstance = findActiveInstance(businessKey);
         if (nextInstance == null) {
-            header.setWorkflowStatus(WORKFLOW_STATUS_COMPLETED);
+            header.setWorkflowStatus(workflowCompletedStatus());
             header.setWorkflowInstanceId(activeInstance.getId());
             header.setWorkflowTaskId(null);
             header.setWorkflowTaskName(null);
@@ -320,7 +321,7 @@ public class InventoryDocumentWorkflowService {
         Optional<WorkflowBindingResolverService.ResolvedWorkflowBinding> binding =
                 resolveBinding(businessCode, workflowLabel, header.getScopeType(), header.getScopeId(), resolveGroupId(header), true);
         header.setWorkflowProcessCode(binding.map(WorkflowBindingResolverService.ResolvedWorkflowBinding::processCode).orElse(businessCode));
-        header.setWorkflowStatus(WORKFLOW_STATUS_RUNNING);
+        header.setWorkflowStatus(workflowRunningStatus());
         header.setWorkflowInstanceId(nextInstance.getId());
         refreshCurrentTask(header, nextInstance.getId());
         persistAction.run();
@@ -336,7 +337,7 @@ public class InventoryDocumentWorkflowService {
         header.setWorkflowInstanceId(null);
         header.setWorkflowTaskId(null);
         header.setWorkflowTaskName(null);
-        header.setWorkflowStatus(WORKFLOW_STATUS_REVOKED);
+        header.setWorkflowStatus(workflowRevokedStatus());
         header.setPendingOperation(PENDING_OPERATION_NONE);
         persistAction.run();
     }
@@ -359,7 +360,7 @@ public class InventoryDocumentWorkflowService {
         header.setWorkflowProcessCode(binding.processCode());
         header.setWorkflowDefinitionKey(binding.processDefinitionKey());
         header.setWorkflowDefinitionId(binding.processDefinitionId());
-        header.setWorkflowStatus(WORKFLOW_STATUS_RUNNING);
+        header.setWorkflowStatus(workflowRunningStatus());
         header.setPendingOperation(StringUtils.hasText(action) ? action : PENDING_OPERATION_NONE);
         ProcessInstance instance = runtimeService.startProcessInstanceByKey(
                 processDefinition.getKey(),
@@ -387,7 +388,7 @@ public class InventoryDocumentWorkflowService {
         header.setWorkflowInstanceId(null);
         header.setWorkflowTaskId(null);
         header.setWorkflowTaskName(null);
-        header.setWorkflowStatus(WORKFLOW_STATUS_NONE);
+        header.setWorkflowStatus(workflowNoneStatus());
         header.setPendingOperation(PENDING_OPERATION_NONE);
     }
 
@@ -467,12 +468,28 @@ public class InventoryDocumentWorkflowService {
                 || StringUtils.hasText(header.getWorkflowDefinitionId())
                 || StringUtils.hasText(header.getWorkflowTaskId())
                 || StringUtils.hasText(header.getWorkflowTaskName())
-                || (StringUtils.hasText(header.getWorkflowStatus()) && !WORKFLOW_STATUS_NONE.equals(header.getWorkflowStatus()));
+                || (StringUtils.hasText(header.getWorkflowStatus()) && !workflowNoneStatus().equals(header.getWorkflowStatus()));
     }
 
     private void persistPurchaseInboundHeader(PurchaseInboundDO target, InventoryDocumentHeader header) {
         PurchaseInboundWorkflowBridge.applyHeader(target, header);
         purchaseInboundRepository.update(target);
+    }
+
+    private String workflowNoneStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_WORKFLOW_STATUS, DictionaryCodes.NONE);
+    }
+
+    private String workflowRunningStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_WORKFLOW_STATUS, DictionaryCodes.RUNNING);
+    }
+
+    private String workflowCompletedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_WORKFLOW_STATUS, DictionaryCodes.COMPLETED);
+    }
+
+    private String workflowRevokedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_WORKFLOW_STATUS, DictionaryCodes.REVOKED);
     }
 
     public record ApprovalResult(boolean workflowApplied, boolean completed) {

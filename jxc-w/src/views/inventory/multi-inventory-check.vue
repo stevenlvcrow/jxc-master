@@ -10,11 +10,6 @@ type TimeType = '盘点日期' | '创建时间';
 type DocumentStatus = '草稿' | '已提交' | '已审核';
 type GeneratedStatus = '全部' | '已生成' | '未生成';
 type PrintStatus = '全部' | '未打印' | '已打印';
-type TreeNode = {
-  value: string;
-  label: string;
-  children?: TreeNode[];
-};
 type MultiInventoryCheckRow = {
   id: number;
   documentCode: string;

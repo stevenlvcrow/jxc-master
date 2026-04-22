@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox, type ElTable } from 'element-plus';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import { buildMnemonicCode } from '@/utils/mnemonic';
 import {
@@ -21,6 +21,7 @@ import {
   type UserAdminItem,
 } from '@/api/modules/system-admin';
 import { useSessionStore } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 type EditableAssignment = {
   uid: string;
@@ -52,8 +53,17 @@ const filteredUsers = ref<UserAdminItem[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const selectedUserIds = ref<number[]>([]);
-const userTableRef = ref<any>(null);
+const userTableRef = ref<InstanceType<typeof ElTable> | null>(null);
 const sessionStore = useSessionStore();
+const COMMON_STATUS_DICT = 'common.enabled_status';
+const { optionsOf } = useDictionaryOptions([COMMON_STATUS_DICT]);
+const statusOptions = optionsOf(COMMON_STATUS_DICT);
+const enabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'ENABLED')?.itemCode ?? 'ENABLED'
+));
+const disabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'DISABLED')?.itemCode ?? 'DISABLED'
+));
 
 const createDialogVisible = ref(false);
 const assignDialogVisible = ref(false);
@@ -198,7 +208,7 @@ const resetQuery = () => {
 const resetCreateForm = () => {
   createForm.realName = '';
   createForm.phone = '';
-  createForm.status = 'ENABLED';
+  createForm.status = enabledStatus.value;
   editingUser.value = null;
 };
 
@@ -308,7 +318,7 @@ const handleBatchDeleteUsers = async () => {
 };
 
 const handleStatusChange = async (row: UserAdminItem, value: boolean | string | number) => {
-  const status = value ? 'ENABLED' : 'DISABLED';
+  const status = value ? enabledStatus.value : disabledStatus.value;
   try {
     await updateAdminUserStatusApi(row.id, status);
     row.status = status;
@@ -687,7 +697,7 @@ watch(
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-switch
-              :model-value="row.status === 'ENABLED'"
+              :model-value="row.status === enabledStatus"
               @change="handleStatusChange(row, $event)"
             />
           </template>
@@ -736,8 +746,12 @@ watch(
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="createForm.status" style="width: 100%">
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
       </el-form>

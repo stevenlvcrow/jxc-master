@@ -1,5 +1,6 @@
 package com.boboboom.jxc.identity.application.service;
 
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.LoginSession;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
@@ -16,11 +17,14 @@ public class MenuApplicationService {
 
     private final MenuRepository menuRepository;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public MenuApplicationService(MenuRepository menuRepository,
-                                  OrgScopeService orgScopeService) {
+                                  OrgScopeService orgScopeService,
+                                  DictionaryLookupService dictionaryLookupService) {
         this.menuRepository = menuRepository;
         this.orgScopeService = orgScopeService;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public List<MenuItemData> current(String orgId) {
@@ -34,7 +38,7 @@ public class MenuApplicationService {
 
         LinkedHashMap<Long, MenuItemData> deduped = new LinkedHashMap<>();
         for (MenuPermissionView row : rows) {
-            if (!"ENABLED".equals(row.getStatus())) {
+            if (!enabledStatus().equals(row.getStatus())) {
                 continue;
             }
             if (!"DIRECTORY".equals(row.getMenuType()) && !"MENU".equals(row.getMenuType())) {
@@ -47,6 +51,7 @@ public class MenuApplicationService {
                     row.getParentId(),
                     row.getMenuType(),
                     row.getRoutePath(),
+                    row.getComponentKey(),
                     row.getIcon(),
                     row.getSortNo()
             ));
@@ -60,7 +65,12 @@ public class MenuApplicationService {
                                Long parentId,
                                String menuType,
                                String routePath,
+                               String componentKey,
                                String icon,
                                Integer sortNo) {
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
     }
 }

@@ -1,8 +1,10 @@
 package com.boboboom.jxc.workflow.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
 import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowConfigSaveRequest;
@@ -37,8 +39,6 @@ public class WorkflowConfigApplicationService {
     private static final String SCOPE_PLATFORM = "PLATFORM";
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
-    private static final String STATUS_DRAFT = "DRAFT";
-    private static final String STATUS_PUBLISHED = "PUBLISHED";
     private static final String NODE_TYPE_NORMAL = "NORMAL";
     private static final String NODE_TYPE_CONDITION = "CONDITION";
     private static final String NODE_TYPE_SUCCESS = "SUCCESS";
@@ -54,15 +54,18 @@ public class WorkflowConfigApplicationService {
     private final ObjectMapper objectMapper;
     private final RepositoryService repositoryService;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public WorkflowConfigApplicationService(WorkflowDefinitionConfigRepository configRepository,
                                             ObjectMapper objectMapper,
                                             RepositoryService repositoryService,
-                                            OrgScopeService orgScopeService) {
+                                            OrgScopeService orgScopeService,
+                                            DictionaryLookupService dictionaryLookupService) {
         this.configRepository = configRepository;
         this.objectMapper = objectMapper;
         this.repositoryService = repositoryService;
         this.orgScopeService = orgScopeService;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public WorkflowConfigView getCurrent(String orgId, String businessCode, String workflowCode) {
@@ -96,7 +99,7 @@ public class WorkflowConfigApplicationService {
         }
         config.setWorkflowName(workflowName);
         config.setNodeConfigJson(toConfigJson(nodes));
-        config.setStatus(STATUS_DRAFT);
+        config.setStatus(draftStatus());
         config.setUpdatedBy(operatorId);
         config.setProcessDefinitionKey(null);
         config.setProcessDefinitionId(null);
@@ -190,7 +193,7 @@ public class WorkflowConfigApplicationService {
                 businessCode,
                 workflowCode,
                 "",
-                STATUS_DRAFT,
+                draftStatus(),
                 0,
                 List.of(),
                 null,
@@ -270,7 +273,7 @@ public class WorkflowConfigApplicationService {
 
         int nextVersion = (config.getVersionNo() == null ? 0 : config.getVersionNo()) + 1;
         LocalDateTime deployedAt = LocalDateTime.now();
-        config.setStatus(STATUS_PUBLISHED);
+        config.setStatus(publishedStatus());
         config.setVersionNo(nextVersion);
         config.setProcessDefinitionKey(processDefinition.getKey());
         config.setProcessDefinitionId(processDefinition.getId());
@@ -506,6 +509,14 @@ public class WorkflowConfigApplicationService {
 
     private boolean supportsApproverUser(String nodeType) {
         return NODE_TYPE_CONDITION.equals(nodeType);
+    }
+
+    private String draftStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.WORKFLOW_DEFINITION_STATUS, DictionaryCodes.DRAFT);
+    }
+
+    private String publishedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.WORKFLOW_DEFINITION_STATUS, DictionaryCodes.PUBLISHED);
     }
 
     private String requiredTrim(String value, String message) {

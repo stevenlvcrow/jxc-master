@@ -30,6 +30,8 @@ public record PurchaseInboundCreateRequest(
             String itemCode,
             @NotBlank(message = "物品名称不能为空")
             String itemName,
+            String spec,
+            String category,
             @NotNull(message = "数量不能为空")
             @DecimalMin(value = "0.000001", message = "数量必须大于0")
             BigDecimal quantity,

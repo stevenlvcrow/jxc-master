@@ -1,4 +1,6 @@
 ﻿<script setup lang="ts">
+import type { SummaryMethod } from 'element-plus';
+
 const props = withDefaults(defineProps<{
   data: Array<Record<string, unknown>>;
   rowKey?: string;
@@ -6,7 +8,7 @@ const props = withDefaults(defineProps<{
   height?: number | string;
   minHeight?: number | string;
   showSummary?: boolean;
-  summaryMethod?: (...args: any[]) => any;
+  summaryMethod?: SummaryMethod<Record<string, unknown>>;
   fit?: boolean;
   border?: boolean;
   stripe?: boolean;
@@ -53,6 +55,9 @@ const handleSelectionChange = (rows: Array<Record<string, unknown>>) => {
       @selection-change="handleSelectionChange"
     >
       <slot />
+      <template v-if="$slots.append" #append>
+        <slot name="append" />
+      </template>
     </el-table>
   </div>
 </template>

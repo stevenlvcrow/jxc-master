@@ -13,6 +13,7 @@ import {
   type GroupAdminItem,
 } from '@/api/modules/system-admin';
 import { useSessionStore } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 const loading = ref(false);
 const submitting = ref(false);
@@ -26,6 +27,15 @@ const queryForm = reactive({
   status: '',
 });
 const sessionStore = useSessionStore();
+const COMMON_STATUS_DICT = 'common.enabled_status';
+const { optionsOf } = useDictionaryOptions([COMMON_STATUS_DICT]);
+const statusOptions = optionsOf(COMMON_STATUS_DICT);
+const enabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'ENABLED')?.itemCode ?? 'ENABLED'
+));
+const disabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'DISABLED')?.itemCode ?? 'DISABLED'
+));
 const canManageAllGroups = computed(() => sessionStore.platformAdminMode);
 const toolbarButtons = computed<ToolbarButton[]>(() => (
   canManageAllGroups.value ? [{ key: 'create', label: '新增集团', type: 'primary' }] : []
@@ -34,14 +44,18 @@ const toolbarButtons = computed<ToolbarButton[]>(() => (
 const form = reactive({
   groupCode: '',
   groupName: '',
-  status: 'ENABLED' as 'ENABLED' | 'DISABLED',
+  adminRealName: '',
+  adminPhone: '',
+  status: 'ENABLED',
   remark: '',
 });
 
 const resetForm = () => {
   form.groupCode = '';
   form.groupName = '';
-  form.status = 'ENABLED';
+  form.adminRealName = '';
+  form.adminPhone = '';
+  form.status = enabledStatus.value;
   form.remark = '';
   editingGroupId.value = null;
 };
@@ -112,19 +126,33 @@ const handleSave = async () => {
     ElMessage.warning('请填写集团编码');
     return;
   }
+  if (!editingGroupId.value && !form.adminRealName.trim()) {
+    ElMessage.warning('请填写管理员姓名');
+    return;
+  }
+  if (!editingGroupId.value && !form.adminPhone.trim()) {
+    ElMessage.warning('请填写管理员手机号');
+    return;
+  }
   submitting.value = true;
   try {
-    const payload = {
-      groupCode: editingGroupId.value ? form.groupCode.trim() : undefined,
-      groupName: form.groupName.trim(),
-      status: form.status,
-      remark: form.remark.trim() || undefined,
-    };
     if (editingGroupId.value) {
-      await updateAdminGroupApi(editingGroupId.value, payload);
+      await updateAdminGroupApi(editingGroupId.value, {
+        groupCode: form.groupCode.trim(),
+        groupName: form.groupName.trim(),
+        status: form.status,
+        remark: form.remark.trim() || undefined,
+      });
       ElMessage.success('集团更新成功');
     } else {
-      await createAdminGroupApi(payload);
+      await createAdminGroupApi({
+        groupCode: undefined,
+        groupName: form.groupName.trim(),
+        adminRealName: form.adminRealName.trim(),
+        adminPhone: form.adminPhone.trim(),
+        status: form.status,
+        remark: form.remark.trim() || undefined,
+      });
       ElMessage.success('集团创建成功');
     }
     createDialogVisible.value = false;
@@ -136,7 +164,7 @@ const handleSave = async () => {
 };
 
 const handleStatusChange = async (row: GroupAdminItem, value: boolean | string | number) => {
-  const status = value ? 'ENABLED' : 'DISABLED';
+  const status = value ? enabledStatus.value : disabledStatus.value;
   await updateAdminGroupStatusApi(row.id, status);
   row.status = status;
   ElMessage.success('状态更新成功');
@@ -192,8 +220,12 @@ watch(
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="queryForm.status" clearable style="width: 140px">
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -211,7 +243,7 @@ watch(
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-switch
-              :model-value="row.status === 'ENABLED'"
+              :model-value="row.status === enabledStatus"
               @change="handleStatusChange(row, $event)"
             />
           </template>
@@ -248,10 +280,20 @@ watch(
         <el-form-item label="集团名称" required>
           <el-input v-model="form.groupName" maxlength="128" />
         </el-form-item>
+        <el-form-item v-if="!editingGroupId" label="管理员姓名" required>
+          <el-input v-model="form.adminRealName" maxlength="64" />
+        </el-form-item>
+        <el-form-item v-if="!editingGroupId" label="管理员手机号" required>
+          <el-input v-model="form.adminPhone" maxlength="32" />
+        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="form.status" style="width: 100%">
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="备注">

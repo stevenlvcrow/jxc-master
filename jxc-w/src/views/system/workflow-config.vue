@@ -149,7 +149,7 @@ const businessOptions = computed(() => {
   return Array.from(optionMap.entries()).map(([value, label]) => ({ value, label }));
 });
 
-const currentBusiness = computed(
+const _currentBusiness = computed(
   () => workflowBusinesses.value.find((item) => item.process_code === currentBusinessCode.value) ?? null,
 );
 
@@ -308,7 +308,7 @@ const resolveBusinessSelection = (businessCode: string) => {
   } as WorkflowProcessItem;
 };
 
-const openAddNodeDialog = () => {
+const _openAddNodeDialog = () => {
   if (isReadOnlyMode.value) {
     return;
   }
@@ -343,7 +343,7 @@ const nodeTypeClass = (type?: string) => {
   return `node-type-${key.toLowerCase()}`;
 };
 
-const getNodeSize = (type?: string) => {
+const getNodeSize = (_type?: string) => {
   return { width: 118, height: 38 };
 };
 
@@ -539,7 +539,7 @@ const syncEditByType = () => {
   }
 };
 
-const openEditDialog = (nodeKey: string) => {
+const _openEditDialog = (nodeKey: string) => {
   const node = form.nodes.find((item) => item.nodeKey === nodeKey);
   if (!node) {
     return;
@@ -1104,7 +1104,7 @@ const edgePath = (edge: EdgeItem) => {
   return `M ${from.x} ${from.y} C ${from.x} ${c1y}, ${to.x} ${c2y}, ${to.x} ${endY}`;
 };
 
-const edgeLabelPoint = (edge: EdgeItem) => {
+const _edgeLabelPoint = (edge: EdgeItem) => {
   const { startOffset, endOffset } = edgePortOffset(edge);
   const from = edgeAnchorPoint(edge.from, edge.to, startOffset);
   const to = edgeAnchorPoint(edge.to, edge.from, endOffset);
@@ -1126,7 +1126,7 @@ const clearEdges = () => {
   updateCanvasContentSize();
 };
 
-const toggleBatchUnapproveForSuccessNodes = () => {
+const _toggleBatchUnapproveForSuccessNodes = () => {
   ElMessage.warning('当前版本暂不支持反审核节点开关');
 };
 
@@ -1193,7 +1193,7 @@ const generateWorkflowCode = () => {
   return `${prefix}${body}`.slice(0, 9).padEnd(9, '0');
 };
 
-const formatDateTime = (date: Date) => {
+const _formatDateTime = (date: Date) => {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');

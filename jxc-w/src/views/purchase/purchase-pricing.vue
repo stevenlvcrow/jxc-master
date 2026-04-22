@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   ArrowDown,
   Back,
@@ -16,6 +16,8 @@ import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import PageTabsLayout, { type PageTabItem } from '@/components/PageTabsLayout.vue';
+import { useSessionStore } from '@/stores/session';
+import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 
 type PricingEnabledStatus = '启用' | '停用';
 type PricingRuleStatus = '草稿' | '已提交' | '已审核';
@@ -45,6 +47,7 @@ type TreeNode = {
 };
 
 const router = useRouter();
+const sessionStore = useSessionStore();
 const tabs: PageTabItem[] = [
   { key: 'item', label: '物品维度' },
   { key: 'rule', label: '规则维度' },
@@ -64,25 +67,10 @@ const writeResultOptions: PricingWriteResult[] = ['成功', '失败', '处理中
 const createModeOptions: CreateMode[] = ['手工创建', '批量导入', '规则生成'];
 const warehouseOptions = ['中央成品仓', '北区原料仓', '南区包材仓'];
 const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
-
-const supplierTree: TreeNode[] = [
-  {
-    value: 'supplier-group-a',
-    label: '华东供应商组',
-    children: [
-      { value: 'supplier-1', label: '鲜达食品' },
-      { value: 'supplier-2', label: '优选农场' },
-    ],
-  },
-  {
-    value: 'supplier-group-b',
-    label: '直营供应商组',
-    children: [
-      { value: 'supplier-3', label: '沪上冷链' },
-      { value: 'supplier-4', label: '盒马包材' },
-    ],
-  },
-];
+const {
+  supplierOptions,
+  loadSupplierOptions,
+} = useSupplierArchiveOptions();
 
 const creatorTree: TreeNode[] = [
   {
@@ -102,6 +90,17 @@ const creatorTree: TreeNode[] = [
     ],
   },
 ];
+
+onMounted(() => {
+  void loadSupplierOptions();
+});
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    void loadSupplierOptions();
+  },
+);
 
 const query = reactive({
   pricingCode: '',
@@ -180,19 +179,17 @@ const treeLabelMap = (nodes: TreeNode[]) => {
   return map;
 };
 
-const supplierLabelMap = treeLabelMap(supplierTree);
 const creatorLabelMap = treeLabelMap(creatorTree);
 
 const filteredRows = computed(() => {
   const pricingCodeKeyword = query.pricingCode.trim().toLowerCase();
   const pricingNameKeyword = query.pricingName.trim().toLowerCase();
-  const supplierLabel = query.supplier ? supplierLabelMap.get(query.supplier) ?? query.supplier : '';
 
   return tableData.filter((row) => {
     const matchedCode = !pricingCodeKeyword || row.pricingCode.toLowerCase().includes(pricingCodeKeyword);
     const matchedName = !pricingNameKeyword || row.pricingName.toLowerCase().includes(pricingNameKeyword);
     const matchedType = !query.pricingType || row.pricingType === query.pricingType;
-    const matchedSupplier = !supplierLabel || row.supplier === supplierLabel;
+    const matchedSupplier = !query.supplier || row.supplier === query.supplier;
     const matchedWarehouse = !query.warehouse || row.warehouse === query.warehouse;
     const matchedEnabledStatus = !query.enabledStatus || row.enabledStatus === query.enabledStatus;
     const matchedOrderStatus = !query.orderStatus || row.orderStatus === query.orderStatus;
@@ -244,7 +241,7 @@ const handleReset = () => {
 
 const handleToolbarAction = (action: string) => {
   if (action === '新增') {
-    router.push('/purchase/1/1/create');
+    router.push('/purchase/pricing/create');
     return;
   }
   ElMessage.info(`${action}功能待接入`);
@@ -318,16 +315,19 @@ const handlePageSizeChange = (size: number) => {
             </el-select>
           </el-form-item>
           <el-form-item label="供应商">
-            <el-tree-select
+            <el-select
               v-model="query.supplier"
-              :data="supplierTree"
-              :props="{ label: 'label', value: 'value', children: 'children' }"
-              check-strictly
-              default-expand-all
               clearable
               placeholder="请选择供应商"
               style="width: 180px"
-            />
+            >
+              <el-option
+                v-for="option in supplierOptions"
+                :key="option.id"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
           </el-form-item>
           <el-form-item label="仓库">
             <el-select

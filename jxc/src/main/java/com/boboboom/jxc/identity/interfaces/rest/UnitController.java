@@ -98,8 +98,8 @@ public class UnitController {
                 scope.scopeId(),
                 unitCode,
                 unitName,
-                normalizeUnitType(request.getType()),
-                normalizeStatus(request.getStatus()),
+                request.getType(),
+                request.getStatus(),
                 trimNullable(request.getRemark())
         );
         return CodeDataResponse.ok(new IdPayload(entity.getId()));
@@ -127,8 +127,8 @@ public class UnitController {
                 scope.scopeId(),
                 unitCode,
                 unitName,
-                normalizeUnitType(request.getType()),
-                normalizeStatus(request.getStatus()),
+                request.getType(),
+                request.getStatus(),
                 trimNullable(request.getRemark())
         );
         return CodeDataResponse.ok();
@@ -148,7 +148,7 @@ public class UnitController {
                                                    @RequestParam(required = false) String orgId,
                                                    @Valid @RequestBody StatusUpdateRequest request) {
         UnitScope scope = resolveUnitScope(orgId);
-        unitAdministrationService.updateUnitStatus(id, scope.scopeType(), scope.scopeId(), normalizeStatus(request.getStatus()));
+        unitAdministrationService.updateUnitStatus(id, scope.scopeType(), scope.scopeId(), request.getStatus());
         return CodeDataResponse.ok();
     }
 
@@ -184,76 +184,6 @@ public class UnitController {
                 entity.getRemark(),
                 entity.getCreatedAt()
         );
-    }
-
-    /**
-     * 解析可空状态参数，ALL 代表不过滤。
-     *
-     * @param value 原始状态值
-     * @return 规范化后的状态值
-     */
-    private String normalizeStatusNullable(String value) {
-        String status = trimNullable(value);
-        if (status == null || "ALL".equalsIgnoreCase(status)) {
-            return null;
-        }
-        return normalizeStatus(status);
-    }
-
-    /**
-     * 规范化状态参数。
-     *
-     * @param value 原始状态值
-     * @return 规范化后的状态值
-     */
-    private String normalizeStatus(String value) {
-        String status = trimNullable(value);
-        if (status == null || status.isEmpty()) {
-            return "ENABLED";
-        }
-        // 统一只允许系统已定义的状态值，避免脏数据写入。
-        if ("ENABLED".equalsIgnoreCase(status)) {
-            return "ENABLED";
-        }
-        if ("DISABLED".equalsIgnoreCase(status)) {
-            return "DISABLED";
-        }
-        throw new BusinessException("状态参数非法");
-    }
-
-    /**
-     * 解析可空单位类型参数，ALL 代表不过滤。
-     *
-     * @param value 原始单位类型
-     * @return 规范化后的单位类型
-     */
-    private String normalizeUnitTypeNullable(String value) {
-        String unitType = trimNullable(value);
-        if (unitType == null || "ALL".equalsIgnoreCase(unitType)) {
-            return null;
-        }
-        return normalizeUnitType(unitType);
-    }
-
-    /**
-     * 规范化单位类型参数。
-     *
-     * @param value 原始单位类型
-     * @return 规范化后的单位类型
-     */
-    private String normalizeUnitType(String value) {
-        String unitType = trimNullable(value);
-        if (unitType == null || unitType.isEmpty()) {
-            return "STANDARD";
-        }
-        // 统一单位类型枚举值，确保接口与持久化一致。
-        if ("STANDARD".equalsIgnoreCase(unitType)) {
-            return "STANDARD";
-        }
-        if ("AUXILIARY".equalsIgnoreCase(unitType)) {
-            return "AUXILIARY";
-        }
-        throw new BusinessException("单位类型参数非法");
     }
 
     /**

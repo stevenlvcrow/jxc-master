@@ -8,7 +8,6 @@ public class MenuDTO {
     private Long parentId;
     private String menuType;
     private String routePath;
-    private String componentPath;
     private String permissionCode;
     private String icon;
     private Integer sortNo;
@@ -60,14 +59,6 @@ public class MenuDTO {
 
     public void setRoutePath(String routePath) {
         this.routePath = routePath;
-    }
-
-    public String getComponentPath() {
-        return componentPath;
-    }
-
-    public void setComponentPath(String componentPath) {
-        this.componentPath = componentPath;
     }
 
     public String getPermissionCode() {

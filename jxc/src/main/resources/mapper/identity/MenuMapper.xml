@@ -11,7 +11,7 @@
         <result property="parentId" column="parent_id"/>
         <result property="menuType" column="menu_type"/>
         <result property="routePath" column="route_path"/>
-        <result property="componentPath" column="component_path"/>
+        <result property="componentKey" column="component_key"/>
         <result property="permissionCode" column="permission_code"/>
         <result property="icon" column="icon"/>
         <result property="sortNo" column="sort_no"/>
@@ -28,7 +28,7 @@
         <result property="parentId" column="parent_id"/>
         <result property="menuType" column="menu_type"/>
         <result property="routePath" column="route_path"/>
-        <result property="componentPath" column="component_path"/>
+        <result property="componentKey" column="component_key"/>
         <result property="permissionCode" column="permission_code"/>
         <result property="icon" column="icon"/>
         <result property="sortNo" column="sort_no"/>
@@ -113,7 +113,7 @@
                             m.parent_id,
                             m.menu_type,
                             m.route_path,
-                            m.component_path,
+                            m.component_key,
                             m.permission_code,
                             m.icon,
                             m.sort_no,
@@ -137,7 +137,7 @@
                    dm.parent_id,
                    dm.menu_type,
                    dm.route_path,
-                   dm.component_path,
+                   dm.component_key,
                    dm.permission_code,
                    dm.icon,
                    dm.sort_no,
@@ -154,7 +154,7 @@
                    parent.parent_id,
                    parent.menu_type,
                    parent.route_path,
-                   parent.component_path,
+                   parent.component_key,
                    parent.permission_code,
                    parent.icon,
                    parent.sort_no,
@@ -171,7 +171,7 @@
                         mt.parent_id,
                         mt.menu_type,
                         mt.route_path,
-                        mt.component_path,
+                        mt.component_key,
                         mt.permission_code,
                         mt.icon,
                         mt.sort_no,

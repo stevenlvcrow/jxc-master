@@ -25,26 +25,29 @@ public class OrgAdministrationService {
     private final StoreRepository storeRepository;
     private final UserRoleRelRepository userRoleRelRepository;
     private final OrgScopeService orgScopeService;
+    private final IdentityAdminLookupService identityAdminLookupService;
 
     public OrgAdministrationService(GroupRepository groupRepository,
                                     StoreRepository storeRepository,
                                     UserRoleRelRepository userRoleRelRepository,
-                                    OrgScopeService orgScopeService) {
+                                    OrgScopeService orgScopeService,
+                                    IdentityAdminLookupService identityAdminLookupService) {
         this.groupRepository = groupRepository;
         this.storeRepository = storeRepository;
         this.userRoleRelRepository = userRoleRelRepository;
         this.orgScopeService = orgScopeService;
+        this.identityAdminLookupService = identityAdminLookupService;
     }
 
     public List<OrgNodeResult> tree() {
         Long userId = AuthContextHolder.require().getUserId();
         boolean platformAdmin = orgScopeService.isPlatformAdmin(userId);
-        List<GroupStoreSummary> groups = groupRepository.findActiveGroupStoreSummaries("ENABLED");
+        List<GroupStoreSummary> groups = groupRepository.findActiveGroupStoreSummaries(identityAdminLookupService.enabledStatus());
 
         Set<Long> directGroupScopeIds = new HashSet<>();
         Set<Long> storeScopeIds = new HashSet<>();
         if (!platformAdmin) {
-            List<UserRoleRelDO> rels = userRoleRelRepository.findByUserIdAndStatus(userId, "ENABLED");
+            List<UserRoleRelDO> rels = userRoleRelRepository.findByUserIdAndStatus(userId, identityAdminLookupService.enabledStatus());
             for (UserRoleRelDO rel : rels) {
                 if ("GROUP".equals(rel.getScopeType()) && rel.getScopeId() != null) {
                     directGroupScopeIds.add(rel.getScopeId());

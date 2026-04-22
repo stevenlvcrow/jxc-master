@@ -1,6 +1,7 @@
 package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
@@ -20,22 +21,23 @@ import java.util.stream.Collectors;
 @Service
 public class IdentityAccessControlService {
 
-    private static final String STATUS_ENABLED = "ENABLED";
-
     private final UserRoleRelRepository userRoleRelRepository;
     private final StoreRepository storeRepository;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public IdentityAccessControlService(UserRoleRelRepository userRoleRelRepository,
                                         StoreRepository storeRepository,
-                                        OrgScopeService orgScopeService) {
+                                        OrgScopeService orgScopeService,
+                                        DictionaryLookupService dictionaryLookupService) {
         this.userRoleRelRepository = userRoleRelRepository;
         this.storeRepository = storeRepository;
         this.orgScopeService = orgScopeService;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public List<Long> listManagedGroupIds(Long operatorId) {
-        return userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, "GROUP", STATUS_ENABLED)
+        return userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, "GROUP", enabledStatus())
                 .stream()
                 .map(UserRoleRelDO::getScopeId)
                 .filter(Objects::nonNull)
@@ -59,7 +61,7 @@ public class IdentityAccessControlService {
         if (orgScopeService.isPlatformAdmin(operatorId)) {
             return;
         }
-        boolean hasGroupScope = userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, "GROUP", STATUS_ENABLED)
+        boolean hasGroupScope = userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, "GROUP", enabledStatus())
                 .stream()
                 .map(UserRoleRelDO::getScopeId)
                 .filter(Objects::nonNull)
@@ -86,7 +88,7 @@ public class IdentityAccessControlService {
         }
         Set<Long> managedStoreIds = new HashSet<>(listManagedStoreIds(new HashSet<>(managedGroupIds)));
         List<UserRoleRelDO> rels = userRoleRelRepository.findByStatusAndGroupOrStoreScopes(
-                STATUS_ENABLED, new LinkedHashSet<>(managedGroupIds), managedStoreIds
+                enabledStatus(), new LinkedHashSet<>(managedGroupIds), managedStoreIds
         );
         return rels.stream()
                 .map(UserRoleRelDO::getRoleId)
@@ -130,5 +132,9 @@ public class IdentityAccessControlService {
         if (role != null && "GROUP_ADMIN".equals(role.getRoleCode())) {
             throw new BusinessException("集团管理员角色菜单权限仅允许平台管理员配置");
         }
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
     }
 }

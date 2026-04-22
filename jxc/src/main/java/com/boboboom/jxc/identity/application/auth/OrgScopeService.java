@@ -1,6 +1,8 @@
 package com.boboboom.jxc.identity.application.auth;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.identity.domain.repository.GroupRepository;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
@@ -20,21 +22,23 @@ public class OrgScopeService {
     public static final String SCOPE_STORE = "STORE";
 
     private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
-    private static final String STATUS_ENABLED = "ENABLED";
 
     private final RoleRepository roleRepository;
     private final UserRoleRelRepository userRoleRelRepository;
     private final StoreRepository storeRepository;
     private final GroupRepository groupRepository;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public OrgScopeService(RoleRepository roleRepository,
                            UserRoleRelRepository userRoleRelRepository,
                            StoreRepository storeRepository,
-                           GroupRepository groupRepository) {
+                           GroupRepository groupRepository,
+                           DictionaryLookupService dictionaryLookupService) {
         this.roleRepository = roleRepository;
         this.userRoleRelRepository = userRoleRelRepository;
         this.storeRepository = storeRepository;
         this.groupRepository = groupRepository;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public boolean isPlatformAdmin(Long userId) {
@@ -46,7 +50,7 @@ public class OrgScopeService {
                 userId,
                 role.getId(),
                 SCOPE_PLATFORM,
-                STATUS_ENABLED
+                enabledStatus()
         );
     }
 
@@ -223,8 +227,12 @@ public class OrgScopeService {
                 userId,
                 scopeType,
                 scopeId,
-                STATUS_ENABLED
+                enabledStatus()
         );
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
     }
 
     private Long findGroupIdByStoreId(Long storeId) {

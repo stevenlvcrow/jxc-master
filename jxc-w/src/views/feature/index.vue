@@ -46,6 +46,9 @@ import TransferGroupView from '@/views/inventory/transfer-group.vue';
 import StockLimitsView from '@/views/inventory/stock-limits.vue';
 import StockLockView from '@/views/inventory/stock-lock.vue';
 import StockLockLogView from '@/views/inventory/stock-lock-log.vue';
+import RealTimeStockQueryView from '@/views/inventory/realtime-stock-query.vue';
+import DishConsumptionOutboundReportView from '@/views/inventory/dish-consumption-outbound-report.vue';
+import InventoryInoutDetailReportView from '@/views/inventory/inventory-inout-detail-report.vue';
 
 const route = useRoute();
 
@@ -101,6 +104,9 @@ const isTransferGroup = computed(() => title.value === '调拨分组');
 const isStockLimits = computed(() => title.value === '库存上下限');
 const isStockLock = computed(() => title.value === '库存锁库');
 const isStockLockLog = computed(() => title.value === '锁库日志');
+const isRealTimeStockQuery = computed(() => title.value === '实时库存查询表');
+const isDishConsumptionOutboundReport = computed(() => title.value === '菜品消耗出库查询表');
+const isInventoryInoutDetailReport = computed(() => title.value === '出入库明细表');
 
 const pendingTasks = [
   '补充查询条件与默认筛选项',
@@ -245,6 +251,15 @@ const pendingTasks = [
   <div v-else-if="isStockLockLog" class="page-grid single">
     <StockLockLogView />
   </div>
+  <div v-else-if="isRealTimeStockQuery" class="page-grid single">
+    <RealTimeStockQueryView />
+  </div>
+  <div v-else-if="isDishConsumptionOutboundReport" class="page-grid single">
+    <DishConsumptionOutboundReportView />
+  </div>
+  <div v-else-if="isInventoryInoutDetailReport" class="page-grid single">
+    <InventoryInoutDetailReportView />
+  </div>
 
   <div v-else class="page-grid">
     <section class="hero-card">
@@ -285,4 +300,3 @@ const pendingTasks = [
     </section>
   </div>
 </template>
-

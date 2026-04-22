@@ -12,6 +12,8 @@ public class PurchaseInboundLineDO extends BaseIdDO {
     private Long inboundId;
     private String itemCode;
     private String itemName;
+    private String spec;
+    private String category;
     private BigDecimal quantity;
     private BigDecimal unitPrice;
     private BigDecimal taxRate;
@@ -39,6 +41,22 @@ public class PurchaseInboundLineDO extends BaseIdDO {
 
     public void setItemName(String itemName) {
         this.itemName = itemName;
+    }
+
+    public String getSpec() {
+        return spec;
+    }
+
+    public void setSpec(String spec) {
+        this.spec = spec;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
     }
 
     public BigDecimal getQuantity() {
@@ -73,4 +91,3 @@ public class PurchaseInboundLineDO extends BaseIdDO {
         this.createdAt = createdAt;
     }
 }
-

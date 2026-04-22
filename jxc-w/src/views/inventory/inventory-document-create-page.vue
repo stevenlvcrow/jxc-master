@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import type { UploadFile, UploadUserFile } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import CommonFormSection from '@/components/CommonFormSection.vue';
 import CommonNumberInput from '@/components/CommonNumberInput.vue';
@@ -21,10 +22,12 @@ import {
 import { fetchItemCategoryTreeApi, fetchItemDetailApi, fetchItemsApi, type ItemCategoryTreeNode, type ItemCreatePayload, type ItemVO } from '@/api/modules/item';
 import { fetchCurrentUserRolesApi } from '@/api/modules/auth';
 import { fetchStoreSalesmenApi, type SalesmanCandidateItem } from '@/api/modules/system-admin';
-import { fetchStoreWarehousesApi, type WarehouseRow } from '@/api/modules/warehouse';
+import { fetchStoreWarehousesApi, type WarehouseRow, type WarehouseType } from '@/api/modules/warehouse';
+import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 import { useSessionStore } from '@/stores/session';
 import type { InventoryDocumentMeta } from '@/views/inventory/document-meta';
 import { normalizeOrgId, parseStoreId } from '@/utils/org';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 const props = defineProps<{
   meta: InventoryDocumentMeta;
@@ -34,6 +37,7 @@ type WarehouseOption = {
   id: number;
   name: string;
   label: string;
+  warehouseType: WarehouseType;
 };
 
 type SalesmanOption = {
@@ -80,6 +84,15 @@ type DocumentItemRow = {
 const router = useRouter();
 const route = useRoute();
 const sessionStore = useSessionStore();
+const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
+const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT]);
+const inventoryDocumentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const submittedStatus = computed(() => (
+  inventoryDocumentStatusOptions.value.find((item) => item.itemKey === 'SUBMITTED')?.itemCode ?? '已提交'
+));
+const approvedStatus = computed(() => (
+  inventoryDocumentStatusOptions.value.find((item) => item.itemKey === 'APPROVED')?.itemCode ?? '已审核'
+));
 const saving = ref(false);
 const loading = ref(false);
 const canCreate = ref(false);
@@ -103,10 +116,18 @@ const selectedItemCandidates = ref<Array<Record<string, unknown>>>([]);
 const itemTreeData = ref<SelectorTreeNode[]>([]);
 const itemCandidateSource = ref<ItemCandidate[]>([]);
 const rowSeed = ref(1);
+const {
+  supplierOptions,
+  loadSupplierOptions,
+} = useSupplierArchiveOptions();
 const navs = [
   { key: 'basic', label: '基础信息' },
   { key: 'items', label: '物品信息' },
 ];
+const counterpartySupplierSelect = computed(() =>
+  props.meta.counterpartyField?.kind === 'select'
+    && props.meta.counterpartyField.label === '供应商',
+);
 const itemTableColumns: SelectorColumn[] = [
   { prop: 'code', label: '物品编码', minWidth: 130 },
   { prop: 'name', label: '物品名称', minWidth: 130 },
@@ -129,14 +150,14 @@ const isEditMode = computed(() => route.name === props.meta.editRouteName);
 const isApprovalMode = computed(() => String(route.query.approvalMode ?? '').trim() === '1' && documentId.value != null);
 const showApprovalActions = computed(() =>
   isApprovalMode.value
-    && detailStatus.value === '已提交'
+    && detailStatus.value === submittedStatus.value
     && (canApprove.value || canUnapprove.value),
 );
 const isReadonlyMode = computed(() => {
   if (isApprovalMode.value) {
     return true;
   }
-  if (isViewMode.value || detailStatus.value === '已审核') {
+  if (isViewMode.value || detailStatus.value === approvedStatus.value) {
     return true;
   }
   if (isCreateMode.value) {
@@ -148,9 +169,32 @@ const isReadonlyMode = computed(() => {
   return true;
 });
 const showDocumentCode = computed(() => props.meta.showDocumentCode !== false);
-const remarkInputType = computed(() => props.meta.remarkInputType ?? 'textarea');
 const showUpstreamCode = computed(() => props.meta.showUpstreamCode === true);
 const usePurchaseInboundItemTableStyle = computed(() => props.meta.itemTableStyle === 'purchase-inbound');
+const usePurchaseReturnOutboundItemTableStyle = computed(() => props.meta.itemTableStyle === 'purchase-return-outbound');
+const isDepartmentPicking = computed(() => props.meta.type === 'department-picking');
+const isPurchaseReturnOutbound = computed(() => props.meta.type === 'purchase-return-outbound');
+const unitColumnLabel = computed(() => {
+  if (usePurchaseReturnOutboundItemTableStyle.value) {
+    return '采购单位';
+  }
+  return (isWarehouseOpeningBalance.value || isDepartmentPicking.value) ? '库存单位' : '单位';
+});
+const availableQtyColumnLabel = computed(() => (
+  usePurchaseReturnOutboundItemTableStyle.value || isDepartmentPicking.value ? '可出库量' : '可用数量'
+));
+const quantityColumnLabel = computed(() => {
+  if (isWarehouseOpeningBalance.value) {
+    return '入库数量';
+  }
+  if (isDepartmentPicking.value) {
+    return '领料数量';
+  }
+  return '数量';
+});
+const showUnitRateColumn = computed(() => isWarehouseOpeningBalance.value || isDepartmentPicking.value);
+const showReasonColumn = computed(() => !isWarehouseOpeningBalance.value && !usePurchaseReturnOutboundItemTableStyle.value && !isDepartmentPicking.value);
+const showAttachment = computed(() => props.meta.showAttachment === true);
 const isWarehouseOpeningBalance = computed(() => props.meta.type === 'warehouse-opening-balance');
 const totalQuantity = computed(() => rows.value.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0));
 const totalAmount = computed(() => rows.value.reduce((sum, row) => sum + Number(row.amount ?? 0), 0));
@@ -176,6 +220,8 @@ const form = reactive({
   salesmanUserId: undefined as number | undefined,
   salesmanName: '',
   remark: '',
+  attachmentName: '',
+  attachmentFiles: [] as UploadUserFile[],
   extraFields: {} as Record<string, string>,
 });
 
@@ -343,6 +389,12 @@ const openItemSelector = async (index: number) => {
   if (isReadonlyMode.value) {
     return;
   }
+  if (isPurchaseReturnOutbound.value) {
+    if (!String(form.counterpartyName ?? '').trim() || !String(form.primaryName ?? '').trim()) {
+      ElMessage.warning('请先选择供应商和仓库');
+      return;
+    }
+  }
   selectingItemRowIndex.value = index;
   selectedItemCandidates.value = [];
   if (!itemTreeData.value.length) {
@@ -495,7 +547,7 @@ const applyItemToRow = async (row: DocumentItemRow, item: ItemCandidate) => {
   row.itemName = item.name;
   row.spec = item.spec;
   row.category = item.category;
-  if (isWarehouseOpeningBalance.value) {
+  if (isWarehouseOpeningBalance.value || isDepartmentPicking.value) {
     const unitMeta = await resolveItemUnitMeta(item);
     row.baseUnit = unitMeta.baseUnit;
     row.unitOptions = unitMeta.unitOptions;
@@ -537,11 +589,22 @@ const loadWarehouses = async () => {
       id: item.id,
       name: item.warehouseName,
       label: `${item.warehouseName}（${item.warehouseCode}）`,
+      warehouseType: item.warehouseType,
     }));
   } catch {
     warehouses.value = [];
     ElMessage.error('仓库列表加载失败');
   }
+};
+
+const getWarehouseOptions = (field?: InventoryDocumentMeta['primaryField']) => {
+  if (!field) {
+    return [];
+  }
+  if (!field.warehouseTypes?.length) {
+    return warehouses.value;
+  }
+  return warehouses.value.filter((item) => field.warehouseTypes?.includes(item.warehouseType));
 };
 
 const applyPresetWarehouse = () => {
@@ -550,13 +613,13 @@ const applyPresetWarehouse = () => {
   }
   const matchedById = presetWarehouseId.value == null
     ? null
-    : warehouses.value.find((item) => item.id === presetWarehouseId.value);
+    : getWarehouseOptions(props.meta.primaryField).find((item) => item.id === presetWarehouseId.value);
   if (matchedById) {
     form.primaryName = matchedById.name;
     return;
   }
   if (presetWarehouseName.value) {
-    const matchedByName = warehouses.value.find((item) => item.name === presetWarehouseName.value);
+    const matchedByName = getWarehouseOptions(props.meta.primaryField).find((item) => item.name === presetWarehouseName.value);
     if (matchedByName) {
       form.primaryName = matchedByName.name;
       return;
@@ -608,6 +671,12 @@ const loadPermission = async () => {
   }
 };
 
+const loadCounterpartyOptions = async () => {
+  if (counterpartySupplierSelect.value) {
+    await loadSupplierOptions();
+  }
+};
+
 const fillDetail = async () => {
   if (!documentId.value) {
     detailStatus.value = '';
@@ -622,6 +691,8 @@ const fillDetail = async () => {
     form.salesmanUserId = undefined;
     form.salesmanName = '';
     form.remark = '';
+    form.attachmentName = '';
+    form.attachmentFiles = [];
     initExtraFields();
     rows.value = [createEmptyRow()];
     return;
@@ -641,10 +712,16 @@ const fillDetail = async () => {
     form.salesmanUserId = detail.salesmanUserId ?? undefined;
     form.salesmanName = detail.salesmanName;
     form.remark = detail.remark;
+    form.attachmentName = detail.extraFields?.attachmentName ?? '';
+    form.attachmentFiles = form.attachmentName
+      ? [{ name: form.attachmentName, url: detail.extraFields?.attachmentUrl || '' }]
+      : [];
     initExtraFields();
     Object.entries(detail.extraFields ?? {}).forEach(([key, value]) => {
       form.extraFields[key] = value;
     });
+    delete form.extraFields.attachmentName;
+    delete form.extraFields.attachmentUrl;
     rows.value = detail.items.map((item) => {
       const unitOptions = parseUnitOptions(item.extraFields?.unitOptions, item.unitName);
       const unitRate = item.extraFields?.unitRate
@@ -720,6 +797,12 @@ const buildPayload = (): GenericInventoryDocumentSavePayload | null => {
   if (!validRows) {
     return null;
   }
+  const extraFields = { ...form.extraFields };
+  delete extraFields.attachmentName;
+  delete extraFields.attachmentUrl;
+  if (form.attachmentName) {
+    extraFields.attachmentName = form.attachmentName;
+  }
   const payload: GenericInventoryDocumentSavePayload = {
     documentDate: form.documentDate,
     primaryName: form.primaryName || undefined,
@@ -731,7 +814,7 @@ const buildPayload = (): GenericInventoryDocumentSavePayload | null => {
     salesmanUserId: form.salesmanUserId,
     salesmanName: form.salesmanName || undefined,
     remark: form.remark || undefined,
-    extraFields: form.extraFields,
+    extraFields,
     items: validRows.map((item): GenericInventoryDocumentLinePayload => ({
       itemCode: item.itemCode.trim(),
       itemName: item.itemName.trim(),
@@ -753,6 +836,11 @@ const buildPayload = (): GenericInventoryDocumentSavePayload | null => {
     })),
   };
   return payload;
+};
+
+const handleAttachmentChange = (uploadFile: UploadFile) => {
+  form.attachmentName = uploadFile.name || '';
+  form.attachmentFiles = form.attachmentName ? [{ name: form.attachmentName, url: '' }] : [];
 };
 
 const handleSubmit = async () => {
@@ -888,7 +976,7 @@ const reloadPageContext = async () => {
   selectedItemCandidates.value = [];
   itemTreeData.value = [];
   itemCandidateSource.value = [];
-  await Promise.all([loadPermission(), loadWarehouses(), loadSalesmen()]);
+  await Promise.all([loadPermission(), loadWarehouses(), loadSalesmen(), loadCounterpartyOptions()]);
   await fillDetail();
   applyPresetWarehouse();
 };
@@ -915,7 +1003,7 @@ onMounted(async () => {
         :primary-action-text="actionPrimaryText"
         :secondary-action-text="actionSecondaryText"
         :show-primary-action="showApprovalActions ? canApprove : true"
-        :show-secondary-action="showApprovalActions ? canUnapprove : true"
+        :show-secondary-action="showApprovalActions ? canUnapprove : false"
         @back="handleCancel"
         @save-draft="handleSaveDraft"
         @save="handlePrimaryAction"
@@ -944,7 +1032,7 @@ onMounted(async () => {
             </el-col>
             <el-col :span="8">
               <el-form-item label="业务员">
-                <el-select v-model="form.salesmanUserId" :disabled="isReadonlyMode" clearable filterable style="width: 100%" @change="updateSalesmanName">
+                <el-select v-model="form.salesmanUserId" :disabled="isReadonlyMode" clearable filterable placeholder="请选择" style="width: 100%" @change="updateSalesmanName">
                   <el-option v-for="item in salesmen" :key="item.userId" :label="item.label" :value="item.userId" />
                 </el-select>
               </el-form-item>
@@ -957,9 +1045,10 @@ onMounted(async () => {
                   :disabled="isReadonlyMode"
                   clearable
                   filterable
+                  placeholder="请选择"
                   style="width: 100%"
                 >
-                  <el-option v-for="item in warehouses" :key="item.id" :label="item.label" :value="item.name" />
+                  <el-option v-for="item in getWarehouseOptions(props.meta.primaryField)" :key="item.id" :label="item.label" :value="item.name" />
                 </el-select>
                 <el-select
                   v-else-if="props.meta.primaryField.kind === 'select'"
@@ -967,6 +1056,7 @@ onMounted(async () => {
                   :disabled="isReadonlyMode"
                   clearable
                   filterable
+                  :placeholder="`请选择${props.meta.primaryField.label}`"
                   style="width: 100%"
                 >
                   <el-option v-for="item in props.meta.primaryField.options ?? []" :key="item" :label="item" :value="item" />
@@ -982,9 +1072,10 @@ onMounted(async () => {
                   :disabled="isReadonlyMode"
                   clearable
                   filterable
+                  placeholder="请选择"
                   style="width: 100%"
                 >
-                  <el-option v-for="item in warehouses" :key="item.id" :label="item.label" :value="item.name" />
+                  <el-option v-for="item in getWarehouseOptions(props.meta.secondaryField)" :key="item.id" :label="item.label" :value="item.name" />
                 </el-select>
                 <el-input v-else v-model="form.secondaryName" :disabled="isReadonlyMode" clearable />
               </el-form-item>
@@ -992,14 +1083,41 @@ onMounted(async () => {
             <el-col v-if="props.meta.counterpartyField" :span="8">
               <el-form-item :label="props.meta.counterpartyField.label">
                 <el-select
-                  v-if="props.meta.counterpartyField.kind === 'select'"
+                  v-if="props.meta.counterpartyField.kind === 'warehouse'"
                   v-model="form.counterpartyName"
                   :disabled="isReadonlyMode"
                   clearable
                   filterable
+                  placeholder="请选择"
                   style="width: 100%"
                 >
-                  <el-option v-for="item in props.meta.counterpartyField.options ?? []" :key="item" :label="item" :value="item" />
+                  <el-option v-for="item in getWarehouseOptions(props.meta.counterpartyField)" :key="item.id" :label="item.label" :value="item.name" />
+                </el-select>
+                <el-select
+                  v-else-if="props.meta.counterpartyField.kind === 'select'"
+                  v-model="form.counterpartyName"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  :placeholder="props.meta.counterpartyField.label === '供应商' ? '请选择供应商' : `请选择${props.meta.counterpartyField.label}`"
+                  style="width: 100%"
+                >
+                  <template v-if="counterpartySupplierSelect">
+                    <el-option
+                      v-for="item in supplierOptions"
+                      :key="item.id"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </template>
+                  <template v-else>
+                    <el-option
+                      v-for="item in props.meta.counterpartyField.options ?? []"
+                      :key="item"
+                      :label="item"
+                      :value="item"
+                    />
+                  </template>
                 </el-select>
                 <el-input v-else v-model="form.counterpartyName" :disabled="isReadonlyMode" clearable />
               </el-form-item>
@@ -1017,6 +1135,7 @@ onMounted(async () => {
                   :disabled="isReadonlyMode"
                   clearable
                   filterable
+                  :placeholder="`请选择${props.meta.reasonField.label}`"
                   style="width: 100%"
                 >
                   <el-option v-for="item in props.meta.reasonField.options ?? []" :key="item" :label="item" :value="item" />
@@ -1036,16 +1155,29 @@ onMounted(async () => {
             </el-col>
             <el-col :span="24">
               <el-form-item label="备注">
-                <el-input
-                  v-if="remarkInputType === 'textarea'"
-                  v-model="form.remark"
-                  type="textarea"
-                  :disabled="isReadonlyMode"
-                  :rows="3"
-                  maxlength="500"
-                  show-word-limit
-                />
-                <el-input v-else v-model="form.remark" :disabled="isReadonlyMode" clearable maxlength="500" />
+                <el-input v-model="form.remark" :disabled="isReadonlyMode" clearable maxlength="500" placeholder="在此填写备注信息..." />
+              </el-form-item>
+            </el-col>
+            <el-col v-if="showAttachment" :span="24">
+              <el-form-item label="附件">
+                <div class="attachment-field">
+                  <el-upload
+                    v-model:file-list="form.attachmentFiles"
+                    :auto-upload="false"
+                    :limit="1"
+                    :show-file-list="false"
+                    :disabled="isReadonlyMode"
+                    @change="handleAttachmentChange"
+                  >
+                    <el-button :disabled="isReadonlyMode">上传文件</el-button>
+                  </el-upload>
+                  <el-input
+                    v-model="form.attachmentName"
+                    :disabled="isReadonlyMode"
+                    placeholder="请选择文件"
+                    readonly
+                  />
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
@@ -1053,18 +1185,16 @@ onMounted(async () => {
       </CommonFormSection>
 
       <CommonFormSection title="物品信息">
-        <template v-if="!usePurchaseInboundItemTableStyle" #action>
-          <el-button v-if="!isReadonlyMode" type="primary" link @click="rows.push(createEmptyRow())">新增明细</el-button>
-        </template>
         <CommonTableSection
           :data="rows"
           :height="itemTableHeight"
-          :show-summary="isWarehouseOpeningBalance"
+          :show-summary="isWarehouseOpeningBalance || isDepartmentPicking"
           :summary-method="getItemTableSummaries"
           :class="{ 'purchase-inbound-item-table': usePurchaseInboundItemTableStyle }"
         >
-          <el-table-column v-if="usePurchaseInboundItemTableStyle" type="index" label="序号" width="56" fixed="left" />
-          <el-table-column v-if="usePurchaseInboundItemTableStyle" label="操作" width="96" fixed="left">
+          <el-table-column v-if="usePurchaseReturnOutboundItemTableStyle" type="selection" width="44" :selectable="() => false" fixed="left" />
+          <el-table-column type="index" label="序号" width="56" fixed="left" />
+          <el-table-column label="操作" width="96" fixed="left">
             <template #default="{ $index }">
               <el-button text type="primary" :disabled="isReadonlyMode" @click="addRow($index)">+</el-button>
               <el-button text :disabled="isReadonlyMode" @click="removeRow($index)">-</el-button>
@@ -1097,9 +1227,9 @@ onMounted(async () => {
               {{ row.category || '-' }}
             </template>
           </el-table-column>
-          <el-table-column prop="unitName" :label="isWarehouseOpeningBalance ? '库存单位' : '单位'" min-width="100">
+          <el-table-column prop="unitName" :label="unitColumnLabel" min-width="100">
             <template #default="{ row }">
-              <template v-if="isWarehouseOpeningBalance">
+              <template v-if="isWarehouseOpeningBalance || isDepartmentPicking">
                 <el-select
                   v-model="row.unitName"
                   :disabled="isReadonlyMode || !row.itemCode"
@@ -1119,24 +1249,24 @@ onMounted(async () => {
               <el-input v-else v-model="row.unitName" :disabled="isReadonlyMode" />
             </template>
           </el-table-column>
-          <el-table-column v-if="isWarehouseOpeningBalance" prop="unitRate" label="库存单位换算率" min-width="160">
+          <el-table-column v-if="showUnitRateColumn" prop="unitRate" label="库存单位换算率" min-width="160">
             <template #default="{ row }">
               {{ formatWarehouseOpeningBalanceUnitRateText(row) }}
             </template>
           </el-table-column>
-          <el-table-column v-if="props.meta.showAvailableQty" label="可用数量" min-width="100">
+          <el-table-column v-if="props.meta.showAvailableQty" :label="availableQtyColumnLabel" min-width="100">
             <template #default="{ row }">
               <CommonNumberInput v-model="row.availableQty" :disabled="isReadonlyMode" :precision="4" :min="0" />
             </template>
           </el-table-column>
-          <el-table-column prop="quantity" :label="isWarehouseOpeningBalance ? '入库数量' : '数量'" min-width="100">
+          <el-table-column prop="quantity" :label="quantityColumnLabel" min-width="100">
             <template #default="{ row }">
               <CommonNumberInput
                 v-model="row.quantity"
                 :disabled="isReadonlyMode"
                 :precision="4"
                 :min="0"
-                @change="isWarehouseOpeningBalance ? syncWarehouseOpeningBalanceQuantities(row) : syncRowAmount(row)"
+                @change="(isWarehouseOpeningBalance || isDepartmentPicking) ? syncWarehouseOpeningBalanceQuantities(row) : syncRowAmount(row)"
               />
             </template>
           </el-table-column>
@@ -1167,7 +1297,7 @@ onMounted(async () => {
               {{ row.baseUnitQuantity != null ? Number(row.baseUnitQuantity).toFixed(4) : '-' }}
             </template>
           </el-table-column>
-          <el-table-column v-if="!isWarehouseOpeningBalance" label="原因" min-width="140">
+          <el-table-column v-if="showReasonColumn" label="原因" min-width="140">
             <template #default="{ row }">
               <el-input v-model="row.lineReason" :disabled="isReadonlyMode" />
             </template>
@@ -1177,15 +1307,10 @@ onMounted(async () => {
               <el-input v-model="row.remark" :disabled="isReadonlyMode" />
             </template>
           </el-table-column>
-          <el-table-column v-if="!usePurchaseInboundItemTableStyle && !isReadonlyMode" label="操作" width="100" fixed="right">
-            <template #default="{ $index }">
-              <el-button type="danger" link @click="removeRow($index)">删除</el-button>
-            </template>
-          </el-table-column>
           <template v-if="usePurchaseInboundItemTableStyle && !isWarehouseOpeningBalance" #append>
             <div class="purchase-inbound-summary-row">
               <span class="summary-title">合计</span>
-              <span class="summary-cell">{{ isWarehouseOpeningBalance ? '入库数量' : '数量' }}：{{ totalQuantity.toFixed(4) }}</span>
+              <span class="summary-cell">{{ quantityColumnLabel }}：{{ totalQuantity.toFixed(4) }}</span>
               <span class="summary-cell">金额：{{ totalAmount.toFixed(2) }}</span>
               <span v-if="isWarehouseOpeningBalance" class="summary-cell">基准单位数量：{{ totalBaseUnitQuantity.toFixed(4) }}</span>
             </div>
@@ -1255,6 +1380,22 @@ onMounted(async () => {
 
 .item-code-picker {
   cursor: pointer;
+}
+
+.attachment-field {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+}
+
+.attachment-field :deep(.el-upload) {
+  flex: 0 0 auto;
+}
+
+.attachment-field :deep(.el-input) {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 :deep(.purchase-inbound-item-table .common-number-input) {

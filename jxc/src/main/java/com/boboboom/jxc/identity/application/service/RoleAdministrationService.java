@@ -2,6 +2,7 @@ package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.BusinessCodeGenerator;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.domain.repository.GroupRepository;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
@@ -28,8 +29,6 @@ import java.util.stream.Collectors;
 public class RoleAdministrationService {
 
     private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
-    private static final String STATUS_ENABLED = "ENABLED";
-    private static final String STATUS_DISABLED = "DISABLED";
     private static final String PLATFORM_ROLE_TYPE = "PLATFORM";
     private static final String ROLE_CODE_PREFIX = "JSBM";
     private static final Set<String> PROTECTED_ROLE_CODES = Set.of(PLATFORM_SUPER_ADMIN_ROLE_CODE);
@@ -43,6 +42,7 @@ public class RoleAdministrationService {
     private final RoleMenuAdministrationService roleMenuAdministrationService;
     private final BusinessCodeGenerator businessCodeGenerator;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public RoleAdministrationService(RoleRepository roleRepository,
                                      GroupRepository groupRepository,
@@ -51,7 +51,8 @@ public class RoleAdministrationService {
                                      IdentityAccessControlService identityAccessControlService,
                                      RoleMenuAdministrationService roleMenuAdministrationService,
                                      BusinessCodeGenerator businessCodeGenerator,
-                                     OrgScopeService orgScopeService) {
+                                     OrgScopeService orgScopeService,
+                                     DictionaryLookupService dictionaryLookupService) {
         this.roleRepository = roleRepository;
         this.groupRepository = groupRepository;
         this.roleMenuRelRepository = roleMenuRelRepository;
@@ -60,6 +61,7 @@ public class RoleAdministrationService {
         this.roleMenuAdministrationService = roleMenuAdministrationService;
         this.businessCodeGenerator = businessCodeGenerator;
         this.orgScopeService = orgScopeService;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public List<RoleAdminSnapshot> listRoles(Long operatorId, boolean platformAdmin, String orgId) {
@@ -233,7 +235,7 @@ public class RoleAdministrationService {
         }
         identityAccessControlService.ensureCanManageRole(operatorId, role);
         String normalizedStatus = normalizeStatus(nextStatus);
-        if (STATUS_DISABLED.equals(normalizedStatus)) {
+        if (disabledStatus().equals(normalizedStatus)) {
             ensureRoleMutable(role);
         }
         role.setStatus(normalizedStatus);
@@ -279,13 +281,14 @@ public class RoleAdministrationService {
         if (groupId == null || groupId <= 0) {
             return;
         }
-        List<RoleDO> templateRoles = roleRepository.findBuiltinTemplateRoles();
+        String enabledStatus = enabledStatus();
+        List<RoleDO> templateRoles = roleRepository.findBuiltinTemplateRoles(enabledStatus);
         for (RoleDO template : templateRoles) {
             RoleDO existing = roleRepository.findByTenantGroupIdAndRoleCode(groupId, template.getRoleCode()).orElse(null);
             if (existing != null) {
                 existing.setBuiltin(Boolean.TRUE);
-                if (!STATUS_ENABLED.equals(existing.getStatus())) {
-                    existing.setStatus(STATUS_ENABLED);
+                if (!enabledStatus.equals(existing.getStatus())) {
+                    existing.setStatus(enabledStatus);
                 }
                 roleRepository.update(existing);
                 continue;
@@ -298,7 +301,7 @@ public class RoleAdministrationService {
             role.setRoleType(template.getRoleType());
             role.setDataScopeType(template.getDataScopeType());
             role.setDescription(template.getDescription());
-            role.setStatus(STATUS_ENABLED);
+            role.setStatus(enabledStatus);
             role.setCreatedBy(operatorId);
             roleRepository.save(role);
         }
@@ -326,12 +329,17 @@ public class RoleAdministrationService {
     private String normalizeStatus(String rawStatus) {
         String status = trimNullable(rawStatus);
         if (status == null) {
-            return STATUS_ENABLED;
+            return enabledStatus();
         }
-        if (!STATUS_ENABLED.equals(status) && !STATUS_DISABLED.equals(status)) {
-            throw new BusinessException("状态仅支持 ENABLED 或 DISABLED");
-        }
-        return status;
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.COMMON_ENABLED_STATUS, status);
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
+    }
+
+    private String disabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.DISABLED);
     }
 
     private boolean normalizeBuiltin(Boolean builtin) {

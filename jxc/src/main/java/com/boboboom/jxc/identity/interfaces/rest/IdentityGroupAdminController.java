@@ -182,8 +182,9 @@ public class IdentityGroupAdminController {
      */
     public CodeDataResponse<IdPayload> createGroupStore(@PathVariable Long groupId,
                                                         @Valid @RequestBody GroupStoreCreateRequest request) {
-        identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
-        StoreDO store = groupAdministrationService.createGroupStore(groupId, request);
+        Long operatorId = identityAdminSupport.currentOperatorId();
+        identityAccessControlService.ensureCanManageGroup(operatorId, groupId);
+        StoreDO store = groupAdministrationService.createGroupStore(groupId, request, operatorId);
         return CodeDataResponse.ok(new IdPayload(store.getId()));
     }
 

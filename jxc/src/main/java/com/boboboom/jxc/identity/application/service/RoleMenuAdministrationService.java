@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
 @Service
 public class RoleMenuAdministrationService {
 
-    private static final String STATUS_ENABLED = "ENABLED";
     private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
     private static final String GROUP_ADMIN_ROLE_CODE = "GROUP_ADMIN";
     private static final String PLATFORM_ROLE_TYPE = "PLATFORM";
@@ -50,15 +49,18 @@ public class RoleMenuAdministrationService {
     private final RoleMenuRelRepository roleMenuRelRepository;
     private final RoleRepository roleRepository;
     private final OrgScopeService orgScopeService;
+    private final IdentityAdminLookupService identityAdminLookupService;
 
     public RoleMenuAdministrationService(MenuRepository menuRepository,
                                          RoleMenuRelRepository roleMenuRelRepository,
                                          RoleRepository roleRepository,
-                                         OrgScopeService orgScopeService) {
+                                         OrgScopeService orgScopeService,
+                                         IdentityAdminLookupService identityAdminLookupService) {
         this.menuRepository = menuRepository;
         this.roleMenuRelRepository = roleMenuRelRepository;
         this.roleRepository = roleRepository;
         this.orgScopeService = orgScopeService;
+        this.identityAdminLookupService = identityAdminLookupService;
     }
 
     @Transactional
@@ -72,8 +74,8 @@ public class RoleMenuAdministrationService {
                 "GROUP_USER_ROLE_MGMT",
                 "用户管理",
                 groupMgmt.getId(),
-                "/group/user-role",
-                "group/user-role/index",
+                "/group/users",
+                "system.user-management.index",
                 "group:user-role:manage",
                 "user",
                 46
@@ -83,7 +85,7 @@ public class RoleMenuAdministrationService {
                 "角色管理",
                 groupMgmt.getId(),
                 "/group/roles",
-                "group/roles/index",
+                "system.role-management.index",
                 "group:role:manage",
                 "team",
                 47
@@ -93,7 +95,7 @@ public class RoleMenuAdministrationService {
                 "菜单权限管理",
                 groupMgmt.getId(),
                 "/group/menu-permissions",
-                "group/menu-permissions/index",
+                "system.menu-permission-management.index",
                 "group:menu-permission:manage",
                 "setting",
                 48
@@ -122,8 +124,8 @@ public class RoleMenuAdministrationService {
                 "STORE_BIZ_MENU_08_01_01",
                 "物品管理",
                 archiveGroup.getId(),
-                "/archive/1/1",
-                "views/feature/index",
+                "/archive/items",
+                "items.management.index",
                 "store:biz:08:01:01:view",
                 null,
                 108011
@@ -132,8 +134,8 @@ public class RoleMenuAdministrationService {
                 "STORE_BIZ_MENU_08_01_02",
                 "物品类别管理",
                 archiveGroup.getId(),
-                "/archive/1/2",
-                "views/feature/index",
+                "/archive/item-categories",
+                "items.category-management.index",
                 "store:biz:08:01:02:view",
                 null,
                 108012
@@ -142,8 +144,8 @@ public class RoleMenuAdministrationService {
                 "STORE_BIZ_MENU_08_01_03",
                 "单位管理",
                 archiveGroup.getId(),
-                "/archive/1/3",
-                "views/feature/index",
+                "/archive/units",
+                "system.unit-management.index",
                 "store:biz:08:01:03:view",
                 null,
                 108013
@@ -152,8 +154,8 @@ public class RoleMenuAdministrationService {
                 "STORE_BIZ_MENU_08_01_04",
                 "统计类型管理",
                 archiveGroup.getId(),
-                "/archive/1/4",
-                "views/feature/index",
+                "/archive/statistics-types",
+                "items.statistics-type-management.index",
                 "store:biz:08:01:04:view",
                 null,
                 108014
@@ -162,8 +164,8 @@ public class RoleMenuAdministrationService {
                 "STORE_BIZ_MENU_08_01_05",
                 "物品标签管理",
                 archiveGroup.getId(),
-                "/archive/1/5",
-                "views/feature/index",
+                "/archive/item-tags",
+                "items.tag-management.index",
                 "store:biz:08:01:05:view",
                 null,
                 108015
@@ -193,7 +195,7 @@ public class RoleMenuAdministrationService {
         }
         return menuRepository.findAllOrdered()
                 .stream()
-                .filter(menu -> STATUS_ENABLED.equals(menu.getStatus()))
+                .filter(menu -> identityAdminLookupService.enabledStatus().equals(menu.getStatus()))
                 .filter(menu -> platformAdmin || isAssignableForManagedRole(menu.getMenuCode()))
                 .map(this::toOption)
                 .toList();
@@ -242,7 +244,7 @@ public class RoleMenuAdministrationService {
                               String menuName,
                               Long parentId,
                               String routePath,
-                              String componentPath,
+                              String componentKey,
                               String permissionCode,
                               String icon,
                               int sortNo) {
@@ -254,12 +256,12 @@ public class RoleMenuAdministrationService {
             menu.setParentId(parentId);
             menu.setMenuType("MENU");
             menu.setRoutePath(routePath);
-            menu.setComponentPath(componentPath);
+            menu.setComponentKey(componentKey);
             menu.setPermissionCode(permissionCode);
             menu.setIcon(icon);
             menu.setSortNo(sortNo);
             menu.setVisible(Boolean.TRUE);
-            menu.setStatus(STATUS_ENABLED);
+            menu.setStatus(identityAdminLookupService.enabledStatus());
             menuRepository.save(menu);
             return menu;
         }
@@ -271,6 +273,26 @@ public class RoleMenuAdministrationService {
         }
         if (!Objects.equals(menu.getParentId(), parentId)) {
             menu.setParentId(parentId);
+            changed = true;
+        }
+        if (!Objects.equals(menu.getRoutePath(), routePath)) {
+            menu.setRoutePath(routePath);
+            changed = true;
+        }
+        if (!Objects.equals(menu.getComponentKey(), componentKey)) {
+            menu.setComponentKey(componentKey);
+            changed = true;
+        }
+        if (!Objects.equals(menu.getPermissionCode(), permissionCode)) {
+            menu.setPermissionCode(permissionCode);
+            changed = true;
+        }
+        if (!Objects.equals(menu.getIcon(), icon)) {
+            menu.setIcon(icon);
+            changed = true;
+        }
+        if (!Objects.equals(menu.getSortNo(), sortNo)) {
+            menu.setSortNo(sortNo);
             changed = true;
         }
         if (changed) {
@@ -371,6 +393,7 @@ public class RoleMenuAdministrationService {
                 menu.getParentId(),
                 menu.getMenuType(),
                 menu.getRoutePath(),
+                menu.getComponentKey(),
                 menu.getPermissionCode(),
                 menu.getStatus(),
                 menu.getSortNo()
@@ -414,6 +437,7 @@ public class RoleMenuAdministrationService {
                                        Long parentId,
                                        String menuType,
                                        String routePath,
+                                       String componentKey,
                                        String permissionCode,
                                        String status,
                                        Integer sortNo) {

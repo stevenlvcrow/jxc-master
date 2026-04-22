@@ -2,8 +2,10 @@ package com.boboboom.jxc.item.application.service;
 
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.item.domain.repository.ItemTagRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemTagDO;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemTagBatchImportRequest;
@@ -26,19 +28,21 @@ import java.util.Set;
 public class ItemTagApplicationService {
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
-    private static final String STATUS_ENABLED = "启用";
     private static final String TAG_CODE_PREFIX = "BQBM";
 
     private final ItemTagRepository itemTagRepository;
     private final OrgScopeService orgScopeService;
     private final BusinessCodeGenerator businessCodeGenerator;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public ItemTagApplicationService(ItemTagRepository itemTagRepository,
                                      OrgScopeService orgScopeService,
-                                     BusinessCodeGenerator businessCodeGenerator) {
+                                     BusinessCodeGenerator businessCodeGenerator,
+                                     DictionaryLookupService dictionaryLookupService) {
         this.itemTagRepository = itemTagRepository;
         this.orgScopeService = orgScopeService;
         this.businessCodeGenerator = businessCodeGenerator;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public PageData<ItemTagRow> list(Integer pageNo,
@@ -92,7 +96,7 @@ public class ItemTagApplicationService {
         row.setScopeId(scope.scopeId());
         row.setTagCode(tagCode);
         row.setTagName(tagName);
-        row.setStatus(STATUS_ENABLED);
+        row.setStatus(dictionaryLookupService.codeOf(DictionaryCodes.ITEM_STATUS, DictionaryCodes.ENABLED));
         row.setRemark(trimNullable(request.itemName()));
         itemTagRepository.save(row);
 
@@ -150,7 +154,7 @@ public class ItemTagApplicationService {
             row.setScopeId(scope.scopeId());
             row.setTagCode(allocator.nextCode());
             row.setTagName(tagName);
-            row.setStatus(STATUS_ENABLED);
+            row.setStatus(dictionaryLookupService.codeOf(DictionaryCodes.ITEM_STATUS, DictionaryCodes.ENABLED));
             row.setRemark(trimNullable(item.itemName()));
             itemTagRepository.save(row);
             inserted++;

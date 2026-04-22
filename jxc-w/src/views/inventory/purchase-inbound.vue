@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
+import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 import {
   batchApprovePurchaseInboundApi,
   batchDeletePurchaseInboundApi,
@@ -15,39 +16,29 @@ import {
   type PurchaseInboundRow,
 } from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 type TimeType = '入库日期' | '创建时间';
-type DocumentStatus = '草稿' | '已提交' | '已审核';
-type ReviewStatus = '未复审' | '已复审';
+type ReviewStatus = '已审核' | '未审核';
 type ReconciliationStatus = '未对账' | '部分对账' | '已对账';
 type InvoiceStatus = '未开票' | '部分开票' | '已开票';
 type PrintStatus = '全部' | '未打印' | '已打印';
 type SplitStatus = '未分账' | '已分账';
-type TreeNode = {
-  value: string;
-  label: string;
-  children?: TreeNode[];
-};
 
 const timeTypeOptions: TimeType[] = ['入库日期', '创建时间'];
-const documentStatusOptions: DocumentStatus[] = ['草稿', '已提交', '已审核'];
-const reviewStatusOptions: ReviewStatus[] = ['未复审', '已复审'];
+const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
+const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT]);
+const documentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const reviewStatusOptions: ReviewStatus[] = ['已审核', '未审核'];
 const reconciliationStatusOptions: ReconciliationStatus[] = ['未对账', '部分对账', '已对账'];
 const splitStatusOptions: SplitStatus[] = ['未分账', '已分账'];
 const invoiceStatusOptions: InvoiceStatus[] = ['未开票', '部分开票', '已开票'];
 const printStatusOptions: PrintStatus[] = ['全部', '未打印', '已打印'];
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
-const supplierTree: TreeNode[] = [
-  {
-    value: 'supplier-group',
-    label: '供应商组',
-    children: [
-      { value: '鲜达食品', label: '鲜达食品' },
-      { value: '优选农场', label: '优选农场' },
-      { value: '盒马包材', label: '盒马包材' },
-    ],
-  },
-];
+const {
+  supplierOptions,
+  loadSupplierOptions,
+} = useSupplierArchiveOptions();
 const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
 const sessionStore = useSessionStore();
 const router = useRouter();
@@ -92,12 +83,14 @@ const resolvePurchaseInboundOrgId = () => {
 
 onMounted(() => {
   void loadWarehouseTree();
+  void loadSupplierOptions();
 });
 
 watch(
   () => sessionStore.currentOrgId,
   () => {
     void loadWarehouseTree();
+    void loadSupplierOptions();
   },
 );
 
@@ -196,7 +189,7 @@ const handleReset = async () => {
 
 const handleToolbarAction = async (action: string) => {
   if (action === '新增') {
-    router.push('/inventory/1/2/create');
+    router.push('/inventory/purchase-inbounds/create');
     return;
   }
   if (action === '批量删除') {
@@ -284,11 +277,11 @@ const handleSelectionChange = (rows: PurchaseInboundRow[]) => {
 };
 
 const handleView = (row: PurchaseInboundRow) => {
-  router.push(`/inventory/1/2/view/${row.id}`);
+  router.push(`/inventory/purchase-inbounds/view/${row.id}`);
 };
 
 const handleEdit = (row: PurchaseInboundRow) => {
-  router.push(`/inventory/1/2/edit/${row.id}`);
+  router.push(`/inventory/purchase-inbounds/edit/${row.id}`);
 };
 
 const handlePageChange = async (page: number) => {
@@ -355,15 +348,19 @@ watch(
         <el-input v-model="query.documentCode" placeholder="请输入单据编号" clearable style="width: 150px" />
       </el-form-item>
       <el-form-item label="供应商">
-        <el-tree-select
+        <el-select
           v-model="query.supplier"
-          :data="supplierTree"
-          :props="{ label: 'label', value: 'value', children: 'children' }"
           clearable
-          check-strictly
-          default-expand-all
           style="width: 150px"
-        />
+          placeholder="请选择供应商"
+        >
+          <el-option
+            v-for="option in supplierOptions"
+            :key="option.id"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
       </el-form-item>
       <el-form-item label="物品">
         <el-select v-model="query.itemName" clearable style="width: 120px">
@@ -379,9 +376,9 @@ watch(
         <el-select v-model="query.documentStatus" clearable style="width: 120px">
           <el-option
             v-for="option in documentStatusOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
           />
         </el-select>
       </el-form-item>

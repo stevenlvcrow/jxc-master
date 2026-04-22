@@ -2,6 +2,7 @@ package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.BusinessCodeGenerator;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.domain.repository.UnitRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
 import org.springframework.stereotype.Service;
@@ -17,11 +18,14 @@ public class UnitAdministrationService {
 
     private final UnitRepository unitRepository;
     private final BusinessCodeGenerator businessCodeGenerator;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public UnitAdministrationService(UnitRepository unitRepository,
-                                     BusinessCodeGenerator businessCodeGenerator) {
+                                     BusinessCodeGenerator businessCodeGenerator,
+                                     DictionaryLookupService dictionaryLookupService) {
         this.unitRepository = unitRepository;
         this.businessCodeGenerator = businessCodeGenerator;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public List<UnitDO> listUnits(String scopeType,
@@ -137,15 +141,9 @@ public class UnitAdministrationService {
     private String normalizeStatus(String value) {
         String status = trimNullable(value);
         if (status == null || status.isEmpty()) {
-            return "ENABLED";
+            return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
         }
-        if ("ENABLED".equalsIgnoreCase(status)) {
-            return "ENABLED";
-        }
-        if ("DISABLED".equalsIgnoreCase(status)) {
-            return "DISABLED";
-        }
-        throw new BusinessException("状态参数非法");
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.COMMON_ENABLED_STATUS, status);
     }
 
     private String normalizeUnitTypeNullable(String value) {
@@ -159,15 +157,9 @@ public class UnitAdministrationService {
     private String normalizeUnitType(String value) {
         String unitType = trimNullable(value);
         if (unitType == null || unitType.isEmpty()) {
-            return "STANDARD";
+            return dictionaryLookupService.codeOf(DictionaryCodes.UNIT_TYPE, DictionaryCodes.STANDARD);
         }
-        if ("STANDARD".equalsIgnoreCase(unitType)) {
-            return "STANDARD";
-        }
-        if ("AUXILIARY".equalsIgnoreCase(unitType)) {
-            return "AUXILIARY";
-        }
-        throw new BusinessException("单位类型参数非法");
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.UNIT_TYPE, unitType);
     }
 
     private String trimNullable(String value) {

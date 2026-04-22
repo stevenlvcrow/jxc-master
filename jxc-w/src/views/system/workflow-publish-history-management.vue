@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage, ElMessageBox, type ElTable } from 'element-plus';
 import {
   bindWorkflowProcessStoresApi,
   createWorkflowProcessApi,
@@ -45,12 +45,9 @@ const bindStoreSubmitting = ref(false);
 const storeLoadWarned = ref(false);
 const bindingStoreBusinessId = ref<number | null>(null);
 const storeOptions = ref<WorkflowProcessStoreOption[]>([]);
-const bindStoreForm = reactive({
-  storeIds: [] as number[],
-});
 const bindStoreSearch = ref('');
 const bindStoreSelectedRows = ref<WorkflowProcessStoreOption[]>([]);
-const bindStoreTableRef = ref<InstanceType<typeof import('element-plus').ElTable> | null>(null);
+const bindStoreTableRef = ref<InstanceType<typeof ElTable> | null>(null);
 const preferredBusinessCode = computed(() => String(route.query.businessCode ?? '').trim());
 const preferredWorkflowCode = computed(() => String(route.query.workflowCode ?? '').trim());
 
@@ -116,6 +113,16 @@ const syncExpandedRows = () => {
   }
   const matched = rows.value.find((item) => item.process_code === routeBusinessCode);
   expandedRowKeys.value = matched ? [matched.id] : [rows.value[0].id];
+};
+
+const toggleExpandedRow = (business: WorkflowProcessItem) => {
+  const isExpanded = expandedRowKeys.value.includes(business.id);
+  expandedRowKeys.value = isExpanded ? [] : [business.id];
+};
+
+const handleExpandChange = (business: WorkflowProcessItem, expandedRows: WorkflowProcessItem[]) => {
+  const isExpanded = expandedRows.some((item) => item.id === business.id);
+  expandedRowKeys.value = isExpanded ? [business.id] : [];
 };
 
 const resetProcessForm = () => {
@@ -303,7 +310,7 @@ const openBindStores = async (business: WorkflowProcessItem) => {
   await nextTick();
   if (bindStoreTableRef.value) {
     storeOptions.value.forEach((row) => {
-      (bindStoreTableRef.value as any).toggleRowSelection(row, selected.some((s) => s.storeId === row.storeId));
+      bindStoreTableRef.value?.toggleRowSelection(row, selected.some((s) => s.storeId === row.storeId));
     });
   }
 };
@@ -414,6 +421,8 @@ watch(
         v-loading="loading"
         row-key="id"
         class="erp-table"
+        @row-dblclick="toggleExpandedRow"
+        @expand-change="handleExpandChange"
       >
         <el-table-column type="expand" width="48">
           <template #default="{ row: business }">

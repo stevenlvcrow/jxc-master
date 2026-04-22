@@ -15,10 +15,11 @@ import {
   type WarehouseCreatePayload,
 } from '@/api/modules/warehouse';
 import type { OrgNode } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 const sessionStore = useSessionStore();
 
-type WarehouseType = '出品及生产部门' | '行政部门' | '普通仓库';
+type WarehouseType = string;
 
 type WarehouseForm = {
   warehouseType: string;
@@ -38,9 +39,23 @@ const toolbarButtons: ToolbarButton[] = [
   { key: '新增', label: '新增', type: 'primary' },
 ];
 
-const statusOptions = ['全部', '启用', '停用'] as const;
-const warehouseTypeOptions = ['全部', '出品及生产部门', '行政部门', '普通仓库'] as const;
-const warehouseFormTypeOptions: WarehouseType[] = ['出品及生产部门', '行政部门', '普通仓库'];
+const COMMON_STATUS_DICT = 'common.enabled_status';
+const WAREHOUSE_TYPE_DICT = 'warehouse.type';
+const { optionsOf } = useDictionaryOptions([COMMON_STATUS_DICT, WAREHOUSE_TYPE_DICT]);
+const statusOptions = optionsOf(COMMON_STATUS_DICT, { enabled: true });
+const warehouseTypeOptions = optionsOf(WAREHOUSE_TYPE_DICT, { enabled: true });
+const warehouseFormTypeOptions = computed(() => (
+  warehouseTypeOptions.value.filter((item) => item.itemCode !== 'ALL')
+));
+const enabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'ENABLED')?.itemCode ?? 'ENABLED'
+));
+const disabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'DISABLED')?.itemCode ?? 'DISABLED'
+));
+const defaultWarehouseType = computed(() => (
+  warehouseTypeOptions.value.find((item) => item.itemKey === 'NORMAL_WAREHOUSE')?.itemCode ?? '普通仓库'
+));
 const departmentOptions = ['供应链中心', '采购部', '营运部', '仓储部', '出品部', '生产部'];
 const regionOptions = [
   {
@@ -64,7 +79,7 @@ const viewDialogVisible = ref(false);
 const viewingRow = ref<WarehouseRow | null>(null);
 const formRef = ref<FormInstance>();
 const form = reactive<WarehouseForm>({
-  warehouseType: '出品及生产部门',
+  warehouseType: '普通仓库',
   warehouseCode: '',
   warehouseName: '',
   department: '',
@@ -89,8 +104,8 @@ const formRules: FormRules<WarehouseForm> = {
 // Query state
 const query = reactive({
   warehouseInfo: '',
-  status: '全部' as (typeof statusOptions)[number],
-  warehouseType: '全部' as (typeof warehouseTypeOptions)[number],
+  status: 'ALL',
+  warehouseType: 'ALL',
 });
 
 // Store / Table state
@@ -113,12 +128,12 @@ const loading = ref(false);
 
 // Computed (all data shown, server-side filtering)
 const totalItems = computed(() => tableData.value.length);
-const isStatusEnabled = (status: WarehouseRow['status'] | undefined | null) => status === 'ENABLED';
+const isStatusEnabled = (status: WarehouseRow['status'] | undefined | null) => status === enabledStatus.value;
 const formatStatusLabel = (status: WarehouseRow['status'] | undefined | null) => {
   if (!status) {
     return '-';
   }
-  return status === 'ENABLED' ? '启用' : '停用';
+  return statusOptions.value.find((item) => item.itemCode === status)?.itemLabel ?? status;
 };
 
 const resolveStoreIdFromCurrentOrg = (): number | undefined => {
@@ -160,8 +175,8 @@ const loadData = async () => {
   try {
     const rows = await fetchStoreWarehousesApi(storeId, {
       keyword: query.warehouseInfo.trim() || undefined,
-      status: query.status !== '全部' ? query.status : undefined,
-      warehouseType: query.warehouseType !== '全部' ? query.warehouseType : undefined,
+      status: query.status !== 'ALL' ? query.status : undefined,
+      warehouseType: query.warehouseType !== 'ALL' ? query.warehouseType : undefined,
     });
     tableData.value = rows;
   } catch (err) {
@@ -197,8 +212,8 @@ const handleSearch = () => {
 
 const handleReset = () => {
   query.warehouseInfo = '';
-  query.status = '全部';
-  query.warehouseType = '全部';
+  query.status = 'ALL';
+  query.warehouseType = 'ALL';
   currentPage.value = 1;
   loadData();
 };
@@ -223,7 +238,7 @@ const handleSelectionChange = (rows: WarehouseRow[]) => {
 };
 
 /** Map UI status to API status */
-const toApiStatus = (enabled: boolean): 'ENABLED' | 'DISABLED' => enabled ? 'ENABLED' : 'DISABLED';
+const toApiStatus = (enabled: boolean) => enabled ? enabledStatus.value : disabledStatus.value;
 
 /** Build payload from form */
 const buildPayload = (): WarehouseCreatePayload => ({
@@ -271,7 +286,7 @@ const handleEdit = async (row: WarehouseRow) => {
   editingId.value = row.id;
   dialogTitle.value = '编辑仓库';
 
-  form.warehouseType = row.warehouseType || '普通仓库';
+  form.warehouseType = row.warehouseType || defaultWarehouseType.value;
   form.warehouseCode = row.warehouseCode;
   form.warehouseName = row.warehouseName;
   form.department = row.department || '';
@@ -281,7 +296,6 @@ const handleEdit = async (row: WarehouseRow) => {
 
   // Parse regionPath back into array
   if (row.address) {
-    const parts = row.address.split(' ').filter(Boolean);
     // Try to match known region prefixes
     let regionStr = '';
     let addrPart = row.address;
@@ -332,17 +346,17 @@ const handleDelete = async (row: WarehouseRow) => {
     ElMessage.success('删除成功');
     loadData();
   } catch (e: unknown) {
-    if ((e as any) !== 'cancel') {
+    if (e !== 'cancel') {
       // error handled by http-client or cancelled
     }
   }
 };
 
 const handleToggleStatus = async (row: WarehouseRow) => {
-  const newStatus: 'ENABLED' | 'DISABLED' = isStatusEnabled(row.status) ? 'DISABLED' : 'ENABLED';
+  const newStatus = isStatusEnabled(row.status) ? disabledStatus.value : enabledStatus.value;
   try {
     await updateWarehouseStatusApi(row.id, newStatus);
-    ElMessage.success(newStatus === 'ENABLED' ? '已启用' : '已停用');
+    ElMessage.success(newStatus === enabledStatus.value ? '已启用' : '已停用');
     loadData();
   } catch {
     // error handled by http-client
@@ -350,7 +364,7 @@ const handleToggleStatus = async (row: WarehouseRow) => {
 };
 
 const resetForm = () => {
-  form.warehouseType = '出品及生产部门';
+  form.warehouseType = defaultWarehouseType.value;
   form.warehouseCode = '';
   form.warehouseName = '';
   form.department = '';
@@ -433,9 +447,9 @@ const handlePageSizeChange = (size: number) => {
         <el-select v-model="query.status" style="width: 120px">
           <el-option
             v-for="option in statusOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
           />
         </el-select>
       </el-form-item>
@@ -443,9 +457,9 @@ const handlePageSizeChange = (size: number) => {
         <el-select v-model="query.warehouseType" style="width: 120px">
           <el-option
             v-for="option in warehouseTypeOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
           />
         </el-select>
       </el-form-item>
@@ -537,9 +551,9 @@ const handlePageSizeChange = (size: number) => {
         <el-select v-model="form.warehouseType" style="width: 100%">
           <el-option
             v-for="option in warehouseFormTypeOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
           />
         </el-select>
       </el-form-item>

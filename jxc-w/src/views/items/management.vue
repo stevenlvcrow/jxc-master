@@ -237,7 +237,7 @@ const batchDelete = async () => {
         ElMessage.warning('请先选择门店机构');
         return;
       }
-      router.push('/archive/1/1/create');
+      router.push('/archive/items/create');
       return;
     }
 
@@ -291,7 +291,7 @@ const handleToggleStatus = async (row: ItemRow) => {
 
 const handleEditOne = (row: ItemRow) => {
   router.push({
-    path: '/archive/1/1/create',
+    path: '/archive/items/create',
     query: {
       id: row.id,
       mode: 'edit',

@@ -574,7 +574,7 @@ const loadPageData = async () => {
         applyDetail(detail);
       } else {
         ElMessage.warning('未找到对应盘点单，已返回列表');
-        router.replace('/inventory/2/1');
+        router.replace('/inventory/inventory-checks');
       }
     }
   } finally {
@@ -583,7 +583,7 @@ const loadPageData = async () => {
 };
 
 const handleBack = () => {
-  router.push('/inventory/2/1');
+  router.push('/inventory/inventory-checks');
 };
 
 const scrollToSection = (key: string) => {
@@ -629,7 +629,7 @@ const removeRow = (index: number) => {
   rows.value.splice(index, 1);
 };
 
-const openItemSelector = async () => {
+const _openItemSelector = async () => {
   if (isReadonlyMode.value) {
     return;
   }
@@ -668,10 +668,6 @@ const handleItemSelectorConfirm = (selectedRows: Array<Record<string, unknown>>)
 
 const handleToolbarAction = async (action: string) => {
   if (isReadonlyMode.value) {
-    return;
-  }
-  if (action === '添加物品') {
-    await openItemSelector();
     return;
   }
   if (action === '移除账面数为 0 的物品') {
@@ -756,7 +752,7 @@ const handleSave = () => {
   }
   const documentCode = `PD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-001`;
   ElMessage.success(`${isEditMode.value ? '编辑' : '新增'}盘点单成功：${documentCode}`);
-  router.push('/inventory/2/1');
+  router.push('/inventory/inventory-checks');
 };
 
 watch(
@@ -866,7 +862,6 @@ watch(
         <h3 class="form-section-title">盘点明细</h3>
         <div class="table-toolbar">
           <el-button v-for="action in [
-            '添加物品',
             '导出盘点物品',
             '导入盘点结果',
             '通过模板新建',

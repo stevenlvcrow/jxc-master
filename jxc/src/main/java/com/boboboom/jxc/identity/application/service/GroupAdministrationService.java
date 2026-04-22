@@ -2,16 +2,18 @@ package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.event.DomainEventPublisher;
 import com.boboboom.jxc.identity.domain.repository.GroupRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreAdminRelRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
+import com.boboboom.jxc.identity.application.event.GroupCreatedEvent;
+import com.boboboom.jxc.identity.application.event.StoreCreatedEvent;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupStoreCreateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupUpsertRequest;
-import com.boboboom.jxc.workflow.application.service.InventoryWorkflowBootstrapService;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,7 +24,6 @@ import java.util.Objects;
 @Service
 public class GroupAdministrationService {
 
-    private static final String STATUS_ENABLED = "ENABLED";
     private static final String GROUP_CODE_PREFIX = "JTBM";
     private static final String STORE_CODE_PREFIX = "MDBM";
 
@@ -31,36 +32,33 @@ public class GroupAdministrationService {
     private final StoreRepository storeRepository;
     private final StoreAdminRelRepository storeAdminRelRepository;
     private final WorkflowProcessStoreBindingRepository workflowProcessStoreBindingRepository;
-    private final InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService;
-    private final StoreSampleDataInitializationService storeSampleDataInitializationService;
     private final IdentityAdminLookupService identityAdminLookupService;
     private final BusinessCodeGenerator businessCodeGenerator;
+    private final DomainEventPublisher domainEventPublisher;
 
     public GroupAdministrationService(UserRoleRelRepository userRoleRelRepository,
                                       GroupRepository groupRepository,
                                       StoreRepository storeRepository,
                                       StoreAdminRelRepository storeAdminRelRepository,
                                       WorkflowProcessStoreBindingRepository workflowProcessStoreBindingRepository,
-                                      InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService,
-                                      StoreSampleDataInitializationService storeSampleDataInitializationService,
                                       IdentityAdminLookupService identityAdminLookupService,
-                                      BusinessCodeGenerator businessCodeGenerator) {
+                                      BusinessCodeGenerator businessCodeGenerator,
+                                      DomainEventPublisher domainEventPublisher) {
         this.userRoleRelRepository = userRoleRelRepository;
         this.groupRepository = groupRepository;
         this.storeRepository = storeRepository;
         this.storeAdminRelRepository = storeAdminRelRepository;
         this.workflowProcessStoreBindingRepository = workflowProcessStoreBindingRepository;
-        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapService;
-        this.storeSampleDataInitializationService = storeSampleDataInitializationService;
         this.identityAdminLookupService = identityAdminLookupService;
         this.businessCodeGenerator = businessCodeGenerator;
+        this.domainEventPublisher = domainEventPublisher;
     }
 
     public List<GroupDO> listGroups(Long operatorId, boolean platformAdmin) {
         if (platformAdmin) {
             return groupRepository.findAllOrdered();
         }
-        List<Long> groupIds = userRoleRelRepository.findByUserIdAndStatus(operatorId, STATUS_ENABLED)
+        List<Long> groupIds = userRoleRelRepository.findByUserIdAndStatus(operatorId, identityAdminLookupService.enabledStatus())
                 .stream()
                 .filter(rel -> "GROUP".equals(rel.getScopeType()))
                 .map(UserRoleRelDO::getScopeId)
@@ -79,14 +77,15 @@ public class GroupAdministrationService {
         if (groupRepository.findByGroupCode(groupCode).isPresent()) {
             throw new BusinessException("集团编码已存在");
         }
+        String adminRealName = identityAdminLookupService.trim(request.getAdminRealName());
+        String adminPhone = identityAdminLookupService.normalizePhone(request.getAdminPhone());
         GroupDO group = new GroupDO();
         group.setGroupCode(groupCode);
         group.setGroupName(identityAdminLookupService.trim(request.getGroupName()));
         group.setStatus(identityAdminLookupService.normalizeStatus(request.getStatus()));
         group.setRemark(identityAdminLookupService.trimNullable(request.getRemark()));
         groupRepository.save(group);
-        ensureGroupBuiltinRoles(group.getId(), operatorId);
-        inventoryWorkflowBootstrapService.ensureDefaults(group.getId(), operatorId);
+        domainEventPublisher.publish(new GroupCreatedEvent(group.getId(), operatorId, adminRealName, adminPhone));
         return group;
     }
 
@@ -133,13 +132,15 @@ public class GroupAdministrationService {
     }
 
     @Transactional
-    public StoreDO createGroupStore(Long groupId, GroupStoreCreateRequest request) {
+    public StoreDO createGroupStore(Long groupId, GroupStoreCreateRequest request, Long operatorId) {
         identityAdminLookupService.requireGroup(groupId);
 
         String storeCode = generateStoreCode();
         if (storeRepository.findByStoreCode(storeCode).isPresent()) {
             throw new BusinessException("门店编码已存在");
         }
+        String adminRealName = identityAdminLookupService.trim(request.getAdminRealName());
+        String adminPhone = identityAdminLookupService.normalizePhone(request.getAdminPhone());
 
         StoreDO store = new StoreDO();
         store.setGroupId(groupId);
@@ -151,7 +152,7 @@ public class GroupAdministrationService {
         store.setAddress(identityAdminLookupService.trimNullable(request.getAddress()));
         store.setRemark(identityAdminLookupService.trimNullable(request.getRemark()));
         storeRepository.save(store);
-        storeSampleDataInitializationService.initializeStoreSampleData(store.getId());
+        domainEventPublisher.publish(new StoreCreatedEvent(groupId, store.getId(), operatorId, adminRealName, adminPhone));
         return store;
     }
 

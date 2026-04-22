@@ -14,6 +14,8 @@ public class GroupStoreCreateRequest {
     private String contactPhone;
     private String address;
     private String remark;
+    private String adminRealName;
+    private String adminPhone;
 
     public String getStoreCode() {
         return storeCode;
@@ -69,5 +71,21 @@ public class GroupStoreCreateRequest {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public String getAdminRealName() {
+        return adminRealName;
+    }
+
+    public void setAdminRealName(String adminRealName) {
+        this.adminRealName = adminRealName;
+    }
+
+    public String getAdminPhone() {
+        return adminPhone;
+    }
+
+    public void setAdminPhone(String adminPhone) {
+        this.adminPhone = adminPhone;
     }
 }

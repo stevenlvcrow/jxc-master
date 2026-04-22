@@ -14,11 +14,6 @@ import { useSessionStore } from '@/stores/session';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 
 type InventoryStatus = '全部' | '正常' | '偏低' | '偏高';
-type TreeNode = {
-  value: string;
-  label: string;
-  children?: TreeNode[];
-};
 type StockLimitRow = {
   id: number;
   warehouseCode: string;

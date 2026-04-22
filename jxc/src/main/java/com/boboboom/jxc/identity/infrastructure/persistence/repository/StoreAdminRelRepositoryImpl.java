@@ -6,6 +6,8 @@ import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreAdmi
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.StoreAdminRelMapper;
 import org.springframework.stereotype.Repository;
 
+import java.util.Optional;
+
 @Repository
 public class StoreAdminRelRepositoryImpl implements StoreAdminRelRepository {
 
@@ -22,6 +24,40 @@ public class StoreAdminRelRepositoryImpl implements StoreAdminRelRepository {
         }
         return storeAdminRelMapper.selectCount(new LambdaQueryWrapper<StoreAdminRelDO>()
                 .eq(StoreAdminRelDO::getStoreId, storeId));
+    }
+
+    @Override
+    public Optional<StoreAdminRelDO> findByStoreId(Long storeId) {
+        if (storeId == null) {
+            return Optional.empty();
+        }
+        return storeAdminRelMapper.selectList(new LambdaQueryWrapper<StoreAdminRelDO>()
+                .eq(StoreAdminRelDO::getStoreId, storeId)
+                .orderByDesc(StoreAdminRelDO::getId))
+                .stream()
+                .findFirst();
+    }
+
+    @Override
+    public Optional<StoreAdminRelDO> findByUserId(Long userId) {
+        if (userId == null) {
+            return Optional.empty();
+        }
+        return storeAdminRelMapper.selectList(new LambdaQueryWrapper<StoreAdminRelDO>()
+                .eq(StoreAdminRelDO::getUserId, userId)
+                .orderByDesc(StoreAdminRelDO::getId))
+                .stream()
+                .findFirst();
+    }
+
+    @Override
+    public void save(StoreAdminRelDO rel) {
+        storeAdminRelMapper.insert(rel);
+    }
+
+    @Override
+    public void update(StoreAdminRelDO rel) {
+        storeAdminRelMapper.updateById(rel);
     }
 
     @Override

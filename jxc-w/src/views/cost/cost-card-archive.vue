@@ -264,7 +264,7 @@ const handleReset = () => {
 
 const handleToolbarAction = (action: string) => {
   if (action === '新增成本卡') {
-    router.push('/archive/2/1/create');
+    router.push('/archive/cost-card-archives/create');
     return;
   }
   ElMessage.info(`已触发：${action}`);

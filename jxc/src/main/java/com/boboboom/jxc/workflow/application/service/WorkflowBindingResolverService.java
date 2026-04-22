@@ -1,6 +1,8 @@
 package com.boboboom.jxc.workflow.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRepository;
@@ -22,18 +24,20 @@ public class WorkflowBindingResolverService {
 
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
-    private static final String STATUS_PUBLISHED = "PUBLISHED";
 
     private final WorkflowProcessRegistryRepository processRegistryRepository;
     private final WorkflowDefinitionConfigRepository definitionConfigRepository;
     private final WorkflowProcessStoreBindingRepository processStoreBindingRepository;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public WorkflowBindingResolverService(WorkflowProcessRegistryRepository processRegistryRepository,
-                                         WorkflowDefinitionConfigRepository definitionConfigRepository,
-                                         WorkflowProcessStoreBindingRepository processStoreBindingRepository) {
+                                           WorkflowDefinitionConfigRepository definitionConfigRepository,
+                                           WorkflowProcessStoreBindingRepository processStoreBindingRepository,
+                                           DictionaryLookupService dictionaryLookupService) {
         this.processRegistryRepository = processRegistryRepository;
         this.definitionConfigRepository = definitionConfigRepository;
         this.processStoreBindingRepository = processStoreBindingRepository;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     /**
@@ -76,7 +80,7 @@ public class WorkflowBindingResolverService {
             throw new BusinessException(workflowLabel + "尚未绑定模板，请先在流程管理中绑定模板");
         }
         WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, registry.getProcessCode(), workflowCode);
-        if (config == null || !STATUS_PUBLISHED.equals(config.getStatus())) {
+        if (config == null || !publishedStatus().equals(config.getStatus())) {
             throw new BusinessException(workflowLabel + "模板未发布，请先发布流程");
         }
         if (!StringUtils.hasText(config.getProcessDefinitionKey()) || !StringUtils.hasText(config.getProcessDefinitionId())) {
@@ -128,6 +132,10 @@ public class WorkflowBindingResolverService {
             return null;
         }
         return value.trim();
+    }
+
+    private String publishedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.WORKFLOW_DEFINITION_STATUS, DictionaryCodes.PUBLISHED);
     }
 
     public record ResolvedWorkflowBinding(Long processRegistryId,

@@ -59,7 +59,7 @@ public class InventoryStockMutationService {
             createInitialBalance(scopeType, scopeId, warehouseName, itemCode, itemName, delta, bizType, bizId, bizLineId, operatorId);
             return;
         }
-        BigDecimal before = balance == null || balance.getQuantity() == null ? BigDecimal.ZERO : balance.getQuantity();
+        BigDecimal before = balance.getQuantity() == null ? BigDecimal.ZERO : balance.getQuantity();
         BigDecimal after = before.add(delta);
         if (after.compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException("库存不足，无法反审核");

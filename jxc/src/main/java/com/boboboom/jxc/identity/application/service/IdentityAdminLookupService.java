@@ -1,6 +1,7 @@
 package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.domain.repository.GroupRepository;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
 import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
@@ -18,25 +19,25 @@ import java.time.LocalDateTime;
 @Service
 public class IdentityAdminLookupService {
 
-    private static final String STATUS_ENABLED = "ENABLED";
-    private static final String STATUS_DISABLED = "DISABLED";
-
     private final UserAccountRepository userAccountRepository;
     private final GroupRepository groupRepository;
     private final RoleRepository roleRepository;
     private final StoreRepository storeRepository;
     private final WarehouseRepository warehouseRepository;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public IdentityAdminLookupService(UserAccountRepository userAccountRepository,
                                       GroupRepository groupRepository,
                                       RoleRepository roleRepository,
                                       StoreRepository storeRepository,
-                                      WarehouseRepository warehouseRepository) {
+                                      WarehouseRepository warehouseRepository,
+                                      DictionaryLookupService dictionaryLookupService) {
         this.userAccountRepository = userAccountRepository;
         this.groupRepository = groupRepository;
         this.roleRepository = roleRepository;
         this.storeRepository = storeRepository;
         this.warehouseRepository = warehouseRepository;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public UserAccountDO requireUser(Long id) {
@@ -67,12 +68,17 @@ public class IdentityAdminLookupService {
     public String normalizeStatus(String rawStatus) {
         String status = trimNullable(rawStatus);
         if (status == null) {
-            return STATUS_ENABLED;
+            return enabledStatus();
         }
-        if (!STATUS_ENABLED.equals(status) && !STATUS_DISABLED.equals(status)) {
-            throw new BusinessException("状态仅支持 ENABLED 或 DISABLED");
-        }
-        return status;
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.COMMON_ENABLED_STATUS, status);
+    }
+
+    public String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
+    }
+
+    public String disabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.DISABLED);
     }
 
     public String normalizePhone(String phone) {
@@ -103,11 +109,12 @@ public class IdentityAdminLookupService {
         if (groupId == null || groupId <= 0) {
             return;
         }
-        for (RoleDO template : roleRepository.findBuiltinTemplateRoles()) {
+        String enabledStatus = enabledStatus();
+        for (RoleDO template : roleRepository.findBuiltinTemplateRoles(enabledStatus)) {
             RoleDO existing = roleRepository.findByTenantGroupIdAndRoleCode(groupId, template.getRoleCode()).orElse(null);
             if (existing != null) {
-                if (!STATUS_ENABLED.equals(existing.getStatus())) {
-                    existing.setStatus(STATUS_ENABLED);
+                if (!enabledStatus.equals(existing.getStatus())) {
+                    existing.setStatus(enabledStatus);
                     roleRepository.update(existing);
                 }
                 continue;
@@ -119,7 +126,7 @@ public class IdentityAdminLookupService {
             role.setRoleType(template.getRoleType());
             role.setDataScopeType(template.getDataScopeType());
             role.setDescription(template.getDescription());
-            role.setStatus(STATUS_ENABLED);
+            role.setStatus(enabledStatus);
             role.setCreatedBy(operatorId);
             roleRepository.save(role);
         }

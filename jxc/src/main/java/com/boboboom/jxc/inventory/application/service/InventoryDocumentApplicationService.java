@@ -1,8 +1,10 @@
 package com.boboboom.jxc.inventory.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
 import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
@@ -37,10 +39,6 @@ import java.util.stream.Collectors;
 @Service
 public class InventoryDocumentApplicationService {
 
-    private static final String STATUS_DRAFT = "草稿";
-    private static final String STATUS_SUBMITTED = "已提交";
-    private static final String STATUS_APPROVED = "已审核";
-    private static final String WORKFLOW_STATUS_NONE = "NONE";
     private static final String PENDING_OPERATION_NONE = "NONE";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
@@ -52,6 +50,7 @@ public class InventoryDocumentApplicationService {
     private final OrgScopeService orgScopeService;
     private final WarehouseRepository warehouseRepository;
     private final ObjectMapper objectMapper;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public InventoryDocumentApplicationService(InventoryDocumentRepository inventoryDocumentRepository,
                                                InventoryStockMutationService inventoryStockMutationService,
@@ -60,7 +59,8 @@ public class InventoryDocumentApplicationService {
                                                InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
                                                OrgScopeService orgScopeService,
                                                WarehouseRepository warehouseRepository,
-                                               ObjectMapper objectMapper) {
+                                               ObjectMapper objectMapper,
+                                               DictionaryLookupService dictionaryLookupService) {
         this.inventoryDocumentRepository = inventoryDocumentRepository;
         this.inventoryStockMutationService = inventoryStockMutationService;
         this.inventoryDocumentPermissionService = inventoryDocumentPermissionService;
@@ -69,6 +69,7 @@ public class InventoryDocumentApplicationService {
         this.orgScopeService = orgScopeService;
         this.warehouseRepository = warehouseRepository;
         this.objectMapper = objectMapper;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     /**
@@ -140,7 +141,7 @@ public class InventoryDocumentApplicationService {
                 .filter(header -> !StringUtils.hasText(primaryKeyword)
                         || toLower(defaultIfBlank(header.getPrimaryName(), "")).contains(primaryKeyword))
                 .filter(header -> !StringUtils.hasText(statusKeyword)
-                        || Objects.equals(defaultIfBlank(header.getStatus(), STATUS_DRAFT), statusKeyword))
+                        || Objects.equals(defaultIfBlank(header.getStatus(), draftStatus()), statusKeyword))
                 .filter(header -> !StringUtils.hasText(remarkKeyword)
                         || toLower(defaultIfBlank(header.getRemark(), "")).contains(remarkKeyword))
                 .filter(header -> matchItem(lineMap.getOrDefault(header.getId(), List.of()), itemKeyword))
@@ -176,7 +177,7 @@ public class InventoryDocumentApplicationService {
         }
 
         List<WarehouseDO> warehouses = loadScopeWarehouses(scope).stream()
-                .filter(warehouse -> Objects.equals(defaultIfBlank(warehouse.getStatus(), ""), "ENABLED"))
+                .filter(warehouse -> Objects.equals(defaultIfBlank(warehouse.getStatus(), ""), enabledStatus()))
                 .toList();
 
         List<InventoryDocumentRow> rows = warehouses.stream()
@@ -257,7 +258,7 @@ public class InventoryDocumentApplicationService {
         return new InventoryDocumentDetail(
                 header.getId(),
                 header.getDocumentCode(),
-                defaultIfBlank(header.getStatus(), STATUS_DRAFT),
+                defaultIfBlank(header.getStatus(), draftStatus()),
                 header.getDocumentDate() == null ? "" : header.getDocumentDate().toString(),
                 defaultIfBlank(header.getPrimaryName(), ""),
                 defaultIfBlank(header.getSecondaryName(), ""),
@@ -378,7 +379,7 @@ public class InventoryDocumentApplicationService {
                 ? new InventoryDocumentHeader()
                 : requireHeader(type, scope, id, operatorId,
                 inventoryDocumentPermissionService.canViewAll(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId));
-        if (!createMode && Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (!createMode && Objects.equals(header.getStatus(), approvedStatus())) {
             throw new BusinessException("已审核单据不允许编辑，请先反审核");
         }
         header.setScopeType(scope.scopeType());
@@ -396,7 +397,7 @@ public class InventoryDocumentApplicationService {
         header.setRemark(trimNullable(request.remark()));
         header.setRejectionReason(null);
         header.setCreatedBy(createMode ? operatorId : header.getCreatedBy());
-        header.setStatus(STATUS_SUBMITTED);
+        header.setStatus(submittedStatus());
         header.setExtraJson(writeJson(request.extraFields()));
         initializeWorkflowState(type, header);
 
@@ -444,7 +445,7 @@ public class InventoryDocumentApplicationService {
             header.setWorkflowTaskName(null);
         }
         if (!StringUtils.hasText(header.getWorkflowStatus())) {
-            header.setWorkflowStatus(WORKFLOW_STATUS_NONE);
+            header.setWorkflowStatus(workflowNoneStatus());
         }
         if (!StringUtils.hasText(header.getPendingOperation())) {
             header.setPendingOperation(PENDING_OPERATION_NONE);
@@ -456,7 +457,7 @@ public class InventoryDocumentApplicationService {
                                InventoryDocumentHeader header,
                                List<InventoryDocumentLine> lines,
                                Long operatorId) {
-        if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (Objects.equals(header.getStatus(), approvedStatus())) {
             return;
         }
         String approverRole = null;
@@ -481,7 +482,7 @@ public class InventoryDocumentApplicationService {
             }
         }
         applyInventoryDelta(type, scope, header, lines, operatorId, false);
-        header.setStatus(STATUS_APPROVED);
+        header.setStatus(approvedStatus());
         header.setApprovedBy(operatorId);
         header.setApprovedAt(LocalDateTime.now());
         header.setPendingOperation(PENDING_OPERATION_NONE);
@@ -497,7 +498,7 @@ public class InventoryDocumentApplicationService {
                                  List<InventoryDocumentLine> lines,
                                  Long operatorId,
                                  String rejectionReason) {
-        if (!Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (!Objects.equals(header.getStatus(), approvedStatus())) {
             return;
         }
         applyInventoryDelta(type, scope, header, lines, operatorId, true);
@@ -509,7 +510,7 @@ public class InventoryDocumentApplicationService {
                 operatorId,
                 header.getWorkflowTaskName()
         );
-        header.setStatus(STATUS_SUBMITTED);
+        header.setStatus(submittedStatus());
         header.setApprovedBy(null);
         header.setApprovedAt(null);
         header.setRejectionReason(rejectionReason);
@@ -610,7 +611,7 @@ public class InventoryDocumentApplicationService {
     }
 
     private void deleteInternal(InventoryDocumentType type, InventoryDocumentHeader header) {
-        if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (Objects.equals(header.getStatus(), approvedStatus())) {
             throw new BusinessException("已审核单据请先反审核后再删除");
         }
         if (StringUtils.hasText(header.getWorkflowInstanceId())) {
@@ -712,8 +713,8 @@ public class InventoryDocumentApplicationService {
                 defaultIfBlank(header.getPrimaryName(), ""),
                 defaultIfBlank(header.getSecondaryName(), ""),
                 defaultIfBlank(header.getCounterpartyName(), ""),
-                defaultIfBlank(header.getStatus(), STATUS_DRAFT),
-                Objects.equals(defaultIfBlank(header.getStatus(), STATUS_DRAFT), STATUS_APPROVED) ? "已复审" : "未复审",
+                defaultIfBlank(header.getStatus(), draftStatus()),
+                Objects.equals(defaultIfBlank(header.getStatus(), draftStatus()), approvedStatus()) ? "已复审" : "未复审",
                 amount == null ? "0.00" : amount.setScale(2, RoundingMode.HALF_UP).toPlainString(),
                 formatDateTime(header.getCreatedAt()),
                 creator,
@@ -738,8 +739,8 @@ public class InventoryDocumentApplicationService {
                 defaultIfBlank(header.getPrimaryName(), defaultIfBlank(warehouse.getWarehouseName(), "")),
                 defaultIfBlank(header.getSecondaryName(), ""),
                 defaultIfBlank(header.getCounterpartyName(), ""),
-                defaultIfBlank(header.getStatus(), STATUS_SUBMITTED),
-                Objects.equals(defaultIfBlank(header.getStatus(), STATUS_DRAFT), STATUS_APPROVED) ? "已复审" : "未复审",
+                defaultIfBlank(header.getStatus(), submittedStatus()),
+                Objects.equals(defaultIfBlank(header.getStatus(), draftStatus()), approvedStatus()) ? "已复审" : "未复审",
                 amount == null ? "0.00" : amount.setScale(2, RoundingMode.HALF_UP).toPlainString(),
                 formatDateTime(header.getCreatedAt()),
                 creator,
@@ -931,6 +932,26 @@ public class InventoryDocumentApplicationService {
 
     private String defaultIfBlank(String value, String fallback) {
         return StringUtils.hasText(value) ? value : fallback;
+    }
+
+    private String draftStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.DRAFT);
+    }
+
+    private String submittedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.SUBMITTED);
+    }
+
+    private String approvedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.APPROVED);
+    }
+
+    private String workflowNoneStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_WORKFLOW_STATUS, DictionaryCodes.NONE);
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
     }
 
     private String toLower(String value) {

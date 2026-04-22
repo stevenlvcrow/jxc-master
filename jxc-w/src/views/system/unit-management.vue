@@ -11,9 +11,10 @@ import {
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import { useSessionStore } from '@/stores/session';
 import { resolveArchiveOrgId } from '@/views/items/org';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
-type UnitType = 'STANDARD' | 'AUXILIARY';
-type UnitStatus = 'ENABLED' | 'DISABLED';
+type UnitType = string;
+type UnitStatus = string;
 
 type UnitRecord = {
   id: number;
@@ -36,6 +37,20 @@ const query = reactive<{
 const currentPage = ref(1);
 const pageSize = ref(10);
 const sessionStore = useSessionStore();
+const COMMON_STATUS_DICT = 'common.enabled_status';
+const UNIT_TYPE_DICT = 'unit.type';
+const { optionsOf } = useDictionaryOptions([COMMON_STATUS_DICT, UNIT_TYPE_DICT]);
+const statusOptions = optionsOf(COMMON_STATUS_DICT, { enabled: true });
+const unitTypeOptions = optionsOf(UNIT_TYPE_DICT, { enabled: true });
+const enabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'ENABLED')?.itemCode ?? 'ENABLED'
+));
+const disabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'DISABLED')?.itemCode ?? 'DISABLED'
+));
+const standardUnitType = computed(() => (
+  unitTypeOptions.value.find((item) => item.itemKey === 'STANDARD')?.itemCode ?? 'STANDARD'
+));
 const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
 const emptyText = computed(() => {
   if (!archiveOrgId.value) {
@@ -83,8 +98,12 @@ const pagedData = computed(() => {
   return filteredData.value;
 });
 
-const statusLabel = (status: UnitStatus) => (status === 'ENABLED' ? '启用' : '停用');
-const typeLabel = (type: UnitType) => (type === 'STANDARD' ? '标准单位' : '辅助单位');
+const statusLabel = (status: UnitStatus) => (
+  statusOptions.value.find((item) => item.itemCode === status)?.itemLabel ?? status
+);
+const typeLabel = (type: UnitType) => (
+  unitTypeOptions.value.find((item) => item.itemCode === type)?.itemLabel ?? type
+);
 
 const openCreateDialog = () => {
   if (!archiveOrgId.value) {
@@ -95,7 +114,7 @@ const openCreateDialog = () => {
   editingId.value = null;
   createForm.code = '';
   createForm.name = '';
-  createForm.type = 'STANDARD';
+  createForm.type = standardUnitType.value;
   createForm.status = true;
   dialogVisible.value = true;
 };
@@ -109,7 +128,7 @@ const openEditDialog = (row: UnitRecord) => {
   createForm.code = row.code;
   createForm.name = row.name;
   createForm.type = row.type;
-  createForm.status = row.status === 'ENABLED';
+  createForm.status = row.status === enabledStatus.value;
   dialogVisible.value = true;
 };
 const loadUnits = async () => {
@@ -190,7 +209,7 @@ const submitCreate = async () => {
     code: dialogMode.value === 'edit' ? createForm.code.trim() : undefined,
     name: createForm.name.trim(),
     type: createForm.type,
-    status: createForm.status ? 'ENABLED' : 'DISABLED',
+    status: createForm.status ? enabledStatus.value : disabledStatus.value,
   } as const;
   try {
     if (dialogMode.value === 'create') {
@@ -233,16 +252,22 @@ watch(
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" style="width: 120px">
-            <el-option label="全部" value="ALL" />
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="单位类型">
           <el-select v-model="query.unitType" style="width: 130px">
-            <el-option label="标准单位" value="STANDARD" />
-            <el-option label="辅助单位" value="AUXILIARY" />
-            <el-option label="全部" value="ALL" />
+            <el-option
+              v-for="option in unitTypeOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -277,7 +302,7 @@ watch(
         </el-table-column>
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'" size="small">
+            <el-tag :type="row.status === enabledStatus ? 'success' : 'info'" size="small">
               {{ statusLabel(row.status) }}
             </el-tag>
           </template>
@@ -324,8 +349,13 @@ watch(
       </el-form-item>
       <el-form-item label="单位类型" prop="type">
         <el-radio-group v-model="createForm.type">
-          <el-radio value="STANDARD">标准单位</el-radio>
-          <el-radio value="AUXILIARY">辅助单位</el-radio>
+          <el-radio
+            v-for="option in unitTypeOptions.filter((item) => item.itemCode !== 'ALL')"
+            :key="option.itemCode"
+            :value="option.itemCode"
+          >
+            {{ option.itemLabel }}
+          </el-radio>
         </el-radio-group>
       </el-form-item>
       <el-form-item label="状态">

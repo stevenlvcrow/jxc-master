@@ -7,6 +7,7 @@ export type CurrentMenuItem = {
   parentId: number | null;
   menuType: 'DIRECTORY' | 'MENU';
   routePath: string | null;
+  componentKey: string | null;
   icon: string | null;
   sortNo: number | null;
 };

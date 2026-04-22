@@ -2,6 +2,7 @@ package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.domain.repository.WarehouseItemRuleRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,15 +14,17 @@ import java.util.List;
 public class WarehouseItemRuleAdministrationService {
 
     private static final String RULE_CODE_PREFIX = "CKWP";
-    private static final String STATUS_ENABLED = "ENABLED";
 
     private final WarehouseItemRuleRepository warehouseItemRuleRepository;
     private final BusinessCodeGenerator businessCodeGenerator;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public WarehouseItemRuleAdministrationService(WarehouseItemRuleRepository warehouseItemRuleRepository,
-                                                  BusinessCodeGenerator businessCodeGenerator) {
+                                                  BusinessCodeGenerator businessCodeGenerator,
+                                                  DictionaryLookupService dictionaryLookupService) {
         this.warehouseItemRuleRepository = warehouseItemRuleRepository;
         this.businessCodeGenerator = businessCodeGenerator;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public List<RuleSummaryData> listRules(Long groupId) {
@@ -81,7 +84,7 @@ public class WarehouseItemRuleAdministrationService {
                 command.controlOrder(),
                 command.controlPurchaseInbound(),
                 command.controlTransferInbound(),
-                STATUS_ENABLED,
+                enabledStatus(),
                 command.operatorUsername(),
                 null,
                 null,
@@ -266,5 +269,9 @@ public class WarehouseItemRuleAdministrationService {
                                     List<RuleItemData> items,
                                     List<RuleCategoryData> categories,
                                     List<RuleWarehouseData> warehouses) {
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
     }
 }

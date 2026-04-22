@@ -1,8 +1,10 @@
 package com.boboboom.jxc.inventory.application.service;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.inventory.domain.repository.InventoryBalanceRepository;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundLineRepository;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
@@ -36,9 +38,6 @@ import java.util.stream.Collectors;
 @Service
 public class PurchaseInboundApplicationService {
 
-    private static final String STATUS_DRAFT = "草稿";
-    private static final String STATUS_SUBMITTED = "已提交";
-    private static final String STATUS_APPROVED = "已审核";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
     private final InventoryBalanceRepository inventoryBalanceRepository;
@@ -50,6 +49,7 @@ public class PurchaseInboundApplicationService {
     private final PurchaseInboundUnapproveService purchaseInboundUnapproveService;
     private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public PurchaseInboundApplicationService(InventoryBalanceRepository inventoryBalanceRepository,
                                              PurchaseInboundRepository purchaseInboundRepository,
@@ -59,7 +59,8 @@ public class PurchaseInboundApplicationService {
                                              PurchaseInboundNotificationService purchaseInboundNotificationService,
                                              PurchaseInboundUnapproveService purchaseInboundUnapproveService,
                                              InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
-                                             OrgScopeService orgScopeService) {
+                                             OrgScopeService orgScopeService,
+                                             DictionaryLookupService dictionaryLookupService) {
         this.inventoryBalanceRepository = inventoryBalanceRepository;
         this.purchaseInboundRepository = purchaseInboundRepository;
         this.purchaseInboundLineRepository = purchaseInboundLineRepository;
@@ -69,6 +70,7 @@ public class PurchaseInboundApplicationService {
         this.purchaseInboundUnapproveService = purchaseInboundUnapproveService;
         this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowService;
         this.orgScopeService = orgScopeService;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public PageData<PurchaseInboundRow> listPurchaseInbound(Integer pageNo,
@@ -151,7 +153,7 @@ public class PurchaseInboundApplicationService {
         return new PurchaseInboundDetail(
                 header.getId(),
                 header.getDocumentCode(),
-                defaultIfBlank(header.getStatus(), STATUS_DRAFT),
+                defaultIfBlank(header.getStatus(), draftStatus()),
                 header.getInboundDate() == null ? "" : header.getInboundDate().toString(),
                 defaultIfBlank(header.getWarehouseName(), ""),
                 defaultIfBlank(header.getSupplierName(), ""),
@@ -171,6 +173,8 @@ public class PurchaseInboundApplicationService {
                         .map(line -> new PurchaseInboundDetailLine(
                                 line.getItemCode(),
                                 line.getItemName(),
+                                defaultIfBlank(line.getSpec(), ""),
+                                defaultIfBlank(line.getCategory(), ""),
                                 line.getQuantity() == null ? BigDecimal.ZERO : line.getQuantity(),
                                 line.getUnitPrice() == null ? BigDecimal.ZERO : line.getUnitPrice(),
                                 line.getTaxRate() == null ? BigDecimal.ZERO : line.getTaxRate()
@@ -199,7 +203,7 @@ public class PurchaseInboundApplicationService {
                 scope.groupId(),
                 "DELETE"
         )) {
-            if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+            if (Objects.equals(header.getStatus(), approvedStatus())) {
                 throw new BusinessException("已审核单据请先反审核后再删除");
             }
             saveDeleteWorkflow(scope, header, operatorId);
@@ -222,7 +226,7 @@ public class PurchaseInboundApplicationService {
                     scope.groupId(),
                     "DELETE"
             )) {
-                if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+                if (Objects.equals(header.getStatus(), approvedStatus())) {
                     throw new BusinessException("已审核单据请先反审核后再删除");
                 }
                 saveDeleteWorkflow(scope, header, operatorId);
@@ -356,7 +360,6 @@ public class PurchaseInboundApplicationService {
             purchaseInboundRepository.update(header);
             return header;
         }
-        purchaseInboundNotificationService.recordSubmit(scope.scopeType(), scope.scopeId(), scope.groupId(), header);
         return header;
     }
 
@@ -368,7 +371,7 @@ public class PurchaseInboundApplicationService {
         PurchaseInboundDO header = createMode
                 ? new PurchaseInboundDO()
                 : requireHeader(scope, id, operatorId);
-        if (!createMode && Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (!createMode && Objects.equals(header.getStatus(), approvedStatus())) {
             throw new BusinessException("已审核单据不允许编辑，请先反审核");
         }
         initializeCreatedHeader(scope, header, createMode, operatorId);
@@ -413,7 +416,7 @@ public class PurchaseInboundApplicationService {
         header.setSalesmanName(trimNullable(request.salesmanName()));
         header.setUpstreamCode(trimNullable(request.upstreamCode()));
         header.setRemark(trimNullable(request.remark()));
-        header.setStatus(createMode || !StringUtils.hasText(header.getStatus()) ? STATUS_SUBMITTED : header.getStatus());
+        header.setStatus(createMode || !StringUtils.hasText(header.getStatus()) ? submittedStatus() : header.getStatus());
     }
 
     private void persistPurchaseInbound(InventoryScope scope,
@@ -446,6 +449,8 @@ public class PurchaseInboundApplicationService {
         line.setInboundId(headerId);
         line.setItemCode(requiredTrim(item.itemCode(), "物品编码不能为空"));
         line.setItemName(requiredTrim(item.itemName(), "物品名称不能为空"));
+        line.setSpec(trimNullable(item.spec()));
+        line.setCategory(trimNullable(item.category()));
         line.setQuantity(normalizePositive(item.quantity(), "数量必须大于0"));
         line.setUnitPrice(normalizeNonNegative(item.unitPrice(), "单价不能小于0"));
         line.setTaxRate(normalizeNonNegative(item.taxRate() == null ? BigDecimal.ZERO : item.taxRate(), "税率不能小于0"));
@@ -550,7 +555,7 @@ public class PurchaseInboundApplicationService {
                 defaultIfBlank(header.getWarehouseName(), "-"),
                 defaultIfBlank(header.getSupplierName(), "-"),
                 formatInboundAmount(lines),
-                defaultIfBlank(header.getStatus(), STATUS_DRAFT),
+                defaultIfBlank(header.getStatus(), draftStatus()),
                 deriveReviewStatus(header),
                 deriveReconciliationStatus(),
                 deriveInvoiceStatus(),
@@ -598,7 +603,7 @@ public class PurchaseInboundApplicationService {
                                PurchaseInboundDO header,
                                List<PurchaseInboundLineDO> lines,
                                BatchApproveContext context) {
-        if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (Objects.equals(header.getStatus(), approvedStatus())) {
             return;
         }
         String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
@@ -661,6 +666,14 @@ public class PurchaseInboundApplicationService {
                 approverRole,
                 LocalDateTime.now()
         );
+        if (!workflowResult.completed()) {
+            purchaseInboundNotificationService.recordSubmit(
+                    scope.scopeType(),
+                    scope.scopeId(),
+                    scope.groupId(),
+                    header
+            );
+        }
     }
 
     private boolean deletePendingHeaderIfNecessary(PurchaseInboundDO header) {
@@ -689,7 +702,7 @@ public class PurchaseInboundApplicationService {
                     operatorId
             );
         }
-        header.setStatus(STATUS_APPROVED);
+        header.setStatus(approvedStatus());
         header.setApprovedBy(operatorId);
         header.setApprovedAt(LocalDateTime.now());
         header.setRejectionReason(null);
@@ -697,7 +710,7 @@ public class PurchaseInboundApplicationService {
     }
 
     private void markHeaderSubmitted(PurchaseInboundDO header) {
-        header.setStatus(STATUS_SUBMITTED);
+        header.setStatus(submittedStatus());
         header.setApprovedBy(null);
         header.setApprovedAt(null);
     }
@@ -724,7 +737,7 @@ public class PurchaseInboundApplicationService {
     }
 
     private String deriveReviewStatus(PurchaseInboundDO header) {
-        return Objects.equals(header.getStatus(), STATUS_APPROVED) ? "已复审" : "未复审";
+        return Objects.equals(header.getStatus(), approvedStatus()) ? "已审核" : "未审核";
     }
 
     private String deriveReconciliationStatus() {
@@ -840,6 +853,18 @@ public class PurchaseInboundApplicationService {
         return StringUtils.hasText(value) ? value : fallback;
     }
 
+    private String draftStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.DRAFT);
+    }
+
+    private String submittedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.SUBMITTED);
+    }
+
+    private String approvedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.APPROVED);
+    }
+
     private String toLower(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
@@ -852,7 +877,7 @@ public class PurchaseInboundApplicationService {
     }
 
     private void deletePurchaseInboundInternal(PurchaseInboundDO header) {
-        if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (Objects.equals(header.getStatus(), approvedStatus())) {
             throw new BusinessException("已审核单据请先反审核后再删除");
         }
         if (StringUtils.hasText(header.getWorkflowInstanceId())) {
@@ -872,7 +897,7 @@ public class PurchaseInboundApplicationService {
                 operatorId,
                 "DELETE"
         );
-        header.setStatus(STATUS_SUBMITTED);
+        header.setStatus(submittedStatus());
         header.setApprovedBy(null);
         header.setApprovedAt(null);
         purchaseInboundRepository.update(header);
@@ -904,6 +929,8 @@ public class PurchaseInboundApplicationService {
 
     public record PurchaseInboundDetailLine(String itemCode,
                                             String itemName,
+                                            String spec,
+                                            String category,
                                             BigDecimal quantity,
                                             BigDecimal unitPrice,
                                             BigDecimal taxRate) {

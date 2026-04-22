@@ -12,8 +12,15 @@ import {
   type GroupStoreItem,
 } from '@/api/modules/system-admin';
 import { useSessionStore, type OrgNode } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 const sessionStore = useSessionStore();
+const COMMON_STATUS_DICT = 'common.enabled_status';
+const { optionsOf } = useDictionaryOptions([COMMON_STATUS_DICT]);
+const statusOptions = optionsOf(COMMON_STATUS_DICT);
+const enabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'ENABLED')?.itemCode ?? 'ENABLED'
+));
 const loading = ref(false);
 const creating = ref(false);
 const createDialogVisible = ref(false);
@@ -31,7 +38,9 @@ const query = reactive({
 
 const createForm = reactive({
   storeName: '',
-  status: 'ENABLED' as 'ENABLED' | 'DISABLED',
+  adminRealName: '',
+  adminPhone: '',
+  status: 'ENABLED',
   contactName: '',
   contactPhone: '',
   address: '',
@@ -67,7 +76,9 @@ const pagedStores = computed(() => {
 
 const resetCreateForm = () => {
   createForm.storeName = '';
-  createForm.status = 'ENABLED';
+  createForm.adminRealName = '';
+  createForm.adminPhone = '';
+  createForm.status = enabledStatus.value;
   createForm.contactName = '';
   createForm.contactPhone = '';
   createForm.address = '';
@@ -160,6 +171,14 @@ const handleCreateStore = async () => {
     ElMessage.warning('请填写门店名称');
     return;
   }
+  if (!isEdit.value && !createForm.adminRealName.trim()) {
+    ElMessage.warning('请填写管理员姓名');
+    return;
+  }
+  if (!isEdit.value && !createForm.adminPhone.trim()) {
+    ElMessage.warning('请填写管理员手机号');
+    return;
+  }
   creating.value = true;
   try {
     const payload = {
@@ -178,6 +197,8 @@ const handleCreateStore = async () => {
       await createGroupStoreApi(selectedGroupId.value, {
         ...payload,
         storeCode: undefined,
+        adminRealName: createForm.adminRealName.trim(),
+        adminPhone: createForm.adminPhone.trim(),
       });
       ElMessage.success('门店创建成功');
     }
@@ -223,8 +244,12 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" clearable style="width: 140px">
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
       </CommonQuerySection>
@@ -236,7 +261,11 @@ onMounted(() => {
         <el-table-column prop="storeName" label="门店名称" min-width="180" />
         <el-table-column prop="contactName" label="联系人" width="120" />
         <el-table-column prop="contactPhone" label="联系电话" width="140" />
-        <el-table-column prop="status" label="状态" width="100" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            {{ statusOptions.find((item) => item.itemCode === row.status)?.itemLabel ?? row.status }}
+          </template>
+        </el-table-column>
         <el-table-column prop="address" label="地址" min-width="220" show-overflow-tooltip />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
@@ -267,10 +296,20 @@ onMounted(() => {
         <el-form-item label="门店名称" required>
           <el-input v-model="createForm.storeName" maxlength="128" />
         </el-form-item>
+        <el-form-item v-if="!isEdit" label="管理员姓名" required>
+          <el-input v-model="createForm.adminRealName" maxlength="64" />
+        </el-form-item>
+        <el-form-item v-if="!isEdit" label="管理员手机号" required>
+          <el-input v-model="createForm.adminPhone" maxlength="32" />
+        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="createForm.status" style="width: 100%">
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="联系人">

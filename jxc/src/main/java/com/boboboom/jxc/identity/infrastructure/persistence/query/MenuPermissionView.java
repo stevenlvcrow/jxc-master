@@ -8,7 +8,7 @@ public class MenuPermissionView {
     private Long parentId;
     private String menuType;
     private String routePath;
-    private String componentPath;
+    private String componentKey;
     private String permissionCode;
     private String icon;
     private Integer sortNo;
@@ -64,16 +64,16 @@ public class MenuPermissionView {
         this.routePath = routePath;
     }
 
-    public String getComponentPath() {
-        return componentPath;
-    }
-
-    public void setComponentPath(String componentPath) {
-        this.componentPath = componentPath;
-    }
-
     public String getPermissionCode() {
         return permissionCode;
+    }
+
+    public String getComponentKey() {
+        return componentKey;
+    }
+
+    public void setComponentKey(String componentKey) {
+        this.componentKey = componentKey;
     }
 
     public void setPermissionCode(String permissionCode) {

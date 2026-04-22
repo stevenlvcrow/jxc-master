@@ -2,8 +2,10 @@ package com.boboboom.jxc.item.application.service;
 
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.item.domain.repository.ItemProfileRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemProfileDO;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemBatchDeleteRequest;
@@ -35,8 +37,6 @@ import java.util.stream.Collectors;
 public class ItemApplicationService {
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
-    private static final String STATUS_ENABLED = "启用";
-    private static final String STATUS_DISABLED = "停用";
     private static final String STATUS_ALL = "全部";
     private static final String ITEM_TYPE_DEFAULT = "普通物品";
     private static final String SOURCE_SELF_BUILT = "自建";
@@ -47,15 +47,18 @@ public class ItemApplicationService {
     private final ObjectMapper objectMapper;
     private final BusinessCodeGenerator businessCodeGenerator;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public ItemApplicationService(ItemProfileRepository itemProfileRepository,
                                  ObjectMapper objectMapper,
                                  BusinessCodeGenerator businessCodeGenerator,
-                                 OrgScopeService orgScopeService) {
+                                 OrgScopeService orgScopeService,
+                                 DictionaryLookupService dictionaryLookupService) {
         this.itemProfileRepository = itemProfileRepository;
         this.objectMapper = objectMapper;
         this.businessCodeGenerator = businessCodeGenerator;
         this.orgScopeService = orgScopeService;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     @Transactional
@@ -404,13 +407,10 @@ public class ItemApplicationService {
 
     private String normalizeStatus(String status) {
         String normalized = requiredTrim(status, "状态不能为空");
-        if (Objects.equals(normalized, STATUS_ENABLED) || Objects.equals(normalized, "ENABLED")) {
-            return STATUS_ENABLED;
+        if (DictionaryCodes.ENABLED.equals(normalized) || DictionaryCodes.DISABLED.equals(normalized)) {
+            return dictionaryLookupService.codeOf(DictionaryCodes.ITEM_STATUS, normalized);
         }
-        if (Objects.equals(normalized, STATUS_DISABLED) || Objects.equals(normalized, "DISABLED")) {
-            return STATUS_DISABLED;
-        }
-        throw new BusinessException("状态仅支持 启用/停用");
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.ITEM_STATUS, normalized);
     }
 
     private String normalizeStorageMode(String storageMode) {

@@ -9,11 +9,6 @@ import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 type TimeType = '单据日期' | '创建时间';
 type DocumentStatus = '草稿' | '已提交' | '已审核';
 type PrintStatus = '全部' | '未打印' | '已打印';
-type TreeNode = {
-  value: string;
-  label: string;
-  children?: TreeNode[];
-};
 type ProfitInboundRow = {
   id: number;
   documentCode: string;

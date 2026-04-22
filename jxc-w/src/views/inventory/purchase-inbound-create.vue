@@ -28,6 +28,7 @@ import { fetchStoreSalesmenApi, type SalesmanCandidateItem } from '@/api/modules
 import { fetchStoreWarehousesApi, type WarehouseRow as ApiWarehouseRow } from '@/api/modules/warehouse';
 import { fetchPurchaseInboundPermissionApi } from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 type SupplierOption = {
   id: number;
@@ -78,6 +79,15 @@ type WarehouseOption = {
 const router = useRouter();
 const route = useRoute();
 const sessionStore = useSessionStore();
+const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
+const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT]);
+const inventoryDocumentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const submittedStatus = computed(() => (
+  inventoryDocumentStatusOptions.value.find((item) => item.itemKey === 'SUBMITTED')?.itemCode ?? '已提交'
+));
+const approvedStatus = computed(() => (
+  inventoryDocumentStatusOptions.value.find((item) => item.itemKey === 'APPROVED')?.itemCode ?? '已审核'
+));
 const activeNav = ref('basic');
 const basicSectionRef = ref<HTMLElement | null>(null);
 const itemSectionRef = ref<HTMLElement | null>(null);
@@ -104,14 +114,14 @@ const canUnapprove = ref(false);
 const isApprovalMode = computed(() => String(route.query.approvalMode ?? '').trim() === '1' && inboundId.value != null);
 const showApprovalActions = computed(() =>
   isApprovalMode.value
-    && detailStatus.value === '已提交'
+    && detailStatus.value === submittedStatus.value
     && (canApprove.value || canUnapprove.value),
 );
 const isReadonlyMode = computed(() => {
   if (isApprovalMode.value) {
     return true;
   }
-  if (isViewMode.value || detailStatus.value === '已审核') {
+  if (isViewMode.value || detailStatus.value === approvedStatus.value) {
     return true;
   }
   if (isCreateMode.value) {
@@ -250,8 +260,8 @@ const applyDetail = (detail: PurchaseInboundDetail) => {
       id: index + 1,
       itemCode: item.itemCode,
       itemName: item.itemName,
-      spec: '',
-      category: '',
+      spec: item.spec ?? '',
+      category: item.category ?? '',
       warehouse: detail.warehouse ?? '',
       purchaseUnit: '',
       quantity: item.quantity ?? null,
@@ -473,7 +483,7 @@ const loadPageData = async () => {
 };
 
 const handleBack = () => {
-  router.push('/inventory/1/2');
+  router.push('/inventory/purchase-inbounds');
 };
 
 const scrollToSection = (key: string) => {
@@ -612,10 +622,6 @@ const totalAmount = computed(() => rows.value.reduce((sum, row) => sum + (row.am
 const handleToolbarAction = async (action: string) => {
   if (isReadonlyMode.value && action !== '返回') {
     ElMessage.info('当前单据为查看状态，不能编辑');
-    return;
-  }
-  if (action === '添加物品') {
-    addRow();
     return;
   }
   if (action === '通过模板新建') {
@@ -785,6 +791,8 @@ const handleSave = async () => {
     items: rows.value.map((row) => ({
       itemCode: row.itemCode,
       itemName: row.itemName,
+      spec: row.spec,
+      category: row.category,
       quantity: Number(row.quantity ?? 0),
       unitPrice: Number(row.inboundPrice ?? 0),
       taxRate: 13,
@@ -797,7 +805,7 @@ const handleSave = async () => {
     const created = await createPurchaseInboundApi(payload, orgId);
     ElMessage.success(`保存成功：${created.documentCode}`);
   }
-  router.push('/inventory/1/2');
+  router.push('/inventory/purchase-inbounds');
 };
 
 const handleApproveAction = async () => {
@@ -811,7 +819,7 @@ const handleApproveAction = async () => {
   }
   await batchApprovePurchaseInboundApi([inboundId.value], orgId);
   ElMessage.success('审核通过成功');
-  router.push('/inventory/1/2');
+  router.push('/inventory/purchase-inbounds');
 };
 
 const handleRejectAction = async () => {
@@ -833,7 +841,7 @@ const handleRejectAction = async () => {
     });
     await batchUnapprovePurchaseInboundApi([inboundId.value], value.trim(), orgId);
     ElMessage.success('审核不通过成功');
-    router.push('/inventory/1/2');
+    router.push('/inventory/purchase-inbounds');
   } catch {
     // 用户取消时不提示
   }
@@ -867,7 +875,7 @@ watch(
       :primary-action-text="actionPrimaryText"
       :secondary-action-text="actionSecondaryText"
       :show-primary-action="showApprovalActions ? canApprove : true"
-      :show-secondary-action="showApprovalActions ? canUnapprove : true"
+      :show-secondary-action="showApprovalActions ? canUnapprove : false"
       @back="handleBack"
       @save-draft="handleSaveDraft"
       @save="handlePrimaryAction"
@@ -937,7 +945,6 @@ watch(
       <div ref="itemSectionRef" class="form-section-block">
         <h3 class="form-section-title">物品信息</h3>
         <div class="table-toolbar">
-          <el-button type="primary" plain :disabled="isReadonlyMode" @click="handleToolbarAction('添加物品')">添加物品</el-button>
           <el-button :disabled="isReadonlyMode" @click="handleToolbarAction('通过模板新建')">通过模板新建</el-button>
           <el-button :disabled="isReadonlyMode" @click="handleToolbarAction('批量选择仓库')">批量选择仓库</el-button>
           <el-button :disabled="isReadonlyMode" @click="handleToolbarAction('批量导入物品')">批量导入物品</el-button>

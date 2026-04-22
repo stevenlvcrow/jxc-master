@@ -50,6 +50,8 @@ export type PurchaseInboundPage = {
 export type PurchaseInboundLinePayload = {
   itemCode: string;
   itemName: string;
+  spec?: string;
+  category?: string;
   quantity: number;
   unitPrice: number;
   taxRate?: number;
@@ -78,7 +80,15 @@ export type PurchaseInboundDetail = {
   upstreamCode: string;
   remark: string;
   rejectionReason: string;
-  items: PurchaseInboundLinePayload[];
+  items: Array<{
+    itemCode: string;
+    itemName: string;
+    spec: string;
+    category: string;
+    quantity: number;
+    unitPrice: number;
+    taxRate?: number;
+  }>;
 };
 
 export type PurchaseInboundPermission = {
@@ -343,4 +353,187 @@ export const batchUnapproveGenericInventoryDocumentApi = (
   orgId?: string,
 ) => apiClient.post<void>(`${genericDocumentBasePath(documentType)}/batch-unapprove`, { ids, rejectionReason }, {
   params: withOrgParams(undefined, orgId),
+});
+
+export type InventoryBalanceQueryParams = {
+  pageNum: number;
+  pageSize: number;
+  warehouse?: string;
+  itemName?: string;
+};
+
+export type InventoryBalanceRow = {
+  warehouse: string;
+  itemCode: string;
+  itemName: string;
+  quantity: string;
+  updatedAt: string;
+};
+
+export type InventoryBalancePage = {
+  list: InventoryBalanceRow[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
+};
+
+export const fetchInventoryBalancesApi = (params: InventoryBalanceQueryParams, orgId?: string) =>
+  apiClient.get<InventoryBalancePage>('/api/inventory/purchase-inbound/balances', {
+    params: withOrgParams(params, orgId),
+  });
+
+export type DishConsumptionOutboundReportDimension = '菜品消耗单明细' | '菜品消耗汇总';
+
+export type DishConsumptionOutboundReportParams = {
+  pageNo: number;
+  pageSize: number;
+  dimension: DishConsumptionOutboundReportDimension;
+  startDate?: string;
+  endDate?: string;
+  warehouse?: string;
+  dishName?: string;
+  itemCode?: string;
+  deductionType?: string;
+  unitType?: string;
+  queryScheme?: string;
+};
+
+export type DishConsumptionOutboundReportRow = {
+  id?: string | number;
+  consumptionNo: string;
+  businessDate: string;
+  dishSpuCode: string;
+  dishSkuCode: string;
+  dishName: string;
+  dishSpec: string;
+  costCard: string;
+  orderSource: string;
+  dishCategory: string;
+  deductionType: string;
+  itemCode: string;
+  itemName: string;
+  specModel: string;
+  warehouse: string;
+  itemUnit: string;
+  dishQty: number | string;
+  theoreticalQty: number | string;
+  outboundQty: number | string;
+  pendingOutboundQty: number | string;
+  unlinkedWarehousePendingQty?: number | string;
+  otherReasonPendingQty?: number | string;
+};
+
+export type DishConsumptionOutboundReportSummary = {
+  dishQty?: number | string;
+  theoreticalQty?: number | string;
+  outboundQty?: number | string;
+  pendingOutboundQty?: number | string;
+  unlinkedWarehousePendingQty?: number | string;
+  otherReasonPendingQty?: number | string;
+};
+
+export type DishConsumptionOutboundReportPage = {
+  list: DishConsumptionOutboundReportRow[];
+  total: number;
+  pageNo: number;
+  pageSize: number;
+  summary?: DishConsumptionOutboundReportSummary;
+};
+
+export const fetchDishConsumptionOutboundReportApi = (
+  params: DishConsumptionOutboundReportParams,
+  orgId?: string,
+) => apiClient.get<DishConsumptionOutboundReportPage>('/api/inventory/dish-consumption-outbound/report', {
+  params: withOrgParams(params, orgId),
+});
+
+export type InventoryInoutDetailStatisticDimension = '单据 + 物品' | '单据';
+
+export type InventoryInoutDetailReportParams = {
+  pageNo: number;
+  pageSize: number;
+  statisticDimension: InventoryInoutDetailStatisticDimension;
+  warehouse?: string;
+  warehouseType?: string;
+  startDate?: string;
+  endDate?: string;
+  dateText?: string;
+  auditStartTime?: string;
+  auditEndTime?: string;
+  inoutType?: string;
+  upstreamDocumentType?: string;
+  itemCategory?: string;
+  statisticType?: string;
+  itemCode?: string;
+  reasonType?: string;
+  adjustmentDocument?: string;
+  oppositeOrg?: string;
+  documentNo?: string;
+  crossMonthDocument?: string;
+  inoutDirection?: string;
+  gift?: string;
+  unitType?: string;
+  queryScheme?: string;
+};
+
+export type InventoryInoutDetailReportRow = {
+  id?: string | number;
+  itemCode?: string;
+  itemName?: string;
+  specModel?: string;
+  itemCategory?: string;
+  statisticType?: string;
+  baseUnit?: string;
+  unit?: string;
+  orgName?: string;
+  orgCode?: string;
+  warehouse?: string;
+  warehouseType?: string;
+  upstreamDocumentNo?: string;
+  upstreamDocumentType?: string;
+  documentNo?: string;
+  inoutType?: string;
+  reasonType?: string;
+  adjustmentDocument?: string;
+  oppositeOrg?: string;
+  oppositeOrgCode?: string;
+  upstreamDocumentDate?: string;
+  documentDate?: string;
+  documentCreatedAt?: string;
+  documentCreator?: string;
+  documentAuditTime?: string;
+  inboundBaseQty?: number | string;
+  inboundQty?: number | string;
+  outboundQty?: number | string;
+  remark?: string;
+  returnDifferenceAmount?: number | string;
+  inboundCostUnitPriceTaxIncluded?: number | string;
+  inboundCostAmountTaxIncluded?: number | string;
+  inboundSettlementUnitPriceTaxIncluded?: number | string;
+  inboundSettlementAmountTaxIncluded?: number | string;
+  inboundDiscountSettlementUnitPriceTaxIncluded?: number | string;
+  inboundDiscountSettlementAmountTaxIncluded?: number | string;
+  outboundBaseQty?: number | string;
+  outboundCostAmountTaxIncluded?: number | string;
+  outboundCostUnitPriceTaxIncluded?: number | string;
+  outboundSettlementUnitPriceTaxIncluded?: number | string;
+  outboundSettlementAmountTaxIncluded?: number | string;
+  outboundDiscountSettlementUnitPriceTaxIncluded?: number | string;
+  outboundDiscountSettlementAmountTaxIncluded?: number | string;
+  outboundDiscountGrossProfitUnitPriceTaxIncluded?: number | string;
+  outboundDiscountGrossProfitTaxIncluded?: number | string;
+};
+
+export type InventoryInoutDetailReportPage = {
+  list: InventoryInoutDetailReportRow[];
+  total: number;
+  pageNo: number;
+  pageSize: number;
+};
+
+export const fetchInventoryInoutDetailReportApi = (
+  params: InventoryInoutDetailReportParams,
+  orgId?: string,
+) => apiClient.get<InventoryInoutDetailReportPage>('/api/inventory/inout-detail/report', {
+  params: withOrgParams(params, orgId),
 });

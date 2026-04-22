@@ -12,7 +12,6 @@ import java.util.Optional;
 @Repository
 public class RoleRepositoryImpl implements RoleRepository {
 
-    private static final String STATUS_ENABLED = "ENABLED";
     private final RoleMapper roleMapper;
 
     public RoleRepositoryImpl(RoleMapper roleMapper) {
@@ -49,11 +48,11 @@ public class RoleRepositoryImpl implements RoleRepository {
     }
 
     @Override
-    public List<RoleDO> findBuiltinTemplateRoles() {
+    public List<RoleDO> findBuiltinTemplateRoles(String enabledStatus) {
         return roleMapper.selectList(new LambdaQueryWrapper<RoleDO>()
                 .eq(RoleDO::getTenantGroupId, 0L)
                 .eq(RoleDO::getBuiltin, Boolean.TRUE)
-                .eq(RoleDO::getStatus, STATUS_ENABLED)
+                .eq(RoleDO::getStatus, enabledStatus)
                 .in(RoleDO::getRoleType, List.of("GROUP", "STORE"))
                 .orderByAsc(RoleDO::getId));
     }

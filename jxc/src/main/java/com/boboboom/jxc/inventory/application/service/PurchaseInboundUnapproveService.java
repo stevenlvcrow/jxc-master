@@ -1,5 +1,7 @@
 package com.boboboom.jxc.inventory.application.service;
 
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
@@ -15,8 +17,6 @@ import java.util.Objects;
 @Service
 public class PurchaseInboundUnapproveService {
 
-    private static final String STATUS_APPROVED = "已审核";
-    private static final String STATUS_SUBMITTED = "已提交";
     private static final String PENDING_OPERATION_DELETE = "DELETE";
     private static final String PENDING_OPERATION_NONE = "NONE";
     private static final String INVENTORY_BIZ_TYPE_UNAPPROVE = "PURCHASE_INBOUND_UNAPPROVE";
@@ -25,15 +25,18 @@ public class PurchaseInboundUnapproveService {
     private final PurchaseInboundNotificationService purchaseInboundNotificationService;
     private final InventoryStockMutationService inventoryStockMutationService;
     private final PurchaseInboundRepository purchaseInboundRepository;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public PurchaseInboundUnapproveService(InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
                                            PurchaseInboundNotificationService purchaseInboundNotificationService,
                                            InventoryStockMutationService inventoryStockMutationService,
-                                           PurchaseInboundRepository purchaseInboundRepository) {
+                                           PurchaseInboundRepository purchaseInboundRepository,
+                                           DictionaryLookupService dictionaryLookupService) {
         this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowService;
         this.purchaseInboundNotificationService = purchaseInboundNotificationService;
         this.inventoryStockMutationService = inventoryStockMutationService;
         this.purchaseInboundRepository = purchaseInboundRepository;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     /**
@@ -54,7 +57,7 @@ public class PurchaseInboundUnapproveService {
                         List<PurchaseInboundLineDO> lines,
                         Long operatorId,
                         String rejectionReason) {
-        if (!Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (!Objects.equals(header.getStatus(), approvedStatus())) {
             resetDeletePendingIfNecessary(header);
             return;
         }
@@ -109,7 +112,7 @@ public class PurchaseInboundUnapproveService {
     }
 
     private void markHeaderSubmitted(PurchaseInboundDO header, String rejectionReason) {
-        header.setStatus(STATUS_SUBMITTED);
+        header.setStatus(submittedStatus());
         header.setApprovedBy(null);
         header.setApprovedAt(null);
         header.setRejectionReason(rejectionReason);
@@ -132,5 +135,13 @@ public class PurchaseInboundUnapproveService {
                 || StringUtils.hasText(header.getWorkflowTaskId())
                 || StringUtils.hasText(header.getWorkflowTaskName())
                 || (StringUtils.hasText(header.getWorkflowStatus()) && !"NONE".equals(header.getWorkflowStatus()));
+    }
+
+    private String submittedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.SUBMITTED);
+    }
+
+    private String approvedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.APPROVED);
     }
 }

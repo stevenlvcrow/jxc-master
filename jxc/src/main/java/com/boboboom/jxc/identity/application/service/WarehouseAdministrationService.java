@@ -2,6 +2,7 @@ package com.boboboom.jxc.identity.application.service;
 
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
 import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
@@ -20,13 +21,16 @@ public class WarehouseAdministrationService {
     private final WarehouseRepository warehouseRepository;
     private final IdentityAdminLookupService identityAdminLookupService;
     private final BusinessCodeGenerator businessCodeGenerator;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public WarehouseAdministrationService(WarehouseRepository warehouseRepository,
                                           IdentityAdminLookupService identityAdminLookupService,
-                                          BusinessCodeGenerator businessCodeGenerator) {
+                                          BusinessCodeGenerator businessCodeGenerator,
+                                          DictionaryLookupService dictionaryLookupService) {
         this.warehouseRepository = warehouseRepository;
         this.identityAdminLookupService = identityAdminLookupService;
         this.businessCodeGenerator = businessCodeGenerator;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public List<WarehouseDO> listGroupWarehouses(Long groupId,
@@ -59,9 +63,7 @@ public class WarehouseAdministrationService {
         warehouse.setWarehouseName(identityAdminLookupService.trim(request.getWarehouseName()));
         warehouse.setDepartment(identityAdminLookupService.trimNullable(request.getDepartment()));
         warehouse.setStatus(identityAdminLookupService.normalizeStatus(request.getStatus()));
-        warehouse.setWarehouseType(identityAdminLookupService.trimNullable(request.getWarehouseType()) != null
-                ? identityAdminLookupService.trimNullable(request.getWarehouseType())
-                : "普通仓库");
+        warehouse.setWarehouseType(normalizeWarehouseType(request.getWarehouseType()));
         warehouse.setContactName(identityAdminLookupService.trimNullable(request.getContactName()));
         warehouse.setContactPhone(identityAdminLookupService.trimNullable(request.getContactPhone()));
         warehouse.setRegionPath(identityAdminLookupService.trimNullable(request.getRegionPath()));
@@ -83,7 +85,7 @@ public class WarehouseAdministrationService {
             warehouse.setStatus(identityAdminLookupService.normalizeStatus(request.getStatus()));
         }
         if (request.getWarehouseType() != null && !request.getWarehouseType().isBlank()) {
-            warehouse.setWarehouseType(request.getWarehouseType());
+            warehouse.setWarehouseType(normalizeWarehouseType(request.getWarehouseType()));
         }
         warehouse.setContactName(identityAdminLookupService.trimNullable(request.getContactName()));
         warehouse.setContactPhone(identityAdminLookupService.trimNullable(request.getContactPhone()));
@@ -121,6 +123,14 @@ public class WarehouseAdministrationService {
     private String generateWarehouseCode() {
         List<String> existingCodes = warehouseRepository.findAllWarehouseCodes();
         return businessCodeGenerator.nextCode(WAREHOUSE_CODE_PREFIX, existingCodes);
+    }
+
+    private String normalizeWarehouseType(String value) {
+        String normalized = identityAdminLookupService.trimNullable(value);
+        if (normalized == null) {
+            return dictionaryLookupService.codeOf(DictionaryCodes.WAREHOUSE_TYPE, "NORMAL_WAREHOUSE");
+        }
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.WAREHOUSE_TYPE, normalized);
     }
 
     private List<WarehouseDO> filterWarehouses(List<WarehouseDO> warehouses,

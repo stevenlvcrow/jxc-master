@@ -1,7 +1,7 @@
 import { apiClient } from '@/api/http-client';
 
-export type UnitType = 'STANDARD' | 'AUXILIARY';
-export type UnitStatus = 'ENABLED' | 'DISABLED';
+export type UnitType = string;
+export type UnitStatus = string;
 
 export type UnitPage = {
   list: UnitItem[];

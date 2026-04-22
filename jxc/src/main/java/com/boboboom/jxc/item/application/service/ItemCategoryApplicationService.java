@@ -2,8 +2,10 @@ package com.boboboom.jxc.item.application.service;
 
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.item.domain.repository.ItemCategoryRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemCategoryDO;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryBatchCreateRequest;
@@ -31,21 +33,22 @@ import java.util.Set;
 public class ItemCategoryApplicationService {
 
     private static final String ROOT_CATEGORY = "物品类别";
-    private static final String STATUS_ENABLED = "启用";
-    private static final String STATUS_DISABLED = "停用";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String CATEGORY_CODE_PREFIX = "WPLB";
 
     private final ItemCategoryRepository itemCategoryRepository;
     private final BusinessCodeGenerator businessCodeGenerator;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
     public ItemCategoryApplicationService(ItemCategoryRepository itemCategoryRepository,
                                           BusinessCodeGenerator businessCodeGenerator,
-                                          OrgScopeService orgScopeService) {
+                                          OrgScopeService orgScopeService,
+                                          DictionaryLookupService dictionaryLookupService) {
         this.itemCategoryRepository = itemCategoryRepository;
         this.businessCodeGenerator = businessCodeGenerator;
         this.orgScopeService = orgScopeService;
+        this.dictionaryLookupService = dictionaryLookupService;
     }
 
     public PageData<ItemCategoryRow> list(Integer pageNo,
@@ -378,13 +381,10 @@ public class ItemCategoryApplicationService {
 
     private String normalizeStatus(String status) {
         String normalized = trim(status);
-        if (Objects.equals(normalized, STATUS_ENABLED) || Objects.equals(normalized, "ENABLED")) {
-            return STATUS_ENABLED;
+        if (DictionaryCodes.ENABLED.equals(normalized) || DictionaryCodes.DISABLED.equals(normalized)) {
+            return dictionaryLookupService.codeOf(DictionaryCodes.ITEM_STATUS, normalized);
         }
-        if (Objects.equals(normalized, STATUS_DISABLED) || Objects.equals(normalized, "DISABLED")) {
-            return STATUS_DISABLED;
-        }
-        throw new BusinessException("状态仅支持 启用/停用");
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.ITEM_STATUS, normalized);
     }
 
     private String normalizeQueryStatus(String status) {

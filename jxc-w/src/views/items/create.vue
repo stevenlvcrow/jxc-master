@@ -575,7 +575,7 @@ onBeforeUnmount(() => {
 });
 
 const goBack = () => {
-  router.push('/archive/1/1');
+  router.push('/archive/items');
 };
 
 const buildCreatePayload = (): ItemCreatePayload => ({
@@ -695,7 +695,7 @@ const handleSave = async () => {
       await createItemApi(payload, resolveItemOrgId());
       ElMessage.success('新增物品成功');
     }
-    router.push('/archive/1/1');
+    router.push('/archive/items');
   } catch (error) {
     if (error instanceof Error && error.message === '请先选择门店机构') {
       ElMessage.warning(error.message);
@@ -1202,7 +1202,7 @@ const loadDetailIfEditMode = async () => {
               <el-input v-model="form.itemDescription" type="textarea" :rows="3" placeholder="请输入物品描述" />
             </el-form-item>
             <el-form-item label="备注" class="item-intro-wide-form-item">
-              <el-input v-model="form.remark" type="textarea" :rows="3" placeholder="请输入备注" />
+              <el-input v-model="form.remark" placeholder="请输入备注" />
             </el-form-item>
             <el-form-item label="营养成分表" class="nutrition-form-item">
               <div class="nutrition-editor">

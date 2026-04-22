@@ -32,7 +32,6 @@ public class UserAdministrationService {
 
     private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
     private static final String ADMIN_USERNAME = "admin";
-    private static final String STATUS_ENABLED = "ENABLED";
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
 
@@ -155,7 +154,7 @@ public class UserAdministrationService {
         if (platformAdmin) {
             users = userAccountRepository.findAllOrdered();
         } else {
-            List<Long> managedGroupIds = userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, "GROUP", STATUS_ENABLED)
+            List<Long> managedGroupIds = userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, "GROUP", identityAdminLookupService.enabledStatus())
                     .stream()
                     .map(UserRoleRelDO::getScopeId)
                     .filter(Objects::nonNull)
@@ -237,7 +236,7 @@ public class UserAdministrationService {
         }
 
         Long matched = userRoleRelRepository.countByUserAndScopedRoles(
-                targetUserId, STATUS_ENABLED, managedGroupIds, managedStoreIds
+                targetUserId, identityAdminLookupService.enabledStatus(), managedGroupIds, managedStoreIds
         );
         if (matched == null || matched == 0) {
             throw new com.boboboom.jxc.common.BusinessException("当前账号无该用户操作权限");
@@ -248,7 +247,7 @@ public class UserAdministrationService {
         if (userId == null) {
             return false;
         }
-        Long count = userRoleRelRepository.countByUserIdAndStatus(userId, STATUS_ENABLED);
+        Long count = userRoleRelRepository.countByUserIdAndStatus(userId, identityAdminLookupService.enabledStatus());
         return count != null && count > 0;
     }
 

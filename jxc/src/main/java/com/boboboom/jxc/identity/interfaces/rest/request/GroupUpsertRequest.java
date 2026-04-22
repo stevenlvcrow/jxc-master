@@ -11,6 +11,8 @@ public class GroupUpsertRequest {
 
     private String status;
     private String remark;
+    private String adminRealName;
+    private String adminPhone;
 
     public String getGroupCode() {
         return groupCode;
@@ -42,5 +44,21 @@ public class GroupUpsertRequest {
 
     public void setRemark(String remark) {
         this.remark = remark;
+    }
+
+    public String getAdminRealName() {
+        return adminRealName;
+    }
+
+    public void setAdminRealName(String adminRealName) {
+        this.adminRealName = adminRealName;
+    }
+
+    public String getAdminPhone() {
+        return adminPhone;
+    }
+
+    public void setAdminPhone(String adminPhone) {
+        this.adminPhone = adminPhone;
     }
 }

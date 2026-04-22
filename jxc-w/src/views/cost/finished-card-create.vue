@@ -471,7 +471,7 @@ const removeMaterialRow = (index: number) => {
 };
 
 const backToArchive = () => {
-  router.push('/archive/2/1');
+  router.push('/archive/cost-card-archives');
 };
 
 const registerSectionRef = (key: string) => (el: Element | ComponentPublicInstance | null) => {
@@ -557,7 +557,7 @@ watch(() => sessionStore.currentOrgId, () => {
               <el-input :model-value="totalCostTax.toFixed(2)" readonly />
             </el-form-item>
             <el-form-item label="备注" class="item-intro-wide-form-item">
-              <el-input v-model="baseForm.remark" type="textarea" :rows="2" placeholder="请输入备注" />
+              <el-input v-model="baseForm.remark" placeholder="请输入备注" />
             </el-form-item>
           </div>
         </section>

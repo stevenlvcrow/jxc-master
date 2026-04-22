@@ -97,7 +97,7 @@ const handleReset = () => {
 };
 
 const handleAdd = () => {
-  router.push('/inventory/5/1/create');
+  router.push('/inventory/inventory-templates/create');
 };
 
 const handleView = (row: InventoryTemplateRow) => {

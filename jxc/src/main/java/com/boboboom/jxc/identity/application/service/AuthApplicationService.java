@@ -28,8 +28,6 @@ import java.util.Objects;
 @Service
 public class AuthApplicationService {
 
-    private static final String ENABLED_STATUS = "ENABLED";
-
     private final UserAccountRepository userAccountRepository;
     private final TokenService tokenService;
     private final OrgScopeService orgScopeService;
@@ -51,7 +49,7 @@ public class AuthApplicationService {
         if (user == null || !PasswordCodec.matches(request.getPassword(), user.getPasswordHash())) {
             throw new BusinessException("账号或密码错误");
         }
-        if (!"ENABLED".equals(user.getStatus())) {
+        if (!identityAdminLookupService.enabledStatus().equals(user.getStatus())) {
             throw new BusinessException("账号已禁用");
         }
 
@@ -188,7 +186,7 @@ public class AuthApplicationService {
 
     private UserAccountDO requireEnabledUser(Long userId) {
         UserAccountDO user = userAccountRepository.findById(userId).orElse(null);
-        if (user == null || !ENABLED_STATUS.equals(user.getStatus())) {
+        if (user == null || !identityAdminLookupService.enabledStatus().equals(user.getStatus())) {
             throw new UnauthorizedException("登录已失效，请重新登录");
         }
         return user;

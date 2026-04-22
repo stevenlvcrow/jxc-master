@@ -209,6 +209,7 @@ public class IdentityRoleAdminController {
                         menu.parentId(),
                         menu.menuType(),
                         menu.routePath(),
+                        menu.componentKey(),
                         menu.permissionCode(),
                         menu.status(),
                         menu.sortNo()

@@ -445,7 +445,7 @@ const resolveWorkflowNoticeRoute = (row: WorkflowApprovalNotificationItem) => {
     return row.routePath;
   }
   if (row.businessCode === 'PURCHASE_INBOUND') {
-    return `/inventory/1/2/view/${row.businessId}`;
+    return `/inventory/purchase-inbounds/view/${row.businessId}`;
   }
   return '';
 };
