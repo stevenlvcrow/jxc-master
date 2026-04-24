@@ -2,8 +2,14 @@ package com.boboboom.jxc.inventory.interfaces.rest;
 
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InterOrgTransferDetailReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InterOrgTransferSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InventoryInoutSummaryReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InventoryProfitLossReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.PageData;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.OtherInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockTurnoverRateReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StagnantStockReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockWarningReportRow;
 import jakarta.validation.constraints.Min;
@@ -104,6 +110,200 @@ public class InventorySupplementReportController {
                 itemKeyword,
                 checkType,
                 profitLossResult,
+                unitType,
+                orgId
+        ));
+    }
+
+    @GetMapping("/inventory-inout-summary/report")
+    public CodeDataResponse<PageData<InventoryInoutSummaryReportRow>> inventoryInoutSummaryReport(
+            @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
+            @RequestParam(defaultValue = "10") @Min(1) Integer pageSize,
+            @RequestParam(required = false) String statisticDimension,
+            @RequestParam(required = false) String warehouse,
+            @RequestParam(required = false) String warehouseType,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String itemCode,
+            @RequestParam(required = false) String itemCategory,
+            @RequestParam(required = false) String statisticType,
+            @RequestParam(required = false) String itemStatus,
+            @RequestParam(required = false) String inoutType,
+            @RequestParam(required = false) String unitType,
+            @RequestParam(required = false) String hideNoInout,
+            @RequestParam(required = false) String queryScheme,
+            @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(inventorySupplementReportApplicationService.inventoryInoutSummaryReport(
+                pageNo,
+                pageSize,
+                statisticDimension,
+                warehouse,
+                warehouseType,
+                startDate,
+                endDate,
+                itemCode,
+                itemCategory,
+                statisticType,
+                itemStatus,
+                inoutType,
+                unitType,
+                hideNoInout,
+                queryScheme,
+                orgId
+        ));
+    }
+
+    @GetMapping("/stock-inout-summary/report")
+    public CodeDataResponse<PageData<StockInoutSummaryReportRow>> stockInoutSummaryReport(
+            @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
+            @RequestParam(defaultValue = "10") @Min(1) Integer pageSize,
+            @RequestParam(required = false) String statisticMode,
+            @RequestParam(required = false) String dateDimension,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String statisticDimension,
+            @RequestParam(required = false) String targetStore,
+            @RequestParam(required = false) String itemKeyword,
+            @RequestParam(required = false) String itemCategory,
+            @RequestParam(required = false) String unitType,
+            @RequestParam(required = false) String queryScheme,
+            @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(inventorySupplementReportApplicationService.stockInoutSummaryReport(
+                pageNo,
+                pageSize,
+                statisticMode,
+                dateDimension,
+                startDate,
+                endDate,
+                statisticDimension,
+                targetStore,
+                itemKeyword,
+                itemCategory,
+                unitType,
+                queryScheme,
+                orgId
+        ));
+    }
+
+    @GetMapping("/other-inout-summary/report")
+    public CodeDataResponse<PageData<OtherInoutSummaryReportRow>> otherInoutSummaryReport(
+            @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
+            @RequestParam(defaultValue = "10") @Min(1) Integer pageSize,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String warehouse,
+            @RequestParam(required = false) String itemCategory,
+            @RequestParam(required = false) String itemCode,
+            @RequestParam(required = false) String inoutType,
+            @RequestParam(required = false) String reasonType,
+            @RequestParam(required = false) String itemStatus,
+            @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(inventorySupplementReportApplicationService.otherInoutSummaryReport(
+                pageNo,
+                pageSize,
+                startDate,
+                endDate,
+                warehouse,
+                itemCategory,
+                itemCode,
+                inoutType,
+                reasonType,
+                itemStatus,
+                orgId
+        ));
+    }
+
+    @GetMapping("/inter-org-transfer-detail/report")
+    public CodeDataResponse<PageData<InterOrgTransferDetailReportRow>> interOrgTransferDetailReport(
+            @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
+            @RequestParam(defaultValue = "10") @Min(1) Integer pageSize,
+            @RequestParam(required = false) String statisticMode,
+            @RequestParam(required = false) String dateType,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String targetStore,
+            @RequestParam(required = false) String sourceStore,
+            @RequestParam(required = false) String itemName,
+            @RequestParam(required = false) String itemCategory,
+            @RequestParam(required = false) String sourceWarehouse,
+            @RequestParam(required = false) String targetWarehouse,
+            @RequestParam(required = false) String documentStatus,
+            @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(inventorySupplementReportApplicationService.interOrgTransferDetailReport(
+                pageNo,
+                pageSize,
+                statisticMode,
+                dateType,
+                startDate,
+                endDate,
+                targetStore,
+                sourceStore,
+                itemName,
+                itemCategory,
+                sourceWarehouse,
+                targetWarehouse,
+                documentStatus,
+                orgId
+        ));
+    }
+
+    @GetMapping("/inter-org-transfer-summary/report")
+    public CodeDataResponse<PageData<InterOrgTransferSummaryReportRow>> interOrgTransferSummaryReport(
+            @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
+            @RequestParam(defaultValue = "10") @Min(1) Integer pageSize,
+            @RequestParam(required = false) String statisticMode,
+            @RequestParam(required = false) String dateType,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String statisticDimension,
+            @RequestParam(required = false) String targetStore,
+            @RequestParam(required = false) String itemKeyword,
+            @RequestParam(required = false) String itemCategory,
+            @RequestParam(required = false) String unitType,
+            @RequestParam(required = false) String queryScheme,
+            @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(inventorySupplementReportApplicationService.interOrgTransferSummaryReport(
+                pageNo,
+                pageSize,
+                statisticMode,
+                dateType,
+                startDate,
+                endDate,
+                statisticDimension,
+                targetStore,
+                itemKeyword,
+                itemCategory,
+                unitType,
+                queryScheme,
+                orgId
+        ));
+    }
+
+    @GetMapping("/stock-turnover-rate/report")
+    public CodeDataResponse<PageData<StockTurnoverRateReportRow>> stockTurnoverRateReport(
+            @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
+            @RequestParam(defaultValue = "10") @Min(1) Integer pageSize,
+            @RequestParam(required = false) String statisticDimension,
+            @RequestParam(required = false) String statisticMethod,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String warehouse,
+            @RequestParam(required = false) String itemCategory,
+            @RequestParam(required = false) String itemCode,
+            @RequestParam(required = false) String itemStatus,
+            @RequestParam(required = false) String unitType,
+            @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(inventorySupplementReportApplicationService.stockTurnoverRateReport(
+                pageNo,
+                pageSize,
+                statisticDimension,
+                statisticMethod,
+                startDate,
+                endDate,
+                warehouse,
+                itemCategory,
+                itemCode,
+                itemStatus,
                 unitType,
                 orgId
         ));
