@@ -102,7 +102,7 @@ const routes: RouteRecordRaw[] = [
         name: 'GroupWorkflowHistory',
         component: () => import('@/views/system/workflow-publish-history-management.vue'),
         meta: {
-          title: '流程发布历史管理',
+          title: '流程发布管理',
         },
       },
       {
@@ -146,6 +146,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/system/menu-permission-management.vue'),
         meta: {
           title: '菜单权限管理',
+        },
+      },
+      {
+        path: 'system/menus',
+        name: 'SystemMenus',
+        component: () => import('@/views/system/menu-maintenance.vue'),
+        meta: {
+          title: '菜单维护',
         },
       },
       {
@@ -1113,6 +1121,8 @@ router.beforeEach(async (to) => {
   const sessionStore = useSessionStore(pinia);
   const menuStore = useMenuStore(pinia);
   const isPublic = Boolean(to.meta.public);
+  const normalizedToPath = normalizeMenuPath(to.path);
+  const routeWasUnmatched = to.matched.length === 0;
 
   if (!sessionStore.isLoggedIn && !isPublic) {
     return '/login';
@@ -1138,8 +1148,6 @@ router.beforeEach(async (to) => {
     return resolveMenuHomePath(sessionStore, menuStore);
   }
 
-  const normalizedToPath = normalizeMenuPath(to.path);
-
   if (sessionStore.isLoggedIn && sessionStore.requiresOrgSelection && sessionStore.hasSelectedOrg) {
     if (!authStorage.getAccessToken()) {
       return PROFILE_HOME_PATH;
@@ -1149,6 +1157,9 @@ router.beforeEach(async (to) => {
       try {
         await menuStore.loadMenus(targetOrgId);
         syncRuntimeMenuRoutes(menuStore.menuItems);
+        if (routeWasUnmatched && canResolvePath(normalizedToPath || to.path)) {
+          return to.fullPath;
+        }
       } catch {
         menuStore.clearMenus();
         removeRuntimeMenuRoutes();

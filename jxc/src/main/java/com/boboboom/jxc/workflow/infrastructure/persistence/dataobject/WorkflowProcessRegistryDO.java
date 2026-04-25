@@ -3,7 +3,8 @@ package com.boboboom.jxc.workflow.infrastructure.persistence.dataobject;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.BaseAuditDO;
 
-@TableName("dev.workflow_process_registry")
+/** 审批流程数据对象，映射数据库表记录。 */
+@TableName("workflow_process_registry")
 public class WorkflowProcessRegistryDO extends BaseAuditDO {
 
     private String scopeType;
@@ -14,59 +15,73 @@ public class WorkflowProcessRegistryDO extends BaseAuditDO {
     private Long createdBy;
     private Long updatedBy;
 
+    /** 获取ScopeType。 */
     public String getScopeType() {
         return scopeType;
     }
 
-    public void setScopeType(String scopeType) {
-        this.scopeType = scopeType;
+    /** 设置ScopeType。 */
+    public void setScopeType(String scopeTypeValue) {
+        this.scopeType = scopeTypeValue;
     }
 
+    /** 获取ScopeId。 */
     public Long getScopeId() {
         return scopeId;
     }
 
-    public void setScopeId(Long scopeId) {
-        this.scopeId = scopeId;
+    /** 设置ScopeId。 */
+    public void setScopeId(Long scopeIdValue) {
+        this.scopeId = scopeIdValue;
     }
 
+    /** 获取ProcessCode。 */
     public String getProcessCode() {
         return processCode;
     }
 
-    public void setProcessCode(String processCode) {
-        this.processCode = processCode;
+    /** 设置ProcessCode。 */
+    public void setProcessCode(String processCodeValue) {
+        this.processCode = processCodeValue;
     }
 
+    /** 获取BusinessName。 */
     public String getBusinessName() {
         return businessName;
     }
 
-    public void setBusinessName(String businessName) {
-        this.businessName = businessName;
+    /** 设置BusinessName。 */
+    public void setBusinessName(String businessNameValue) {
+        this.businessName = businessNameValue;
     }
 
+    /** 获取TemplateId。 */
     public String getTemplateId() {
         return templateId;
     }
 
-    public void setTemplateId(String templateId) {
-        this.templateId = templateId;
+    /** 设置TemplateId。 */
+    public void setTemplateId(String templateIdValue) {
+        this.templateId = templateIdValue;
     }
 
+    /** 获取CreatedBy。 */
     public Long getCreatedBy() {
         return createdBy;
     }
 
-    public void setCreatedBy(Long createdBy) {
-        this.createdBy = createdBy;
+    /** 设置CreatedBy。 */
+    public void setCreatedBy(Long createdByValue) {
+        this.createdBy = createdByValue;
     }
 
+    /** 获取UpdatedBy。 */
     public Long getUpdatedBy() {
         return updatedBy;
     }
 
-    public void setUpdatedBy(Long updatedBy) {
-        this.updatedBy = updatedBy;
+    /** 设置UpdatedBy。 */
+    public void setUpdatedBy(Long updatedByValue) {
+        this.updatedBy = updatedByValue;
     }
 }

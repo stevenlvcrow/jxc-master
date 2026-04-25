@@ -1,5 +1,11 @@
 package com.boboboom.jxc.identity.infrastructure.persistence.repository;
 
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+
+import org.springframework.stereotype.Repository;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.boboboom.jxc.identity.domain.repository.WarehouseItemRuleRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
@@ -12,12 +18,8 @@ import com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItem
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseItemRuleWarehouseMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.WarehouseMapper;
-import org.springframework.stereotype.Repository;
 
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-
+/** 身份与权限仓储实现，负责通过持久层组件完成数据读写。 */
 @Repository
 public class WarehouseItemRuleRepositoryImpl implements WarehouseItemRuleRepository {
 
@@ -27,18 +29,20 @@ public class WarehouseItemRuleRepositoryImpl implements WarehouseItemRuleReposit
     private final WarehouseItemRuleWarehouseMapper ruleWarehouseMapper;
     private final WarehouseMapper warehouseMapper;
 
-    public WarehouseItemRuleRepositoryImpl(WarehouseItemRuleMapper warehouseItemRuleMapper,
-                                           WarehouseItemRuleItemMapper ruleItemMapper,
-                                           WarehouseItemRuleCategoryMapper ruleCategoryMapper,
-                                           WarehouseItemRuleWarehouseMapper ruleWarehouseMapper,
-                                           WarehouseMapper warehouseMapper) {
-        this.warehouseItemRuleMapper = warehouseItemRuleMapper;
-        this.ruleItemMapper = ruleItemMapper;
-        this.ruleCategoryMapper = ruleCategoryMapper;
-        this.ruleWarehouseMapper = ruleWarehouseMapper;
-        this.warehouseMapper = warehouseMapper;
+    /** 身份与权限仓储实现，负责通过持久层组件完成数据读写。 */
+    public WarehouseItemRuleRepositoryImpl(WarehouseItemRuleMapper warehouseItemRuleMapperValue,
+                                           WarehouseItemRuleItemMapper ruleItemMapperValue,
+                                           WarehouseItemRuleCategoryMapper ruleCategoryMapperValue,
+                                           WarehouseItemRuleWarehouseMapper ruleWarehouseMapperValue,
+                                           WarehouseMapper warehouseMapperValue) {
+        this.warehouseItemRuleMapper = warehouseItemRuleMapperValue;
+        this.ruleItemMapper = ruleItemMapperValue;
+        this.ruleCategoryMapper = ruleCategoryMapperValue;
+        this.ruleWarehouseMapper = ruleWarehouseMapperValue;
+        this.warehouseMapper = warehouseMapperValue;
     }
 
+    /** 查询规则SummariesBy集团标识。 */
     @Override
     public List<RuleSummary> findRuleSummariesByGroupId(Long groupId) {
         return warehouseItemRuleMapper.selectList(new LambdaQueryWrapper<WarehouseItemRuleDO>()
@@ -49,11 +53,13 @@ public class WarehouseItemRuleRepositoryImpl implements WarehouseItemRuleReposit
                 .toList();
     }
 
+    /** 查询规则By标识。 */
     @Override
     public Optional<RuleRecord> findRuleById(Long ruleId) {
         return Optional.ofNullable(warehouseItemRuleMapper.selectById(ruleId)).map(this::toRuleRecord);
     }
 
+    /** 查询规则明细By标识。 */
     @Override
     public RuleDetailData findRuleDetailById(Long ruleId) {
         RuleRecord rule = findRuleById(ruleId).orElse(null);
@@ -97,6 +103,7 @@ public class WarehouseItemRuleRepositoryImpl implements WarehouseItemRuleReposit
         return new RuleDetailData(rule, items, categories, warehouses);
     }
 
+    /** 处理save规则。 */
     @Override
     public Long saveRule(RuleRecord rule) {
         WarehouseItemRuleDO data = toDataObject(rule);
@@ -108,11 +115,13 @@ public class WarehouseItemRuleRepositoryImpl implements WarehouseItemRuleReposit
         return data.getId();
     }
 
+    /** 删除规则By标识。 */
     @Override
     public void deleteRuleById(Long ruleId) {
         warehouseItemRuleMapper.deleteById(ruleId);
     }
 
+    /** 处理replace规则Details。 */
     @Override
     public void replaceRuleDetails(Long ruleId,
                                    List<RuleItemData> items,
@@ -163,6 +172,7 @@ public class WarehouseItemRuleRepositoryImpl implements WarehouseItemRuleReposit
         }
     }
 
+    /** 查询All规则Codes。 */
     @Override
     public List<String> findAllRuleCodes() {
         return warehouseItemRuleMapper.selectList(new LambdaQueryWrapper<WarehouseItemRuleDO>()

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { Search, Setting } from '@element-plus/icons-vue';
+import { Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
@@ -10,6 +10,12 @@ import {
   fetchItemsApi,
   type ItemVO,
 } from '@/api/modules/item';
+import {
+  fetchItemBatchTraceReportApi,
+  type ItemBatchTraceExternalFlowRow,
+  type ItemBatchTraceInternalFlowRow,
+  type ItemBatchTraceSourceRow,
+} from '@/api/modules/inventory';
 import { resolveArchiveOrgId } from '@/views/items/org';
 
 type UnitType = '基准单位' | '库存单位';
@@ -19,61 +25,9 @@ type TreeNode = {
   children?: TreeNode[];
 };
 
-type SourceRow = {
-  id: string;
-  sourceOrg: string;
-  inboundOrg: string;
-  inboundWarehouse: string;
-  inboundType: string;
-  inboundDocumentNo: string;
-  upstreamDocumentNo: string;
-  inboundDate: string;
-  inboundCreatedAt: string;
-  batchNo: string;
-  manufacturer: string;
-  itemCode: string;
-  itemName: string;
-  specModel: string;
-  unit: string;
-  inboundQty: number;
-};
-
-type InternalFlowRow = {
-  id: string;
-  orgName: string;
-  warehouse: string;
-  inoutType: string;
-  documentNo: string;
-  upstreamDocumentNo: string;
-  documentDate: string;
-  documentCreatedAt: string;
-  batchNo: string;
-  itemCode: string;
-  itemName: string;
-  specModel: string;
-  unit: string;
-  inoutQty: number;
-  currentBalanceQty: number;
-};
-
-type ExternalFlowRow = {
-  id: string;
-  orgName: string;
-  warehouse: string;
-  targetOrg: string;
-  outboundType: string;
-  outboundDocumentNo: string;
-  upstreamDocumentNo: string;
-  outboundDate: string;
-  outboundCreatedAt: string;
-  batchNo: string;
-  itemCode: string;
-  itemName: string;
-  specModel: string;
-  unit: string;
-  inoutQty: number;
-  targetBalanceQty: number;
-};
+type SourceRow = ItemBatchTraceSourceRow;
+type InternalFlowRow = ItemBatchTraceInternalFlowRow;
+type ExternalFlowRow = ItemBatchTraceExternalFlowRow;
 
 type ReportColumn<T> = {
   key: keyof T;
@@ -104,11 +58,13 @@ const internalFlowRows = ref<InternalFlowRow[]>([]);
 const externalFlowRows = ref<ExternalFlowRow[]>([]);
 const itemTree = ref<TreeNode[]>([]);
 
+const currentOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
+
 const storeTree = computed<TreeNode[]>(() => {
   const normalize = (node: OrgNode): TreeNode | null => {
     if (node.type === 'store') {
       return {
-        value: node.id,
+        value: node.name,
         label: node.code ? `${node.name} / ${node.code}` : node.name,
       };
     }
@@ -119,7 +75,7 @@ const storeTree = computed<TreeNode[]>(() => {
       return null;
     }
     return {
-      value: node.id,
+      value: node.name,
       label: node.name,
       children,
     };
@@ -213,16 +169,15 @@ const formatValue = (value: unknown) => {
 };
 
 const loadOptions = async () => {
-  const orgId = resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
   optionLoading.value = true;
   try {
     await loadWarehouseTree();
-    if (!orgId) {
+    if (!currentOrgId.value) {
       itemTree.value = [];
       return;
     }
     const itemRows = await fetchAllPages<ItemVO>((pageNo, pageSizeValue) =>
-      fetchItemsApi({ pageNo, pageSize: pageSizeValue, status: '全部', itemType: '全部' }, orgId));
+      fetchItemsApi({ pageNo, pageSize: pageSizeValue, status: '全部', itemType: '全部' }, currentOrgId.value ?? undefined));
     itemTree.value = itemRows.map((row) => ({
       value: row.code,
       label: `${row.code} / ${row.name}`,
@@ -253,9 +208,23 @@ const fetchReport = async () => {
   }
   loading.value = true;
   try {
+    const report = await fetchItemBatchTraceReportApi({
+      startDate: query.businessDateRange[0],
+      endDate: query.businessDateRange[1],
+      warehouses: query.warehouses.join(','),
+      itemCode: query.itemCode,
+      batchNo: query.batchNo.trim(),
+      sourceOrg: query.sourceOrg,
+      unitType: query.unitType,
+    }, currentOrgId.value ?? undefined);
+    sourceRows.value = report.sourceRows ?? [];
+    internalFlowRows.value = report.internalFlowRows ?? [];
+    externalFlowRows.value = report.externalFlowRows ?? [];
+  } catch {
     sourceRows.value = [];
     internalFlowRows.value = [];
     externalFlowRows.value = [];
+    ElMessage.error('物品批次全流程跟踪表加载失败');
   } finally {
     loading.value = false;
   }
@@ -275,10 +244,6 @@ const handleReset = () => {
   sourceRows.value = [];
   internalFlowRows.value = [];
   externalFlowRows.value = [];
-};
-
-const handleSourceAdvanced = () => {
-  ElMessage.info('来源机构高级筛选待接入');
 };
 
 watch(
@@ -344,22 +309,16 @@ onMounted(async () => {
       </el-form-item>
 
       <el-form-item label="来源机构">
-        <el-input-group>
-          <el-tree-select
-            v-model="query.sourceOrg"
-            :data="storeTree"
-            :props="{ label: 'label', value: 'value', children: 'children' }"
-            filterable
-            clearable
-            check-strictly
-            default-expand-all
-            style="width: 180px"
-          />
-          <el-button @click="handleSourceAdvanced">
-            <el-icon><Setting /></el-icon>
-            高级
-          </el-button>
-        </el-input-group>
+        <el-tree-select
+          v-model="query.sourceOrg"
+          :data="storeTree"
+          :props="{ label: 'label', value: 'value', children: 'children' }"
+          filterable
+          clearable
+          check-strictly
+          default-expand-all
+          style="width: 180px"
+        />
       </el-form-item>
 
       <el-form-item label="单位类型">

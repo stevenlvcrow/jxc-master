@@ -1,14 +1,15 @@
 package com.boboboom.jxc.workflow.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService;
-import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService.PageData;
-import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService.WorkflowApprovalNotificationView;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService;
+import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService.NotificationPageData;
+import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService.WorkflowApprovalNotificationView;
 
 /**
  * 流程审批消息接口，负责展示当前机构下的审批通过、拒绝消息。
@@ -23,10 +24,10 @@ public class WorkflowNotificationController {
     /**
      * 构造流程审批消息接口。
      *
-     * @param notificationApplicationService 流程审批消息服务
+     * @param notificationApplicationServiceValue 流程审批消息服务
      */
-    public WorkflowNotificationController(WorkflowApprovalNotificationApplicationService notificationApplicationService) {
-        this.notificationApplicationService = notificationApplicationService;
+    public WorkflowNotificationController(WorkflowApprovalNotificationApplicationService notificationApplicationServiceValue) {
+        this.notificationApplicationService = notificationApplicationServiceValue;
     }
 
     /**
@@ -38,10 +39,11 @@ public class WorkflowNotificationController {
      * @return 审批消息分页结果
      */
     @GetMapping
-    public CodeDataResponse<PageData<WorkflowApprovalNotificationView>> page(@RequestParam(required = false) String orgId,
-                                                                             @RequestParam(defaultValue = "1") Integer pageNum,
-                                                                             @RequestParam(defaultValue = "10") Integer pageSize) {
-        return CodeDataResponse.ok(notificationApplicationService.page(orgId, pageNum, pageSize));
+    public CodeDataResponse<NotificationPageData<WorkflowApprovalNotificationView>> page(@RequestParam(required = false) String orgId,
+                                                                                         @RequestParam(required = false) String tab,
+                                                                                         @RequestParam(defaultValue = "1") Integer pageNum,
+                                                                                         @RequestParam(defaultValue = "10") Integer pageSize) {
+        return CodeDataResponse.ok(notificationApplicationService.page(orgId, tab, pageNum, pageSize));
     }
 
     /**

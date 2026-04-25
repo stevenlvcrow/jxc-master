@@ -430,31 +430,6 @@ const summaryTotals = computed(() => {
   };
 });
 
-const getItemTableSummaries = ({ columns }: { columns: Array<{ property?: string; type?: string }> }) => {
-  let summaryLabelFilled = false;
-  return columns.map((column) => {
-    if (!summaryLabelFilled && column.type !== 'selection') {
-      summaryLabelFilled = true;
-      return '合计';
-    }
-    const property = column.property as keyof typeof summaryTotals.value | undefined;
-    if (!property) {
-      return '';
-    }
-    const totals = summaryTotals.value;
-    if (property === 'avgPriceExTax') {
-      return formatMoney(totals.avgPriceExTax);
-    }
-    if (property === 'stockQty' || property === 'expectedInboundQty' || property === 'expectedOutboundQty' || property === 'theoreticalQty' || property === 'd1TheoreticalQty' || property === 'd2TheoreticalQty') {
-      return formatNumber(Number(totals[property] ?? 0), 4);
-    }
-    if (property === 'stockAmount' || property === 'stockAmountExTax' || property === 'taxAmount' || property === 'theoreticalAmount') {
-      return formatMoney(Number(totals[property] ?? 0));
-    }
-    return '';
-  });
-};
-
 const summaryCells = computed(() => {
   const totals = summaryTotals.value;
   const labels = [
@@ -681,8 +656,6 @@ onMounted(async () => {
       :data="tableData"
       :loading="loading"
       :height="420"
-      :show-summary="true"
-      :summary-method="getItemTableSummaries"
     >
       <el-table-column type="index" label="序号" width="56" fixed="left" />
       <el-table-column

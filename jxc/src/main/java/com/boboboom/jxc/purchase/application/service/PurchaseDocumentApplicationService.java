@@ -1,27 +1,7 @@
 package com.boboboom.jxc.purchase.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.inventory.application.service.InventoryDocumentHeader;
-import com.boboboom.jxc.inventory.application.service.InventoryDocumentWorkflowService;
-import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
-import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
-import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
-import org.springframework.jdbc.support.GeneratedKeyHolder;
-import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.sql.Date;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -37,34 +17,58 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DataScopeAccessService;
+import com.boboboom.jxc.inventory.application.service.InventoryDocumentHeader;
+import com.boboboom.jxc.inventory.application.service.InventoryDocumentWorkflowService;
+import com.boboboom.jxc.purchase.domain.repository.PurchaseDocumentRepository;
+import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
+import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService;
+
+/** 采购单据业务服务，负责采购申请、订货与入库链路的单据编排。 */
 @Service
 public class PurchaseDocumentApplicationService {
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 200;
+    private static final String REVIEW_STATUS_APPROVED = "已审核";
+    private static final String REVIEW_STATUS_UNAPPROVED = "未审核";
 
-    private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final PurchaseDocumentRepository purchaseDocumentRepository;
     private final OrgScopeService orgScopeService;
+    private final DataScopeAccessService dataScopeAccessService;
     private final InventoryDocumentWorkflowService workflowService;
     private final WorkflowApprovalNotificationApplicationService notificationService;
 
-    public PurchaseDocumentApplicationService(NamedParameterJdbcTemplate jdbcTemplate,
-                                              OrgScopeService orgScopeService,
-                                              InventoryDocumentWorkflowService workflowService,
-                                              WorkflowApprovalNotificationApplicationService notificationService) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.orgScopeService = orgScopeService;
-        this.workflowService = workflowService;
-        this.notificationService = notificationService;
+    /** 采购单据业务服务，负责采购申请、订货与入库链路的单据编排。 */
+    public PurchaseDocumentApplicationService(PurchaseDocumentRepository purchaseDocumentRepositoryValue,
+                                              OrgScopeService orgScopeServiceValue,
+                                              DataScopeAccessService dataScopeAccessServiceValue,
+                                              InventoryDocumentWorkflowService workflowServiceValue,
+                                              WorkflowApprovalNotificationApplicationService notificationServiceValue) {
+        this.purchaseDocumentRepository = purchaseDocumentRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.dataScopeAccessService = dataScopeAccessServiceValue;
+        this.workflowService = workflowServiceValue;
+        this.notificationService = notificationServiceValue;
     }
 
+    /** 分页查询业务数据。 */
     public PageData<PurchaseDocumentView> page(String rawDocumentType, Map<String, String> params) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(params.get("orgId"));
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        boolean viewAll = canViewAll(scope, operatorId);
         int pageNo = parsePositiveInt(params.get("pageNo"), 1);
         int pageSize = Math.min(parsePositiveInt(params.get("pageSize"), DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
-        List<Header> headers = loadHeaders(scope, kind.storageType());
+        List<Header> headers = loadHeaders(scope, kind.storageType(), operatorId, viewAll);
         Map<Long, List<Line>> lineMap = loadLineMap(headers.stream().map(item -> item.id).toList());
         List<PurchaseDocumentView> filtered = headers.stream()
                 .map(header -> toView(header, lineMap.getOrDefault(header.id, List.of()), kind))
@@ -77,13 +81,17 @@ public class PurchaseDocumentApplicationService {
         return new PageData<>(filtered.subList(start, end), filtered.size(), pageNo, pageSize);
     }
 
+    /** 查询业务详情。 */
     public PurchaseDocumentView detail(String rawDocumentType, Long id, String orgId) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
-        Header header = requireHeader(scope, kind.storageType(), id);
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        boolean viewAll = canViewAll(scope, operatorId) || canReview(scope, kind, operatorId);
+        Header header = requireHeader(scope, kind.storageType(), id, operatorId, viewAll);
         return toView(header, loadLines(header.id), kind);
     }
 
+    /** 创建业务记录。 */
     @Transactional
     public IdPayload create(String rawDocumentType, SavePurchaseDocumentRequest request, String orgId) {
         DocumentKind kind = resolveKind(rawDocumentType);
@@ -95,7 +103,7 @@ public class PurchaseDocumentApplicationService {
         header.documentType = kind.storageType();
         header.documentCode = generateDocumentCode(scope, kind);
         header.documentStatus = "草稿";
-        header.reviewStatus = "待审核";
+        header.reviewStatus = REVIEW_STATUS_UNAPPROVED;
         header.workflowStatus = "NONE";
         header.pendingOperation = "NONE";
         header.createdBy = operatorId;
@@ -106,11 +114,13 @@ public class PurchaseDocumentApplicationService {
         return new IdPayload(header.id, header.documentCode);
     }
 
+    /** 更新业务记录。 */
     @Transactional
     public void update(String rawDocumentType, Long id, SavePurchaseDocumentRequest request, String orgId) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
-        Header header = requireHeader(scope, kind.storageType(), id);
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        Header header = requireHeader(scope, kind.storageType(), id, operatorId, canViewAll(scope, operatorId));
         ensureEditable(header);
         applyRequest(header, request, kind, false);
         header.updatedAt = LocalDateTime.now();
@@ -118,36 +128,41 @@ public class PurchaseDocumentApplicationService {
         replaceLines(header.id, request.items());
     }
 
+    /** 删除业务记录。 */
     @Transactional
     public void delete(String rawDocumentType, Long id, String orgId) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
-        Header header = requireHeader(scope, kind.storageType(), id);
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        Header header = requireHeader(scope, kind.storageType(), id, operatorId, canViewAll(scope, operatorId));
         ensureEditable(header);
-        jdbcTemplate.update("DELETE FROM purchase_document WHERE id = :id", new MapSqlParameterSource("id", header.id));
+        purchaseDocumentRepository.deleteHeaderById(header.id);
     }
 
+    /** 批量删除业务记录。 */
     @Transactional
     public void batchDelete(String rawDocumentType, BatchActionRequest request, String orgId) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
-        for (Header header : requireHeaders(scope, kind.storageType(), request.ids())) {
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        for (Header header : requireHeaders(scope, kind.storageType(), request.ids(), operatorId, canViewAll(scope, operatorId))) {
             ensureEditable(header);
-            jdbcTemplate.update("DELETE FROM purchase_document WHERE id = :id", new MapSqlParameterSource("id", header.id));
+            purchaseDocumentRepository.deleteHeaderById(header.id);
         }
     }
 
+    /** 批量提交采购单据。 */
     @Transactional
     public void batchSubmit(String rawDocumentType, BatchActionRequest request, String orgId) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        for (Header header : requireHeaders(scope, kind.storageType(), request.ids())) {
+        for (Header header : requireHeaders(scope, kind.storageType(), request.ids(), operatorId, canViewAll(scope, operatorId))) {
             if ("已审核".equals(header.documentStatus)) {
                 continue;
             }
             header.documentStatus = "已提交";
-            header.reviewStatus = "待审核";
+            header.reviewStatus = REVIEW_STATUS_UNAPPROVED;
             header.submitterName = AuthContextHolder.userNameOr("system");
             header.lastOperatorName = header.submitterName;
             header.lastOperatedAt = LocalDateTime.now();
@@ -160,34 +175,41 @@ public class PurchaseDocumentApplicationService {
         }
     }
 
+    /** 批量审核通过单据。 */
     @Transactional
     public void batchApprove(String rawDocumentType, BatchActionRequest request, String orgId) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
-        for (Header header : requireHeaders(scope, kind.storageType(), request.ids())) {
+        boolean reviewAccess = canViewAll(scope, operatorId) || canReview(scope, kind, operatorId);
+        for (Header header : requireHeaders(scope, kind.storageType(), request.ids(), operatorId, reviewAccess)) {
             approveHeader(scope, kind, header, operatorId);
         }
     }
 
+    /** 批量驳回采购单据。 */
     @Transactional
     public void batchReject(String rawDocumentType, BatchActionRequest request, String orgId) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         String reason = requiredTrim(request.rejectionReason(), "驳回原因不能为空");
-        for (Header header : requireHeaders(scope, kind.storageType(), request.ids())) {
+        boolean reviewAccess = canViewAll(scope, operatorId) || canReview(scope, kind, operatorId);
+        for (Header header : requireHeaders(scope, kind.storageType(), request.ids(), operatorId, reviewAccess)) {
             rejectHeader(scope, kind, header, operatorId, reason);
         }
     }
 
+    /** 批量撤销单据审核。 */
     @Transactional
     public void batchUnapprove(String rawDocumentType, BatchActionRequest request, String orgId) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
-        for (Header header : requireHeaders(scope, kind.storageType(), request.ids())) {
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        boolean reviewAccess = canViewAll(scope, operatorId) || canReview(scope, kind, operatorId);
+        for (Header header : requireHeaders(scope, kind.storageType(), request.ids(), operatorId, reviewAccess)) {
             header.documentStatus = "已提交";
-            header.reviewStatus = "待审核";
+            header.reviewStatus = REVIEW_STATUS_UNAPPROVED;
             header.approvedBy = null;
             header.approvedAt = null;
             header.lastOperatorName = AuthContextHolder.userNameOr("system");
@@ -205,21 +227,25 @@ public class PurchaseDocumentApplicationService {
         }
     }
 
+    /** 批量标记采购单据打印。 */
     @Transactional
     public void batchPrint(String rawDocumentType, BatchActionRequest request, String orgId) {
         updateSimpleStatus(rawDocumentType, request, orgId, header -> header.printStatus = "已打印");
     }
 
+    /** 批量关闭采购单据。 */
     @Transactional
     public void batchClose(String rawDocumentType, BatchActionRequest request, String orgId) {
         updateSimpleStatus(rawDocumentType, request, orgId, header -> header.documentStatus = "已关闭");
     }
 
+    /** 批量取消关闭采购单据。 */
     @Transactional
     public void batchCancelClose(String rawDocumentType, BatchActionRequest request, String orgId) {
         updateSimpleStatus(rawDocumentType, request, orgId, header -> header.documentStatus = "已提交");
     }
 
+    /** 批量确认采购单据收货。 */
     @Transactional
     public void batchReceive(String rawDocumentType, BatchActionRequest request, String orgId) {
         updateSimpleStatus(rawDocumentType, request, orgId, header -> {
@@ -229,6 +255,7 @@ public class PurchaseDocumentApplicationService {
         });
     }
 
+    /** 批量取消采购单据收货。 */
     @Transactional
     public void batchCancelReceive(String rawDocumentType, BatchActionRequest request, String orgId) {
         updateSimpleStatus(rawDocumentType, request, orgId, header -> {
@@ -237,12 +264,11 @@ public class PurchaseDocumentApplicationService {
         });
     }
 
+    /** 查询采购申请审核明细。 */
     @Transactional
     public void reviewApplicationLines(LineReviewBatchRequest request, String orgId) {
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
-        if (request.lineReviews() == null || request.lineReviews().isEmpty()) {
-            throw new BusinessException("请选择需要审核的明细");
-        }
+        requireLineReviews(request);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         List<Long> lineIds = request.lineReviews().stream().map(LineReviewRequest::lineId).filter(Objects::nonNull).distinct().toList();
         if (lineIds.isEmpty()) {
@@ -256,18 +282,11 @@ public class PurchaseDocumentApplicationService {
             throw new BusinessException("存在无效明细");
         }
         Set<Long> documentIds = lines.stream().map(item -> item.documentId).collect(Collectors.toCollection(LinkedHashSet::new));
-        List<Header> headers = requireHeaders(scope, "APPLICATION", new ArrayList<>(documentIds));
+        boolean reviewAccess = canViewAll(scope, operatorId) || canReview(scope, DocumentKind.APPLICATION, operatorId);
+        List<Header> headers = requireHeaders(scope, "APPLICATION", new ArrayList<>(documentIds), operatorId, reviewAccess);
         Map<Long, Header> headerMap = headers.stream().collect(Collectors.toMap(item -> item.id, item -> item));
         boolean approved = Boolean.TRUE.equals(request.approved());
-        for (Line line : lines) {
-            Header header = headerMap.get(line.documentId);
-            if (header == null) {
-                throw new BusinessException("存在无效明细");
-            }
-            LineReviewRequest review = reviewMap.get(line.id);
-            BigDecimal reviewQty = review.reviewQty() == null ? line.quantity : review.reviewQty();
-            updateLineReview(line.id, approved ? "已审核" : "已驳回", reviewQty, trimNullable(review.remark()));
-        }
+        applyLineReviewResults(lines, headerMap, reviewMap, approved);
         if (!approved) {
             String reason = requiredTrim(request.rejectionReason(), "驳回原因不能为空");
             for (Header header : headers) {
@@ -275,18 +294,45 @@ public class PurchaseDocumentApplicationService {
             }
             return;
         }
+        approveFullyReviewedHeaders(scope, headers, operatorId);
+    }
+
+    private void applyLineReviewResults(List<Line> lines,
+                                        Map<Long, Header> headerMap,
+                                        Map<Long, LineReviewRequest> reviewMap,
+                                        boolean approved) {
+        for (Line line : lines) {
+            if (!headerMap.containsKey(line.documentId)) {
+                throw new BusinessException("存在无效明细");
+            }
+            LineReviewRequest review = reviewMap.get(line.id);
+            BigDecimal reviewQty = review.reviewQty() == null ? line.quantity : review.reviewQty();
+            updateLineReview(line.id, approved ? REVIEW_STATUS_APPROVED : REVIEW_STATUS_UNAPPROVED,
+                    reviewQty, trimNullable(review.remark()));
+        }
+    }
+
+    private void approveFullyReviewedHeaders(OrgScopeService.AccessibleScope scope, List<Header> headers, Long operatorId) {
         for (Header header : headers) {
             List<Line> currentLines = loadLines(header.id);
-            boolean allApproved = currentLines.stream().allMatch(line -> "已审核".equals(line.reviewStatus));
+            boolean allApproved = currentLines.stream().allMatch(line -> REVIEW_STATUS_APPROVED.equals(line.reviewStatus));
             if (allApproved) {
                 approveHeader(scope, DocumentKind.APPLICATION, header, operatorId);
             }
         }
     }
 
+    private void requireLineReviews(LineReviewBatchRequest request) {
+        if (request.lineReviews() == null || request.lineReviews().isEmpty()) {
+            throw new BusinessException("请选择需要审核的明细");
+        }
+    }
+
+    /** 更新采购申请明细。 */
     @Transactional
     public void updateApplicationLines(LineUpdateBatchRequest request, String orgId) {
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         if (request.lineUpdates() == null || request.lineUpdates().isEmpty()) {
             throw new BusinessException("请选择需要保存的明细");
         }
@@ -302,7 +348,8 @@ public class PurchaseDocumentApplicationService {
             throw new BusinessException("存在无效明细");
         }
         Set<Long> documentIds = lines.stream().map(item -> item.documentId).collect(Collectors.toCollection(LinkedHashSet::new));
-        List<Header> headers = requireHeaders(scope, "APPLICATION", new ArrayList<>(documentIds));
+        boolean reviewAccess = canViewAll(scope, operatorId) || canReview(scope, DocumentKind.APPLICATION, operatorId);
+        List<Header> headers = requireHeaders(scope, "APPLICATION", new ArrayList<>(documentIds), operatorId, reviewAccess);
         Map<Long, Header> headerMap = headers.stream().collect(Collectors.toMap(item -> item.id, item -> item));
         for (Line line : lines) {
             if (!headerMap.containsKey(line.documentId)) {
@@ -318,15 +365,7 @@ public class PurchaseDocumentApplicationService {
                     trimNullable(update.remark())
             );
         }
-        jdbcTemplate.update("""
-                UPDATE purchase_document
-                SET last_operator_name = :operator,
-                    last_operated_at = CURRENT_TIMESTAMP,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id IN (:ids)
-                """, new MapSqlParameterSource()
-                .addValue("operator", AuthContextHolder.userNameOr("system"))
-                .addValue("ids", new ArrayList<>(documentIds)));
+        purchaseDocumentRepository.updateLastOperator(new ArrayList<>(documentIds), AuthContextHolder.userNameOr("system"));
     }
 
     private void approveHeader(OrgScopeService.AccessibleScope scope, DocumentKind kind, Header header, Long operatorId) {
@@ -356,12 +395,12 @@ public class PurchaseDocumentApplicationService {
         applyWorkflowHeader(header, workflowHeader);
         if (result.completed()) {
             header.documentStatus = terminalApprovedStatus(kind);
-            header.reviewStatus = "已审核";
+            header.reviewStatus = REVIEW_STATUS_APPROVED;
             header.approvedBy = operatorId;
             header.approvedAt = LocalDateTime.now();
         } else {
             header.documentStatus = "已提交";
-            header.reviewStatus = "待审核";
+            header.reviewStatus = REVIEW_STATUS_UNAPPROVED;
         }
         header.lastOperatorName = AuthContextHolder.userNameOr("system");
         header.lastOperatedAt = LocalDateTime.now();
@@ -386,7 +425,7 @@ public class PurchaseDocumentApplicationService {
                 header.workflowTaskName
         );
         header.documentStatus = "已驳回";
-        header.reviewStatus = "已驳回";
+        header.reviewStatus = REVIEW_STATUS_UNAPPROVED;
         header.rejectionReason = reason;
         header.lastOperatorName = AuthContextHolder.userNameOr("system");
         header.lastOperatedAt = LocalDateTime.now();
@@ -441,6 +480,7 @@ public class PurchaseDocumentApplicationService {
                 kind.businessName() + "流程",
                 header.id,
                 header.documentCode,
+                AuthContextHolder.userIdOr(null),
                 AuthContextHolder.userNameOr("system"),
                 "发起人",
                 target == null ? null : target.userId(),
@@ -466,6 +506,7 @@ public class PurchaseDocumentApplicationService {
                 kind.businessName() + "流程",
                 header.id,
                 header.documentCode,
+                AuthContextHolder.userIdOr(null),
                 AuthContextHolder.userNameOr("system"),
                 StringUtils.hasText(role) ? role : "普通审核",
                 null,
@@ -484,7 +525,8 @@ public class PurchaseDocumentApplicationService {
                                     HeaderMutator mutator) {
         DocumentKind kind = resolveKind(rawDocumentType);
         OrgScopeService.AccessibleScope scope = resolveScope(orgId);
-        for (Header header : requireHeaders(scope, kind.storageType(), request.ids())) {
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        for (Header header : requireHeaders(scope, kind.storageType(), request.ids(), operatorId, canViewAll(scope, operatorId))) {
             mutator.apply(header);
             header.lastOperatorName = AuthContextHolder.userNameOr("system");
             header.lastOperatedAt = LocalDateTime.now();
@@ -501,17 +543,17 @@ public class PurchaseDocumentApplicationService {
         header.supplierName = trimNullable(request.supplier());
         header.sourceDocumentCode = trimNullable(request.sourceDocumentCode());
         header.downstreamDocumentCode = trimNullable(request.downstreamDocumentCode());
-        header.documentBizType = StringUtils.hasText(request.documentBizType()) ? request.documentBizType() : defaultBizType(kind);
-        header.shipStatus = StringUtils.hasText(request.shipStatus()) ? request.shipStatus() : defaultShipStatus(kind);
-        header.receiveStatus = StringUtils.hasText(request.receiveStatus()) ? request.receiveStatus() : defaultReceiveStatus(kind);
-        header.reconciliationStatus = StringUtils.hasText(request.reconciliationStatus()) ? request.reconciliationStatus() : "未对账";
-        header.supplierSplitStatus = StringUtils.hasText(request.supplierSplit()) ? request.supplierSplit() : "未分账";
-        header.splitReceiptStatus = StringUtils.hasText(request.splitReceipt()) ? request.splitReceipt() : "不拆分";
-        header.printStatus = StringUtils.hasText(request.printStatus()) ? request.printStatus() : "未打印";
+        header.documentBizType = defaultIfBlank(request.documentBizType(), defaultBizType(kind));
+        header.shipStatus = defaultIfBlank(request.shipStatus(), defaultShipStatus(kind));
+        header.receiveStatus = defaultIfBlank(request.receiveStatus(), defaultReceiveStatus(kind));
+        header.reconciliationStatus = defaultIfBlank(request.reconciliationStatus(), "未对账");
+        header.supplierSplitStatus = defaultIfBlank(request.supplierSplit(), "未分账");
+        header.splitReceiptStatus = defaultIfBlank(request.splitReceipt(), "不拆分");
+        header.printStatus = defaultIfBlank(request.printStatus(), "未打印");
         header.returnReason = trimNullable(request.returnReason());
-        header.inspectionStatus = StringUtils.hasText(request.inspectionStatus()) ? request.inspectionStatus() : "无需质检";
+        header.inspectionStatus = defaultIfBlank(request.inspectionStatus(), "无需质检");
         header.adjustedPrice = Boolean.TRUE.equals(request.adjustedPrice());
-        header.applicantName = StringUtils.hasText(request.applicant()) ? request.applicant() : AuthContextHolder.userNameOr("system");
+        header.applicantName = defaultIfBlank(request.applicant(), AuthContextHolder.userNameOr("system"));
         header.submitterName = trimNullable(request.submitter());
         header.remark = trimNullable(request.remark());
         header.lastOperatorName = AuthContextHolder.userNameOr("system");
@@ -525,202 +567,72 @@ public class PurchaseDocumentApplicationService {
     }
 
     private Long insertHeader(Header header) {
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbcTemplate.update("""
-                INSERT INTO purchase_document (
-                    scope_type, scope_id, document_type, document_code, document_date, expected_arrival_date,
-                    purchase_org, warehouse_name, supplier_name, source_document_code, downstream_document_code,
-                    document_status, review_status, ship_status, receive_status, reconciliation_status,
-                    supplier_split_status, document_biz_type, split_receipt_status, print_status, return_reason,
-                    inspection_status, inspection_count, adjusted_price, workflow_status, pending_operation,
-                    creator_name, submitter_name, applicant_name, last_operator_name, last_operated_at,
-                    remark, created_by, created_at, updated_at
-                ) VALUES (
-                    :scopeType, :scopeId, :documentType, :documentCode, :documentDate, :expectedArrivalDate,
-                    :purchaseOrg, :warehouseName, :supplierName, :sourceDocumentCode, :downstreamDocumentCode,
-                    :documentStatus, :reviewStatus, :shipStatus, :receiveStatus, :reconciliationStatus,
-                    :supplierSplitStatus, :documentBizType, :splitReceiptStatus, :printStatus, :returnReason,
-                    :inspectionStatus, :inspectionCount, :adjustedPrice, :workflowStatus, :pendingOperation,
-                    :creatorName, :submitterName, :applicantName, :lastOperatorName, :lastOperatedAt,
-                    :remark, :createdBy, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                )
-                """, toHeaderParams(header), keyHolder, new String[]{"id"});
-        Number key = keyHolder.getKey();
-        if (key == null) {
+        Long id = purchaseDocumentRepository.saveHeader(header);
+        if (id == null) {
             throw new BusinessException("采购单据保存失败");
         }
-        return key.longValue();
+        return id;
     }
 
     private void updateHeader(Header header) {
-        jdbcTemplate.update("""
-                UPDATE purchase_document
-                SET document_date = :documentDate,
-                    expected_arrival_date = :expectedArrivalDate,
-                    purchase_org = :purchaseOrg,
-                    warehouse_name = :warehouseName,
-                    supplier_name = :supplierName,
-                    source_document_code = :sourceDocumentCode,
-                    downstream_document_code = :downstreamDocumentCode,
-                    document_status = :documentStatus,
-                    review_status = :reviewStatus,
-                    ship_status = :shipStatus,
-                    receive_status = :receiveStatus,
-                    reconciliation_status = :reconciliationStatus,
-                    supplier_split_status = :supplierSplitStatus,
-                    document_biz_type = :documentBizType,
-                    split_receipt_status = :splitReceiptStatus,
-                    print_status = :printStatus,
-                    return_reason = :returnReason,
-                    inspection_status = :inspectionStatus,
-                    inspection_count = :inspectionCount,
-                    adjusted_price = :adjustedPrice,
-                    workflow_process_code = :workflowProcessCode,
-                    workflow_definition_key = :workflowDefinitionKey,
-                    workflow_definition_id = :workflowDefinitionId,
-                    workflow_instance_id = :workflowInstanceId,
-                    workflow_task_id = :workflowTaskId,
-                    workflow_task_name = :workflowTaskName,
-                    workflow_status = :workflowStatus,
-                    pending_operation = :pendingOperation,
-                    rejection_reason = :rejectionReason,
-                    creator_name = :creatorName,
-                    submitter_name = :submitterName,
-                    applicant_name = :applicantName,
-                    last_operator_name = :lastOperatorName,
-                    last_operated_at = :lastOperatedAt,
-                    remark = :remark,
-                    approved_by = :approvedBy,
-                    approved_at = :approvedAt,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id
-                """, toHeaderParams(header).addValue("id", header.id));
+        purchaseDocumentRepository.updateHeader(header);
     }
 
     private void replaceLines(Long documentId, List<LineRequest> items) {
-        jdbcTemplate.update("DELETE FROM purchase_document_line WHERE document_id = :documentId",
-                new MapSqlParameterSource("documentId", documentId));
+        purchaseDocumentRepository.deleteLinesByDocumentId(documentId);
         for (LineRequest item : items) {
             BigDecimal quantity = positive(item.quantity(), "数量必须大于0");
             BigDecimal price = nonNegative(item.unitPrice(), "单价不能小于0");
             BigDecimal amount = item.amount() == null ? quantity.multiply(price) : nonNegative(item.amount(), "金额不能小于0");
-            jdbcTemplate.update("""
-                    INSERT INTO purchase_document_line (
-                        document_id, item_code, item_name, spec, item_category, supplier_name, purchase_unit,
-                        base_unit, base_conversion, quantity, review_qty, received_qty, unit_price, tax_rate,
-                        amount, is_gift, warehouse_name, expected_arrival_date, review_status, remark, created_at
-                    ) VALUES (
-                        :documentId, :itemCode, :itemName, :spec, :itemCategory, :supplierName, :purchaseUnit,
-                        :baseUnit, :baseConversion, :quantity, :reviewQty, :receivedQty, :unitPrice, :taxRate,
-                        :amount, :isGift, :warehouseName, :expectedArrivalDate, :reviewStatus, :remark, CURRENT_TIMESTAMP
-                    )
-                    """, new MapSqlParameterSource()
-                    .addValue("documentId", documentId)
-                    .addValue("itemCode", requiredTrim(item.itemCode(), "物品编码不能为空"))
-                    .addValue("itemName", requiredTrim(item.itemName(), "物品名称不能为空"))
-                    .addValue("spec", trimNullable(item.spec()))
-                    .addValue("itemCategory", trimNullable(item.itemCategory()))
-                    .addValue("supplierName", trimNullable(item.supplier()))
-                    .addValue("purchaseUnit", trimNullable(item.purchaseUnit()))
-                    .addValue("baseUnit", trimNullable(item.baseUnit()))
-                    .addValue("baseConversion", trimNullable(item.baseConversion()))
-                    .addValue("quantity", quantity)
-                    .addValue("reviewQty", item.reviewQty() == null ? quantity : nonNegative(item.reviewQty(), "审核数量不能小于0"))
-                    .addValue("receivedQty", item.receivedQty() == null ? BigDecimal.ZERO : nonNegative(item.receivedQty(), "收货数量不能小于0"))
-                    .addValue("unitPrice", price)
-                    .addValue("taxRate", item.taxRate() == null ? BigDecimal.ZERO : nonNegative(item.taxRate(), "税率不能小于0"))
-                    .addValue("amount", amount)
-                    .addValue("isGift", Boolean.TRUE.equals(item.isGift()))
-                    .addValue("warehouseName", trimNullable(item.warehouse()))
-                    .addValue("expectedArrivalDate", parseDateNullable(item.expectedArrivalDate()))
-                    .addValue("reviewStatus", StringUtils.hasText(item.reviewStatus()) ? item.reviewStatus() : "待审核")
-                    .addValue("remark", trimNullable(item.remark())));
+            Line line = new Line();
+            line.documentId = documentId;
+            line.itemCode = requiredTrim(item.itemCode(), "物品编码不能为空");
+            line.itemName = requiredTrim(item.itemName(), "物品名称不能为空");
+            line.spec = trimNullable(item.spec());
+            line.itemCategory = trimNullable(item.itemCategory());
+            line.supplierName = trimNullable(item.supplier());
+            line.purchaseUnit = trimNullable(item.purchaseUnit());
+            line.baseUnit = trimNullable(item.baseUnit());
+            line.baseConversion = trimNullable(item.baseConversion());
+            line.quantity = quantity;
+            line.reviewQty = item.reviewQty() == null ? quantity : nonNegative(item.reviewQty(), "审核数量不能小于0");
+            line.receivedQty = item.receivedQty() == null ? BigDecimal.ZERO : nonNegative(item.receivedQty(), "收货数量不能小于0");
+            line.unitPrice = price;
+            line.taxRate = item.taxRate() == null ? BigDecimal.ZERO : nonNegative(item.taxRate(), "税率不能小于0");
+            line.amount = amount;
+            line.isGift = Boolean.TRUE.equals(item.isGift());
+            line.warehouseName = trimNullable(item.warehouse());
+            line.expectedArrivalDate = parseDateNullable(item.expectedArrivalDate());
+            line.reviewStatus = normalizeReviewStatus(item.reviewStatus());
+            line.remark = trimNullable(item.remark());
+            purchaseDocumentRepository.saveLine(line);
         }
     }
 
-    private MapSqlParameterSource toHeaderParams(Header header) {
-        return new MapSqlParameterSource()
-                .addValue("scopeType", header.scopeType)
-                .addValue("scopeId", header.scopeId)
-                .addValue("documentType", header.documentType)
-                .addValue("documentCode", header.documentCode)
-                .addValue("documentDate", header.documentDate)
-                .addValue("expectedArrivalDate", header.expectedArrivalDate)
-                .addValue("purchaseOrg", header.purchaseOrg)
-                .addValue("warehouseName", header.warehouseName)
-                .addValue("supplierName", header.supplierName)
-                .addValue("sourceDocumentCode", header.sourceDocumentCode)
-                .addValue("downstreamDocumentCode", header.downstreamDocumentCode)
-                .addValue("documentStatus", header.documentStatus)
-                .addValue("reviewStatus", header.reviewStatus)
-                .addValue("shipStatus", header.shipStatus)
-                .addValue("receiveStatus", header.receiveStatus)
-                .addValue("reconciliationStatus", header.reconciliationStatus)
-                .addValue("supplierSplitStatus", header.supplierSplitStatus)
-                .addValue("documentBizType", header.documentBizType)
-                .addValue("splitReceiptStatus", header.splitReceiptStatus)
-                .addValue("printStatus", header.printStatus)
-                .addValue("returnReason", header.returnReason)
-                .addValue("inspectionStatus", header.inspectionStatus)
-                .addValue("inspectionCount", header.inspectionCount)
-                .addValue("adjustedPrice", header.adjustedPrice)
-                .addValue("workflowProcessCode", header.workflowProcessCode)
-                .addValue("workflowDefinitionKey", header.workflowDefinitionKey)
-                .addValue("workflowDefinitionId", header.workflowDefinitionId)
-                .addValue("workflowInstanceId", header.workflowInstanceId)
-                .addValue("workflowTaskId", header.workflowTaskId)
-                .addValue("workflowTaskName", header.workflowTaskName)
-                .addValue("workflowStatus", StringUtils.hasText(header.workflowStatus) ? header.workflowStatus : "NONE")
-                .addValue("pendingOperation", StringUtils.hasText(header.pendingOperation) ? header.pendingOperation : "NONE")
-                .addValue("rejectionReason", header.rejectionReason)
-                .addValue("creatorName", header.creatorName)
-                .addValue("submitterName", header.submitterName)
-                .addValue("applicantName", header.applicantName)
-                .addValue("lastOperatorName", header.lastOperatorName)
-                .addValue("lastOperatedAt", header.lastOperatedAt)
-                .addValue("remark", header.remark)
-                .addValue("createdBy", header.createdBy)
-                .addValue("approvedBy", header.approvedBy)
-                .addValue("approvedAt", header.approvedAt);
+    private List<Header> loadHeaders(OrgScopeService.AccessibleScope scope,
+                                     String documentType,
+                                     Long operatorId,
+                                     boolean viewAll) {
+        return purchaseDocumentRepository.findHeaders(scope.scopeType(), scope.scopeId(), documentType, operatorId, viewAll);
     }
 
-    private List<Header> loadHeaders(OrgScopeService.AccessibleScope scope, String documentType) {
-        return jdbcTemplate.query("""
-                SELECT *
-                FROM purchase_document
-                WHERE scope_type = :scopeType
-                  AND scope_id = :scopeId
-                  AND document_type = :documentType
-                ORDER BY document_date DESC, id DESC
-                """, new MapSqlParameterSource()
-                .addValue("scopeType", scope.scopeType())
-                .addValue("scopeId", scope.scopeId())
-                .addValue("documentType", documentType), headerMapper());
-    }
-
-    private Header requireHeader(OrgScopeService.AccessibleScope scope, String documentType, Long id) {
+    private Header requireHeader(OrgScopeService.AccessibleScope scope,
+                                 String documentType,
+                                 Long id,
+                                 Long operatorId,
+                                 boolean viewAll) {
         if (id == null) {
             throw new BusinessException("单据ID不能为空");
         }
-        List<Header> rows = jdbcTemplate.query("""
-                SELECT *
-                FROM purchase_document
-                WHERE id = :id
-                  AND scope_type = :scopeType
-                  AND scope_id = :scopeId
-                  AND document_type = :documentType
-                """, new MapSqlParameterSource()
-                .addValue("id", id)
-                .addValue("scopeType", scope.scopeType())
-                .addValue("scopeId", scope.scopeId())
-                .addValue("documentType", documentType), headerMapper());
-        if (rows.isEmpty()) {
-            throw new BusinessException("单据不存在");
-        }
-        return rows.get(0);
+        return purchaseDocumentRepository.findHeader(scope.scopeType(), scope.scopeId(), documentType, id, operatorId, viewAll)
+                .orElseThrow(() -> new BusinessException("单据不存在"));
     }
 
-    private List<Header> requireHeaders(OrgScopeService.AccessibleScope scope, String documentType, List<Long> ids) {
+    private List<Header> requireHeaders(OrgScopeService.AccessibleScope scope,
+                                        String documentType,
+                                        List<Long> ids,
+                                        Long operatorId,
+                                        boolean viewAll) {
         if (ids == null || ids.isEmpty()) {
             throw new BusinessException("请选择单据");
         }
@@ -728,86 +640,60 @@ public class PurchaseDocumentApplicationService {
         if (distinctIds.isEmpty()) {
             throw new BusinessException("请选择单据");
         }
-        List<Header> rows = jdbcTemplate.query("""
-                SELECT *
-                FROM purchase_document
-                WHERE scope_type = :scopeType
-                  AND scope_id = :scopeId
-                  AND document_type = :documentType
-                  AND id IN (:ids)
-                """, new MapSqlParameterSource()
-                .addValue("scopeType", scope.scopeType())
-                .addValue("scopeId", scope.scopeId())
-                .addValue("documentType", documentType)
-                .addValue("ids", distinctIds), headerMapper());
+        List<Header> rows = purchaseDocumentRepository.findHeadersByIds(
+                scope.scopeType(),
+                scope.scopeId(),
+                documentType,
+                distinctIds,
+                operatorId,
+                viewAll
+        );
         if (rows.size() != distinctIds.size()) {
             throw new BusinessException("存在无效单据");
         }
         return rows;
     }
 
+    private boolean canViewAll(OrgScopeService.AccessibleScope scope, Long operatorId) {
+        return dataScopeAccessService.canViewScopeData(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
+    }
+
+    private boolean canReview(OrgScopeService.AccessibleScope scope, DocumentKind kind, Long operatorId) {
+        return workflowService.hasBusinessReviewPermission(
+                kind.businessCode(),
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                operatorId
+        );
+    }
+
     private Map<Long, List<Line>> loadLineMap(List<Long> documentIds) {
         if (documentIds == null || documentIds.isEmpty()) {
             return Map.of();
         }
-        return jdbcTemplate.query("""
-                SELECT *
-                FROM purchase_document_line
-                WHERE document_id IN (:documentIds)
-                ORDER BY id ASC
-                """, new MapSqlParameterSource("documentIds", documentIds), lineMapper())
+        return purchaseDocumentRepository.findLinesByDocumentIds(documentIds)
                 .stream()
                 .collect(Collectors.groupingBy(item -> item.documentId, LinkedHashMap::new, Collectors.toList()));
     }
 
     private List<Line> loadLines(Long documentId) {
-        return jdbcTemplate.query("""
-                SELECT *
-                FROM purchase_document_line
-                WHERE document_id = :documentId
-                ORDER BY id ASC
-                """, new MapSqlParameterSource("documentId", documentId), lineMapper());
+        return purchaseDocumentRepository.findLinesByDocumentId(documentId);
     }
 
     private List<Line> loadLinesByIds(List<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             return List.of();
         }
-        return jdbcTemplate.query("""
-                SELECT *
-                FROM purchase_document_line
-                WHERE id IN (:ids)
-                """, new MapSqlParameterSource("ids", ids), lineMapper());
+        return purchaseDocumentRepository.findLinesByIds(ids);
     }
 
     private void updateLineReview(Long lineId, String reviewStatus, BigDecimal reviewQty, String remark) {
-        jdbcTemplate.update("""
-                UPDATE purchase_document_line
-                SET review_status = :reviewStatus,
-                    review_qty = :reviewQty,
-                    remark = COALESCE(:remark, remark)
-                WHERE id = :lineId
-                """, new MapSqlParameterSource()
-                .addValue("lineId", lineId)
-                .addValue("reviewStatus", reviewStatus)
-                .addValue("reviewQty", reviewQty)
-                .addValue("remark", remark));
+        purchaseDocumentRepository.updateLineReview(lineId, reviewStatus, reviewQty, remark);
     }
 
     private void updateLinePatch(Long lineId, String supplier, LocalDate expectedArrivalDate, BigDecimal reviewQty, String remark) {
-        jdbcTemplate.update("""
-                UPDATE purchase_document_line
-                SET supplier_name = COALESCE(:supplierName, supplier_name),
-                    expected_arrival_date = COALESCE(:expectedArrivalDate, expected_arrival_date),
-                    review_qty = :reviewQty,
-                    remark = COALESCE(:remark, remark)
-                WHERE id = :lineId
-                """, new MapSqlParameterSource()
-                .addValue("lineId", lineId)
-                .addValue("supplierName", supplier)
-                .addValue("expectedArrivalDate", expectedArrivalDate == null ? null : Date.valueOf(expectedArrivalDate))
-                .addValue("reviewQty", reviewQty)
-                .addValue("remark", remark));
+        purchaseDocumentRepository.updateLinePatch(lineId, supplier, expectedArrivalDate, reviewQty, remark);
     }
 
     private PurchaseDocumentView toView(Header header, List<Line> lines, DocumentKind kind) {
@@ -824,7 +710,7 @@ public class PurchaseDocumentApplicationService {
                 defaultIfBlank(header.sourceDocumentCode, "-"),
                 defaultIfBlank(header.downstreamDocumentCode, "-"),
                 defaultIfBlank(header.documentStatus, "草稿"),
-                defaultIfBlank(header.reviewStatus, "待审核"),
+                defaultIfBlank(header.reviewStatus, REVIEW_STATUS_UNAPPROVED),
                 defaultIfBlank(header.shipStatus, "未发货"),
                 defaultIfBlank(header.receiveStatus, "未收货"),
                 defaultIfBlank(header.reconciliationStatus, "未对账"),
@@ -872,7 +758,7 @@ public class PurchaseDocumentApplicationService {
                 line.isGift,
                 defaultIfBlank(line.warehouseName, ""),
                 formatDate(line.expectedArrivalDate),
-                defaultIfBlank(line.reviewStatus, "待审核"),
+                defaultIfBlank(line.reviewStatus, REVIEW_STATUS_UNAPPROVED),
                 defaultIfBlank(line.remark, "")
         );
     }
@@ -882,22 +768,38 @@ public class PurchaseDocumentApplicationService {
         LocalDate end = parseDateNullable(firstParam(params, "endDate", "dateEnd"));
         LocalDate date = parseDateNullable(row.documentDate());
         return matchDate(date, start, end)
-                && contains(row.documentCode(), firstParam(params, "documentCode", "applicationCode", "receiptCode"))
+                && matchesPurchaseDocumentText(row, params)
+                && matchesPurchaseDocumentStatus(row, params)
+                && matchesPurchaseDocumentExtra(row, params);
+    }
+
+    private boolean matchesPurchaseDocumentText(PurchaseDocumentView row, Map<String, String> params) {
+        return contains(row.documentCode(), firstParam(params, "documentCode", "applicationCode", "receiptCode"))
                 && equalsIfPresent(row.warehouse(), firstParam(params, "warehouse", "receiptWarehouse", "returnWarehouse"))
                 && equalsIfPresent(row.supplier(), params.get("supplier"))
-                && equalsIfPresent(row.documentStatus(), params.get("documentStatus"))
+                && contains(row.sourceDocumentCode(), firstParam(params, "sourceDocumentCode", "sourceCode", "purchaseOrderCode"))
+                && contains(row.remark(), params.get("remark"));
+    }
+
+    private boolean matchesPurchaseDocumentStatus(PurchaseDocumentView row, Map<String, String> params) {
+        return equalsIfPresent(row.documentStatus(), params.get("documentStatus"))
                 && equalsIfPresent(row.reviewStatus(), params.get("reviewStatus"))
                 && equalsIfPresent(row.shipStatus(), params.get("shipStatus"))
                 && equalsIfPresent(row.receiveStatus(), params.get("receiveStatus"))
-                && equalsIfPresent(row.reconciliationStatus(), params.get("reconciliationStatus"))
-                && equalsIfPresent(row.supplierSplit(), params.get("supplierSplit"))
+                && equalsIfPresent(row.reconciliationStatus(), params.get("reconciliationStatus"));
+    }
+
+    private boolean matchesPurchaseDocumentExtra(PurchaseDocumentView row, Map<String, String> params) {
+        return equalsIfPresent(row.supplierSplit(), params.get("supplierSplit"))
                 && equalsIfPresent(row.documentBizType(), params.get("documentType"))
                 && equalsIfPresent(row.returnReason(), params.get("returnReason"))
                 && equalsIfPresent(row.inspectionStatus(), params.get("inspectionStatus"))
-                && ("全部".equals(defaultIfBlank(params.get("printStatus"), "全部")) || equalsIfPresent(row.printStatus(), params.get("printStatus")))
-                && contains(row.sourceDocumentCode(), firstParam(params, "sourceDocumentCode", "sourceCode", "purchaseOrderCode"))
-                && contains(row.remark(), params.get("remark"))
+                && matchesPrintStatus(row, params.get("printStatus"))
                 && matchItem(row, params.get("itemCode"));
+    }
+
+    private boolean matchesPrintStatus(PurchaseDocumentView row, String printStatus) {
+        return "全部".equals(defaultIfBlank(printStatus, "全部")) || equalsIfPresent(row.printStatus(), printStatus);
     }
 
     private boolean matchDate(LocalDate value, LocalDate start, LocalDate end) {
@@ -955,86 +857,6 @@ public class PurchaseDocumentApplicationService {
         header.approvedAt = workflowHeader.getApprovedAt();
     }
 
-    private RowMapper<Header> headerMapper() {
-        return (rs, rowNum) -> {
-            Header row = new Header();
-            row.id = rs.getLong("id");
-            row.scopeType = rs.getString("scope_type");
-            row.scopeId = rs.getLong("scope_id");
-            row.documentType = rs.getString("document_type");
-            row.documentCode = rs.getString("document_code");
-            row.documentDate = toLocalDate(rs, "document_date");
-            row.expectedArrivalDate = toLocalDate(rs, "expected_arrival_date");
-            row.purchaseOrg = rs.getString("purchase_org");
-            row.warehouseName = rs.getString("warehouse_name");
-            row.supplierName = rs.getString("supplier_name");
-            row.sourceDocumentCode = rs.getString("source_document_code");
-            row.downstreamDocumentCode = rs.getString("downstream_document_code");
-            row.documentStatus = rs.getString("document_status");
-            row.reviewStatus = rs.getString("review_status");
-            row.shipStatus = rs.getString("ship_status");
-            row.receiveStatus = rs.getString("receive_status");
-            row.reconciliationStatus = rs.getString("reconciliation_status");
-            row.supplierSplitStatus = rs.getString("supplier_split_status");
-            row.documentBizType = rs.getString("document_biz_type");
-            row.splitReceiptStatus = rs.getString("split_receipt_status");
-            row.printStatus = rs.getString("print_status");
-            row.returnReason = rs.getString("return_reason");
-            row.inspectionStatus = rs.getString("inspection_status");
-            row.inspectionCount = rs.getObject("inspection_count", Integer.class);
-            row.adjustedPrice = rs.getBoolean("adjusted_price");
-            row.workflowProcessCode = rs.getString("workflow_process_code");
-            row.workflowDefinitionKey = rs.getString("workflow_definition_key");
-            row.workflowDefinitionId = rs.getString("workflow_definition_id");
-            row.workflowInstanceId = rs.getString("workflow_instance_id");
-            row.workflowTaskId = rs.getString("workflow_task_id");
-            row.workflowTaskName = rs.getString("workflow_task_name");
-            row.workflowStatus = rs.getString("workflow_status");
-            row.pendingOperation = rs.getString("pending_operation");
-            row.rejectionReason = rs.getString("rejection_reason");
-            row.creatorName = rs.getString("creator_name");
-            row.submitterName = rs.getString("submitter_name");
-            row.applicantName = rs.getString("applicant_name");
-            row.lastOperatorName = rs.getString("last_operator_name");
-            row.lastOperatedAt = toLocalDateTime(rs, "last_operated_at");
-            row.remark = rs.getString("remark");
-            row.createdBy = rs.getObject("created_by", Long.class);
-            row.approvedBy = rs.getObject("approved_by", Long.class);
-            row.approvedAt = toLocalDateTime(rs, "approved_at");
-            row.createdAt = toLocalDateTime(rs, "created_at");
-            row.updatedAt = toLocalDateTime(rs, "updated_at");
-            return row;
-        };
-    }
-
-    private RowMapper<Line> lineMapper() {
-        return (rs, rowNum) -> {
-            Line row = new Line();
-            row.id = rs.getLong("id");
-            row.documentId = rs.getLong("document_id");
-            row.itemCode = rs.getString("item_code");
-            row.itemName = rs.getString("item_name");
-            row.spec = rs.getString("spec");
-            row.itemCategory = rs.getString("item_category");
-            row.supplierName = rs.getString("supplier_name");
-            row.purchaseUnit = rs.getString("purchase_unit");
-            row.baseUnit = rs.getString("base_unit");
-            row.baseConversion = rs.getString("base_conversion");
-            row.quantity = decimal(rs, "quantity");
-            row.reviewQty = decimal(rs, "review_qty");
-            row.receivedQty = decimal(rs, "received_qty");
-            row.unitPrice = decimal(rs, "unit_price");
-            row.taxRate = decimal(rs, "tax_rate");
-            row.amount = decimal(rs, "amount");
-            row.isGift = rs.getBoolean("is_gift");
-            row.warehouseName = rs.getString("warehouse_name");
-            row.expectedArrivalDate = toLocalDate(rs, "expected_arrival_date");
-            row.reviewStatus = rs.getString("review_status");
-            row.remark = rs.getString("remark");
-            return row;
-        };
-    }
-
     private DocumentKind resolveKind(String value) {
         String normalized = trimNullable(value);
         if ("applications".equals(normalized) || "application-reviews".equals(normalized) || "APPLICATION".equals(normalized)) {
@@ -1060,18 +882,7 @@ public class PurchaseDocumentApplicationService {
     private String generateDocumentCode(OrgScopeService.AccessibleScope scope, DocumentKind kind) {
         String datePart = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
         String prefix = kind.codePrefix() + "-" + datePart + "-";
-        Integer count = jdbcTemplate.queryForObject("""
-                SELECT COUNT(1)
-                FROM purchase_document
-                WHERE scope_type = :scopeType
-                  AND scope_id = :scopeId
-                  AND document_type = :documentType
-                  AND document_code LIKE :prefix
-                """, new MapSqlParameterSource()
-                .addValue("scopeType", scope.scopeType())
-                .addValue("scopeId", scope.scopeId())
-                .addValue("documentType", kind.storageType())
-                .addValue("prefix", prefix + "%"), Integer.class);
+        Long count = purchaseDocumentRepository.countByCodePrefix(scope.scopeType(), scope.scopeId(), kind.storageType(), prefix + "%");
         return prefix + String.format(Locale.ROOT, "%03d", (count == null ? 0 : count) + 1);
     }
 
@@ -1169,6 +980,17 @@ public class PurchaseDocumentApplicationService {
         return StringUtils.hasText(value) ? value : fallback;
     }
 
+    private String normalizeReviewStatus(String value) {
+        String text = trimNullable(value);
+        if (!StringUtils.hasText(text)) {
+            return REVIEW_STATUS_UNAPPROVED;
+        }
+        if (REVIEW_STATUS_APPROVED.equals(text) || REVIEW_STATUS_UNAPPROVED.equals(text)) {
+            return text;
+        }
+        throw new BusinessException("审核状态只能为已审核或未审核");
+    }
+
     private boolean contains(String value, String keyword) {
         if (!StringUtils.hasText(keyword)) {
             return true;
@@ -1198,21 +1020,6 @@ public class PurchaseDocumentApplicationService {
         return value == null ? "" : DATETIME_FORMATTER.format(value);
     }
 
-    private LocalDate toLocalDate(ResultSet rs, String column) throws SQLException {
-        Date value = rs.getDate(column);
-        return value == null ? null : value.toLocalDate();
-    }
-
-    private LocalDateTime toLocalDateTime(ResultSet rs, String column) throws SQLException {
-        Timestamp value = rs.getTimestamp(column);
-        return value == null ? null : value.toLocalDateTime();
-    }
-
-    private BigDecimal decimal(ResultSet rs, String column) throws SQLException {
-        BigDecimal value = rs.getBigDecimal(column);
-        return value == null ? BigDecimal.ZERO : value;
-    }
-
     private enum DocumentKind {
         APPLICATION("applications", "APPLICATION", "PURCHASE_APPLICATION", "采购单申请", "PA", "/purchase/application-reviews"),
         ORDER("orders", "ORDER", "PURCHASE_ORDER", "采购订单", "PO", "/purchase/orders"),
@@ -1226,105 +1033,131 @@ public class PurchaseDocumentApplicationService {
         private final String codePrefix;
         private final String routePath;
 
-        DocumentKind(String routeKey, String storageType, String businessCode, String businessName, String codePrefix, String routePath) {
-            this.routeKey = routeKey;
-            this.storageType = storageType;
-            this.businessCode = businessCode;
-            this.businessName = businessName;
-            this.codePrefix = codePrefix;
-            this.routePath = routePath;
+        DocumentKind(String routeKeyValue, String storageTypeValue, String businessCodeValue, String businessNameValue, String codePrefixValue, String routePathValue) {
+            this.routeKey = routeKeyValue;
+            this.storageType = storageTypeValue;
+            this.businessCode = businessCodeValue;
+            this.businessName = businessNameValue;
+            this.codePrefix = codePrefixValue;
+            this.routePath = routePathValue;
         }
 
-        String routeKey() { return routeKey; }
-        String storageType() { return storageType; }
-        String businessCode() { return businessCode; }
-        String businessName() { return businessName; }
-        String codePrefix() { return codePrefix; }
-        String routePath() { return routePath; }
+        String routeKey() {
+            return routeKey;
+        }
+
+        String storageType() {
+            return storageType;
+        }
+
+        String businessCode() {
+            return businessCode;
+        }
+
+        String businessName() {
+            return businessName;
+        }
+
+        String codePrefix() {
+            return codePrefix;
+        }
+
+        String routePath() {
+            return routePath;
+        }
     }
 
     private interface HeaderMutator {
         void apply(Header header);
     }
 
-    private static final class Header {
-        Long id;
-        String scopeType;
-        Long scopeId;
-        String documentType;
-        String documentCode;
-        LocalDate documentDate;
-        LocalDate expectedArrivalDate;
-        String purchaseOrg;
-        String warehouseName;
-        String supplierName;
-        String sourceDocumentCode;
-        String downstreamDocumentCode;
-        String documentStatus;
-        String reviewStatus;
-        String shipStatus;
-        String receiveStatus;
-        String reconciliationStatus;
-        String supplierSplitStatus;
-        String documentBizType;
-        String splitReceiptStatus;
-        String printStatus;
-        String returnReason;
-        String inspectionStatus;
-        Integer inspectionCount = 0;
-        Boolean adjustedPrice = false;
-        String workflowProcessCode;
-        String workflowDefinitionKey;
-        String workflowDefinitionId;
-        String workflowInstanceId;
-        String workflowTaskId;
-        String workflowTaskName;
-        String workflowStatus;
-        String pendingOperation;
-        String rejectionReason;
-        String creatorName;
-        String submitterName;
-        String applicantName;
-        String lastOperatorName;
-        LocalDateTime lastOperatedAt;
-        String remark;
-        Long createdBy;
-        Long approvedBy;
-        LocalDateTime approvedAt;
-        LocalDateTime createdAt;
-        LocalDateTime updatedAt;
+    /**
+     * 采购单据头业务数据。
+     */
+    public static final class Header {
+        public Long id;
+        public String scopeType;
+        public Long scopeId;
+        public String documentType;
+        public String documentCode;
+        public LocalDate documentDate;
+        public LocalDate expectedArrivalDate;
+        public String purchaseOrg;
+        public String warehouseName;
+        public String supplierName;
+        public String sourceDocumentCode;
+        public String downstreamDocumentCode;
+        public String documentStatus;
+        public String reviewStatus;
+        public String shipStatus;
+        public String receiveStatus;
+        public String reconciliationStatus;
+        public String supplierSplitStatus;
+        public String documentBizType;
+        public String splitReceiptStatus;
+        public String printStatus;
+        public String returnReason;
+        public String inspectionStatus;
+        public Integer inspectionCount = 0;
+        public Boolean adjustedPrice = false;
+        public String workflowProcessCode;
+        public String workflowDefinitionKey;
+        public String workflowDefinitionId;
+        public String workflowInstanceId;
+        public String workflowTaskId;
+        public String workflowTaskName;
+        public String workflowStatus;
+        public String pendingOperation;
+        public String rejectionReason;
+        public String creatorName;
+        public String submitterName;
+        public String applicantName;
+        public String lastOperatorName;
+        public LocalDateTime lastOperatedAt;
+        public String remark;
+        public Long createdBy;
+        public Long approvedBy;
+        public LocalDateTime approvedAt;
+        public LocalDateTime createdAt;
+        public LocalDateTime updatedAt;
     }
 
-    private static final class Line {
-        Long id;
-        Long documentId;
-        String itemCode;
-        String itemName;
-        String spec;
-        String itemCategory;
-        String supplierName;
-        String purchaseUnit;
-        String baseUnit;
-        String baseConversion;
-        BigDecimal quantity = BigDecimal.ZERO;
-        BigDecimal reviewQty = BigDecimal.ZERO;
-        BigDecimal receivedQty = BigDecimal.ZERO;
-        BigDecimal unitPrice = BigDecimal.ZERO;
-        BigDecimal taxRate = BigDecimal.ZERO;
-        BigDecimal amount = BigDecimal.ZERO;
-        Boolean isGift = false;
-        String warehouseName;
-        LocalDate expectedArrivalDate;
-        String reviewStatus;
-        String remark;
+    /**
+     * 采购单据行业务数据。
+     */
+    public static final class Line {
+        public Long id;
+        public Long documentId;
+        public String itemCode;
+        public String itemName;
+        public String spec;
+        public String itemCategory;
+        public String supplierName;
+        public String purchaseUnit;
+        public String baseUnit;
+        public String baseConversion;
+        public BigDecimal quantity = BigDecimal.ZERO;
+        public BigDecimal reviewQty = BigDecimal.ZERO;
+        public BigDecimal receivedQty = BigDecimal.ZERO;
+        public BigDecimal unitPrice = BigDecimal.ZERO;
+        public BigDecimal taxRate = BigDecimal.ZERO;
+        public BigDecimal amount = BigDecimal.ZERO;
+        public Boolean isGift = false;
+        public String warehouseName;
+        public LocalDate expectedArrivalDate;
+        public String reviewStatus;
+        public String remark;
     }
 
+    /** 采购载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id, String documentCode) {
     }
 
+    /** 采购分页数据模型，承载列表数据和分页信息。 */
     public record PageData<T>(List<T> list, long total, int pageNo, int pageSize) {
     }
 
+    /** 采购视图模型，承载页面展示数据。 */
     public record PurchaseDocumentView(Long id,
                                        String documentType,
                                        String documentCode,
@@ -1363,6 +1196,7 @@ public class PurchaseDocumentApplicationService {
                                        String createdAt) {
     }
 
+    /** 采购视图模型，承载页面展示数据。 */
     public record PurchaseDocumentLineView(Long id,
                                            String itemCode,
                                            String itemName,
@@ -1385,6 +1219,7 @@ public class PurchaseDocumentApplicationService {
                                            String remark) {
     }
 
+    /** 采购请求参数，承载接口入参。 */
     public record SavePurchaseDocumentRequest(String documentDate,
                                               String expectedArrivalDate,
                                               String purchaseOrg,
@@ -1408,6 +1243,7 @@ public class PurchaseDocumentApplicationService {
                                               List<LineRequest> items) {
     }
 
+    /** 采购请求参数，承载接口入参。 */
     public record LineRequest(String itemCode,
                               String itemName,
                               String spec,
@@ -1429,20 +1265,25 @@ public class PurchaseDocumentApplicationService {
                               String remark) {
     }
 
+    /** 采购请求参数，承载接口入参。 */
     public record BatchActionRequest(List<Long> ids, String rejectionReason) {
     }
 
+    /** 采购请求参数，承载接口入参。 */
     public record LineReviewBatchRequest(Boolean approved,
                                          String rejectionReason,
                                          List<LineReviewRequest> lineReviews) {
     }
 
+    /** 采购请求参数，承载接口入参。 */
     public record LineReviewRequest(Long lineId, BigDecimal reviewQty, String remark) {
     }
 
+    /** 采购请求参数，承载接口入参。 */
     public record LineUpdateBatchRequest(List<LineUpdateRequest> lineUpdates) {
     }
 
+    /** 采购请求参数，承载接口入参。 */
     public record LineUpdateRequest(Long lineId, String supplier, String expectedArrivalDate, BigDecimal reviewQty, String remark) {
     }
 }

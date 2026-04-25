@@ -233,8 +233,6 @@ watch(
         <el-icon><Delete /></el-icon>
         批量删除
       </el-button>
-      <el-button @click="handleToolbarAction('批量审核')">批量审核</el-button>
-      <el-button @click="handleToolbarAction('批量反审核')">批量反审核</el-button>
       <el-button @click="handleToolbarAction('批量导出单据列表')">
         <el-icon><Download /></el-icon>
         批量导出单据列表

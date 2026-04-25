@@ -1,23 +1,25 @@
 package com.boboboom.jxc.inventory.interfaces.rest;
 
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InterOrgTransferDetailReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InterOrgTransferSummaryReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InventoryInoutSummaryReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InventoryProfitLossReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.PageData;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.OtherInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.PageData;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StagnantStockReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockInoutSummaryReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockTurnoverRateReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StagnantStockReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockWarningReportRow;
+
 import jakarta.validation.constraints.Min;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 库存报表补充接口。
@@ -29,10 +31,12 @@ public class InventorySupplementReportController {
 
     private final InventorySupplementReportApplicationService inventorySupplementReportApplicationService;
 
-    public InventorySupplementReportController(InventorySupplementReportApplicationService inventorySupplementReportApplicationService) {
-        this.inventorySupplementReportApplicationService = inventorySupplementReportApplicationService;
+    /** 库存接口入口，负责接收请求、调用业务服务并返回统一响应。 */
+    public InventorySupplementReportController(InventorySupplementReportApplicationService inventorySupplementReportApplicationServiceValue) {
+        this.inventorySupplementReportApplicationService = inventorySupplementReportApplicationServiceValue;
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/stock-warning/report")
     public CodeDataResponse<PageData<StockWarningReportRow>> stockWarningReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -59,6 +63,7 @@ public class InventorySupplementReportController {
         ));
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/stagnant-stock/report")
     public CodeDataResponse<PageData<StagnantStockReportRow>> stagnantStockReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -85,6 +90,7 @@ public class InventorySupplementReportController {
         ));
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/inventory-profit-loss/report")
     public CodeDataResponse<PageData<InventoryProfitLossReportRow>> inventoryProfitLossReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -115,6 +121,7 @@ public class InventorySupplementReportController {
         ));
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/inventory-inout-summary/report")
     public CodeDataResponse<PageData<InventoryInoutSummaryReportRow>> inventoryInoutSummaryReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -153,6 +160,7 @@ public class InventorySupplementReportController {
         ));
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/stock-inout-summary/report")
     public CodeDataResponse<PageData<StockInoutSummaryReportRow>> stockInoutSummaryReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -199,6 +207,7 @@ public class InventorySupplementReportController {
         ));
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/other-inout-summary/report")
     public CodeDataResponse<PageData<OtherInoutSummaryReportRow>> otherInoutSummaryReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -227,6 +236,7 @@ public class InventorySupplementReportController {
         ));
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/inter-org-transfer-detail/report")
     public CodeDataResponse<PageData<InterOrgTransferDetailReportRow>> interOrgTransferDetailReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -261,6 +271,7 @@ public class InventorySupplementReportController {
         ));
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/inter-org-transfer-summary/report")
     public CodeDataResponse<PageData<InterOrgTransferSummaryReportRow>> interOrgTransferSummaryReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -293,6 +304,7 @@ public class InventorySupplementReportController {
         ));
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/stock-turnover-rate/report")
     public CodeDataResponse<PageData<StockTurnoverRateReportRow>> stockTurnoverRateReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,

@@ -1,11 +1,12 @@
 package com.boboboom.jxc.item.infrastructure.persistence.dataobject;
 
+import java.math.BigDecimal;
+
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.BaseAuditDO;
 
-import java.math.BigDecimal;
-
-@TableName("dev.supplier_profile")
+/** 物品与供应商数据对象，映射数据库表记录。 */
+@TableName("supplier_profile")
 public class SupplierProfileDO extends BaseAuditDO {
 
     private String scopeType;
@@ -41,260 +42,324 @@ public class SupplierProfileDO extends BaseAuditDO {
     private String invoicePhone;
     private String invoiceAddress;
 
+    /** 获取ScopeType。 */
     public String getScopeType() {
         return scopeType;
     }
 
-    public void setScopeType(String scopeType) {
-        this.scopeType = scopeType;
+    /** 设置ScopeType。 */
+    public void setScopeType(String scopeTypeValue) {
+        this.scopeType = scopeTypeValue;
     }
 
+    /** 获取ScopeId。 */
     public Long getScopeId() {
         return scopeId;
     }
 
-    public void setScopeId(Long scopeId) {
-        this.scopeId = scopeId;
+    /** 设置ScopeId。 */
+    public void setScopeId(Long scopeIdValue) {
+        this.scopeId = scopeIdValue;
     }
 
+    /** 获取SupplierCode。 */
     public String getSupplierCode() {
         return supplierCode;
     }
 
-    public void setSupplierCode(String supplierCode) {
-        this.supplierCode = supplierCode;
+    /** 设置SupplierCode。 */
+    public void setSupplierCode(String supplierCodeValue) {
+        this.supplierCode = supplierCodeValue;
     }
 
+    /** 获取SupplierName。 */
     public String getSupplierName() {
         return supplierName;
     }
 
-    public void setSupplierName(String supplierName) {
-        this.supplierName = supplierName;
+    /** 设置SupplierName。 */
+    public void setSupplierName(String supplierNameValue) {
+        this.supplierName = supplierNameValue;
     }
 
+    /** 获取SupplierShortName。 */
     public String getSupplierShortName() {
         return supplierShortName;
     }
 
-    public void setSupplierShortName(String supplierShortName) {
-        this.supplierShortName = supplierShortName;
+    /** 设置SupplierShortName。 */
+    public void setSupplierShortName(String supplierShortNameValue) {
+        this.supplierShortName = supplierShortNameValue;
     }
 
+    /** 获取SupplierMnemonic。 */
     public String getSupplierMnemonic() {
         return supplierMnemonic;
     }
 
-    public void setSupplierMnemonic(String supplierMnemonic) {
-        this.supplierMnemonic = supplierMnemonic;
+    /** 设置SupplierMnemonic。 */
+    public void setSupplierMnemonic(String supplierMnemonicValue) {
+        this.supplierMnemonic = supplierMnemonicValue;
     }
 
+    /** 获取SupplierCategory。 */
     public String getSupplierCategory() {
         return supplierCategory;
     }
 
-    public void setSupplierCategory(String supplierCategory) {
-        this.supplierCategory = supplierCategory;
+    /** 设置SupplierCategory。 */
+    public void setSupplierCategory(String supplierCategoryValue) {
+        this.supplierCategory = supplierCategoryValue;
     }
 
+    /** 获取TaxRate。 */
     public BigDecimal getTaxRate() {
         return taxRate;
     }
 
-    public void setTaxRate(BigDecimal taxRate) {
-        this.taxRate = taxRate;
+    /** 设置TaxRate。 */
+    public void setTaxRate(BigDecimal taxRateValue) {
+        this.taxRate = taxRateValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 
+    /** 获取ContactPerson。 */
     public String getContactPerson() {
         return contactPerson;
     }
 
-    public void setContactPerson(String contactPerson) {
-        this.contactPerson = contactPerson;
+    /** 设置ContactPerson。 */
+    public void setContactPerson(String contactPersonValue) {
+        this.contactPerson = contactPersonValue;
     }
 
+    /** 获取ContactPhone。 */
     public String getContactPhone() {
         return contactPhone;
     }
 
-    public void setContactPhone(String contactPhone) {
-        this.contactPhone = contactPhone;
+    /** 设置ContactPhone。 */
+    public void setContactPhone(String contactPhoneValue) {
+        this.contactPhone = contactPhoneValue;
     }
 
+    /** 获取Email。 */
     public String getEmail() {
         return email;
     }
 
-    public void setEmail(String email) {
-        this.email = email;
+    /** 设置Email。 */
+    public void setEmail(String emailValue) {
+        this.email = emailValue;
     }
 
+    /** 获取ContactAddress。 */
     public String getContactAddress() {
         return contactAddress;
     }
 
-    public void setContactAddress(String contactAddress) {
-        this.contactAddress = contactAddress;
+    /** 设置ContactAddress。 */
+    public void setContactAddress(String contactAddressValue) {
+        this.contactAddress = contactAddressValue;
     }
 
+    /** 获取Remark。 */
     public String getRemark() {
         return remark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    /** 设置Remark。 */
+    public void setRemark(String remarkValue) {
+        this.remark = remarkValue;
     }
 
+    /** 获取SettlementMethod。 */
     public String getSettlementMethod() {
         return settlementMethod;
     }
 
-    public void setSettlementMethod(String settlementMethod) {
-        this.settlementMethod = settlementMethod;
+    /** 设置SettlementMethod。 */
+    public void setSettlementMethod(String settlementMethodValue) {
+        this.settlementMethod = settlementMethodValue;
     }
 
+    /** 获取OrderSummaryRule。 */
     public String getOrderSummaryRule() {
         return orderSummaryRule;
     }
 
-    public void setOrderSummaryRule(String orderSummaryRule) {
-        this.orderSummaryRule = orderSummaryRule;
+    /** 设置OrderSummaryRule。 */
+    public void setOrderSummaryRule(String orderSummaryRuleValue) {
+        this.orderSummaryRule = orderSummaryRuleValue;
     }
 
+    /** 获取InputBatchWhenDelivery。 */
     public Boolean getInputBatchWhenDelivery() {
         return inputBatchWhenDelivery;
     }
 
-    public void setInputBatchWhenDelivery(Boolean inputBatchWhenDelivery) {
-        this.inputBatchWhenDelivery = inputBatchWhenDelivery;
+    /** 设置InputBatchWhenDelivery。 */
+    public void setInputBatchWhenDelivery(Boolean inputBatchWhenDeliveryValue) {
+        this.inputBatchWhenDelivery = inputBatchWhenDeliveryValue;
     }
 
+    /** 获取SyncReceiptData。 */
     public Boolean getSyncReceiptData() {
         return syncReceiptData;
     }
 
-    public void setSyncReceiptData(Boolean syncReceiptData) {
-        this.syncReceiptData = syncReceiptData;
+    /** 设置SyncReceiptData。 */
+    public void setSyncReceiptData(Boolean syncReceiptDataValue) {
+        this.syncReceiptData = syncReceiptDataValue;
     }
 
+    /** 获取PurchaseReceiptDependShipping。 */
     public String getPurchaseReceiptDependShipping() {
         return purchaseReceiptDependShipping;
     }
 
-    public void setPurchaseReceiptDependShipping(String purchaseReceiptDependShipping) {
-        this.purchaseReceiptDependShipping = purchaseReceiptDependShipping;
+    /** 设置PurchaseReceiptDependShipping。 */
+    public void setPurchaseReceiptDependShipping(String purchaseReceiptDependShippingValue) {
+        this.purchaseReceiptDependShipping = purchaseReceiptDependShippingValue;
     }
 
+    /** 获取DeliveryDependShipping。 */
     public String getDeliveryDependShipping() {
         return deliveryDependShipping;
     }
 
-    public void setDeliveryDependShipping(String deliveryDependShipping) {
-        this.deliveryDependShipping = deliveryDependShipping;
+    /** 设置DeliveryDependShipping。 */
+    public void setDeliveryDependShipping(String deliveryDependShippingValue) {
+        this.deliveryDependShipping = deliveryDependShippingValue;
     }
 
+    /** 获取SupplierManageInventory。 */
     public Boolean getSupplierManageInventory() {
         return supplierManageInventory;
     }
 
-    public void setSupplierManageInventory(Boolean supplierManageInventory) {
-        this.supplierManageInventory = supplierManageInventory;
+    /** 设置SupplierManageInventory。 */
+    public void setSupplierManageInventory(Boolean supplierManageInventoryValue) {
+        this.supplierManageInventory = supplierManageInventoryValue;
     }
 
+    /** 获取ControlOrderTime。 */
     public Boolean getControlOrderTime() {
         return controlOrderTime;
     }
 
-    public void setControlOrderTime(Boolean controlOrderTime) {
-        this.controlOrderTime = controlOrderTime;
+    /** 设置ControlOrderTime。 */
+    public void setControlOrderTime(Boolean controlOrderTimeValue) {
+        this.controlOrderTime = controlOrderTimeValue;
     }
 
+    /** 获取AllowCloseOrder。 */
     public Boolean getAllowCloseOrder() {
         return allowCloseOrder;
     }
 
-    public void setAllowCloseOrder(Boolean allowCloseOrder) {
-        this.allowCloseOrder = allowCloseOrder;
+    /** 设置AllowCloseOrder。 */
+    public void setAllowCloseOrder(Boolean allowCloseOrderValue) {
+        this.allowCloseOrder = allowCloseOrderValue;
     }
 
+    /** 获取ReconciliationMode。 */
     public String getReconciliationMode() {
         return reconciliationMode;
     }
 
-    public void setReconciliationMode(String reconciliationMode) {
-        this.reconciliationMode = reconciliationMode;
+    /** 设置ReconciliationMode。 */
+    public void setReconciliationMode(String reconciliationModeValue) {
+        this.reconciliationMode = reconciliationModeValue;
     }
 
+    /** 获取ScopeControl。 */
     public String getScopeControl() {
         return scopeControl;
     }
 
-    public void setScopeControl(String scopeControl) {
-        this.scopeControl = scopeControl;
+    /** 设置ScopeControl。 */
+    public void setScopeControl(String scopeControlValue) {
+        this.scopeControl = scopeControlValue;
     }
 
+    /** 获取Source。 */
     public String getSource() {
         return source;
     }
 
-    public void setSource(String source) {
-        this.source = source;
+    /** 设置Source。 */
+    public void setSource(String sourceValue) {
+        this.source = sourceValue;
     }
 
+    /** 获取SupplyRelation。 */
     public String getSupplyRelation() {
         return supplyRelation;
     }
 
-    public void setSupplyRelation(String supplyRelation) {
-        this.supplyRelation = supplyRelation;
+    /** 设置SupplyRelation。 */
+    public void setSupplyRelation(String supplyRelationValue) {
+        this.supplyRelation = supplyRelationValue;
     }
 
+    /** 获取BindStatus。 */
     public String getBindStatus() {
         return bindStatus;
     }
 
-    public void setBindStatus(String bindStatus) {
-        this.bindStatus = bindStatus;
+    /** 设置BindStatus。 */
+    public void setBindStatus(String bindStatusValue) {
+        this.bindStatus = bindStatusValue;
     }
 
+    /** 获取InvoiceCompanyName。 */
     public String getInvoiceCompanyName() {
         return invoiceCompanyName;
     }
 
-    public void setInvoiceCompanyName(String invoiceCompanyName) {
-        this.invoiceCompanyName = invoiceCompanyName;
+    /** 设置InvoiceCompanyName。 */
+    public void setInvoiceCompanyName(String invoiceCompanyNameValue) {
+        this.invoiceCompanyName = invoiceCompanyNameValue;
     }
 
+    /** 获取TaxpayerId。 */
     public String getTaxpayerId() {
         return taxpayerId;
     }
 
-    public void setTaxpayerId(String taxpayerId) {
-        this.taxpayerId = taxpayerId;
+    /** 设置TaxpayerId。 */
+    public void setTaxpayerId(String taxpayerIdValue) {
+        this.taxpayerId = taxpayerIdValue;
     }
 
+    /** 获取InvoicePhone。 */
     public String getInvoicePhone() {
         return invoicePhone;
     }
 
-    public void setInvoicePhone(String invoicePhone) {
-        this.invoicePhone = invoicePhone;
+    /** 设置InvoicePhone。 */
+    public void setInvoicePhone(String invoicePhoneValue) {
+        this.invoicePhone = invoicePhoneValue;
     }
 
+    /** 获取InvoiceAddress。 */
     public String getInvoiceAddress() {
         return invoiceAddress;
     }
 
-    public void setInvoiceAddress(String invoiceAddress) {
-        this.invoiceAddress = invoiceAddress;
+    /** 设置InvoiceAddress。 */
+    public void setInvoiceAddress(String invoiceAddressValue) {
+        this.invoiceAddress = invoiceAddressValue;
     }
 }
 

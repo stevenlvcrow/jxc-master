@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.cost.infrastructure.persistence.mapper.CostCardMapper">
+
+    <resultMap id="CostCardHeaderMap" type="com.boboboom.jxc.cost.application.service.CostCardApplicationService$CostCardHeader">
+        <constructor>
+            <idArg column="id" javaType="java.lang.Long"/>
+            <arg column="scope_type" javaType="java.lang.String"/>
+            <arg column="scope_id" javaType="java.lang.Long"/>
+            <arg column="card_code" javaType="java.lang.String"/>
+            <arg column="card_name" javaType="java.lang.String"/>
+            <arg column="card_type" javaType="java.lang.String"/>
+            <arg column="status" javaType="java.lang.String"/>
+            <arg column="effective_version_id" javaType="java.lang.Long"/>
+            <arg column="linked_dish_count" javaType="java.lang.Integer"/>
+            <arg column="remark" javaType="java.lang.String"/>
+            <arg column="created_by" javaType="java.lang.Long"/>
+        </constructor>
+    </resultMap>
+
+    <resultMap id="CostCardVersionMap" type="com.boboboom.jxc.cost.application.service.CostCardApplicationService$CostCardVersion">
+        <constructor>
+            <idArg column="id" javaType="java.lang.Long"/>
+            <arg column="card_id" javaType="java.lang.Long"/>
+            <arg column="version_no" javaType="java.lang.Integer"/>
+            <arg column="effective_date" javaType="java.time.LocalDate"/>
+            <arg column="version_status" javaType="java.lang.String"/>
+            <arg column="referenced" javaType="java.lang.Boolean"/>
+            <arg column="remark" javaType="java.lang.String"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectCards" resultMap="CostCardHeaderMap">
+        select *
+        from cost_card
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+        order by updated_at desc, id desc
+    </select>
+
+    <select id="selectCardByScopeAndId" resultMap="CostCardHeaderMap">
+        select *
+        from cost_card
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and id = #{id}
+    </select>
+
+    <select id="selectVersionsByCardId" resultMap="CostCardVersionMap">
+        select *
+        from cost_card_version
+        where card_id = #{cardId}
+        order by version_no desc
+    </select>
+
+    <select id="countByCodePrefix" resultType="java.lang.Long">
+        select count(1)
+        from cost_card
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and card_code like #{prefix}
+    </select>
+
+    <select id="insertCard" resultType="java.lang.Long">
+        insert into cost_card
+        (scope_type, scope_id, card_code, card_name, card_type, status, effective_version_id,
+         linked_dish_count, remark, created_by, created_at, updated_at)
+        values (#{header.scopeType}, #{header.scopeId}, #{header.cardCode}, #{header.cardName}, #{header.cardType},
+                #{header.status}, #{header.effectiveVersionId}, #{header.linkedDishCount}, #{header.remark},
+                #{header.createdBy}, current_timestamp, current_timestamp)
+        returning id
+    </select>
+
+    <update id="updateCard">
+        update cost_card
+        set card_name = #{header.cardName},
+            card_type = #{header.cardType},
+            remark = #{header.remark},
+            updated_at = current_timestamp
+        where id = #{header.id}
+    </update>
+
+    <select id="insertVersion" resultType="java.lang.Long">
+        insert into cost_card_version
+        (card_id, version_no, effective_date, version_status, referenced, remark, created_at, updated_at)
+        values (#{version.cardId}, #{version.versionNo}, #{version.effectiveDate}, #{version.versionStatus},
+                #{version.referenced}, #{version.remark}, current_timestamp, current_timestamp)
+        returning id
+    </select>
+
+    <insert id="insertLine">
+        insert into cost_card_line
+        (version_id, item_code, item_name, unit_name, quantity, conversion_rate, loss_rate,
+         default_warehouse, remark, created_at)
+        values (#{versionId}, #{line.itemCode}, #{line.itemName}, #{line.unitName}, #{line.quantity},
+                #{line.conversionRate}, #{line.lossRate}, #{line.defaultWarehouse}, #{line.remark}, current_timestamp)
+    </insert>
+
+    <update id="activateVersionStatus">
+        update cost_card_version
+        set version_status = case when id = #{versionId} then 'ACTIVE' else 'DISABLED' end,
+            updated_at = current_timestamp
+        where card_id = #{cardId}
+    </update>
+
+    <update id="activateCardVersion">
+        update cost_card
+        set status = 'ENABLED',
+            effective_version_id = #{versionId},
+            updated_at = current_timestamp
+        where id = #{cardId}
+    </update>
+
+    <update id="disableCard">
+        update cost_card
+        set status = 'DISABLED',
+            updated_at = current_timestamp
+        where id = #{cardId}
+    </update>
+
+    <insert id="upsertDishBinding">
+        insert into dish_cost_card_binding
+        (scope_type, scope_id, dish_id, card_id, default_warehouse, enabled, created_at, updated_at)
+        values (#{scopeType}, #{scopeId}, #{dishId}, #{cardId}, #{defaultWarehouse}, #{enabled},
+                current_timestamp, current_timestamp)
+        on conflict (scope_type, scope_id, dish_id)
+        do update set card_id = excluded.card_id,
+                      default_warehouse = excluded.default_warehouse,
+                      enabled = excluded.enabled,
+                      updated_at = current_timestamp
+    </insert>
+</mapper>

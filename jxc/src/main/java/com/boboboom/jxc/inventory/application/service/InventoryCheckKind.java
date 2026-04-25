@@ -1,8 +1,8 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-
 import java.util.Arrays;
+
+import com.boboboom.jxc.common.BusinessException;
 
 /**
  * 盘点单文档类型。
@@ -20,12 +20,12 @@ public enum InventoryCheckKind {
     private final String lineTable;
     private final boolean multi;
 
-    InventoryCheckKind(String pathSegment, String documentPrefix, String headerTable, String lineTable, boolean multi) {
-        this.pathSegment = pathSegment;
-        this.documentPrefix = documentPrefix;
-        this.headerTable = headerTable;
-        this.lineTable = lineTable;
-        this.multi = multi;
+    InventoryCheckKind(String pathSegmentValue, String documentPrefixValue, String headerTableValue, String lineTableValue, boolean multiValue) {
+        this.pathSegment = pathSegmentValue;
+        this.documentPrefix = documentPrefixValue;
+        this.headerTable = headerTableValue;
+        this.lineTable = lineTableValue;
+        this.multi = multiValue;
     }
 
     /**
@@ -41,22 +41,27 @@ public enum InventoryCheckKind {
                 .orElseThrow(() -> new BusinessException("不支持的盘点单类型"));
     }
 
+    /** 获取DocumentPrefix。 */
     public String getDocumentPrefix() {
         return documentPrefix;
     }
 
+    /** 获取HeaderTable。 */
     public String getHeaderTable() {
         return headerTable;
     }
 
+    /** 获取LineTable。 */
     public String getLineTable() {
         return lineTable;
     }
 
+    /** 判断Multi。 */
     public boolean isMulti() {
         return multi;
     }
 
+    /** 获取BusinessCode。 */
     public String getBusinessCode() {
         return name();
     }

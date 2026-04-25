@@ -1,16 +1,21 @@
 package com.boboboom.jxc.inventory.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.inventory.application.service.InventoryReportApplicationService;
-import com.boboboom.jxc.inventory.application.service.InventoryReportApplicationService.DishConsumptionOutboundReportPage;
-import com.boboboom.jxc.inventory.application.service.InventoryReportApplicationService.InventoryInoutDetailReportRow;
-import com.boboboom.jxc.inventory.application.service.InventoryReportApplicationService.PageData;
-import jakarta.validation.constraints.Min;
+import java.util.List;
+
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.inventory.application.service.InventoryReportApplicationService;
+import com.boboboom.jxc.inventory.application.service.InventoryReportApplicationService.DishConsumptionOutboundReportPage;
+import com.boboboom.jxc.inventory.application.service.InventoryReportApplicationService.InventoryInoutDetailReportRow;
+import com.boboboom.jxc.inventory.application.service.InventoryReportApplicationService.ItemBatchTraceReport;
+import com.boboboom.jxc.inventory.application.service.InventoryReportApplicationService.PageData;
+
+import jakarta.validation.constraints.Min;
 
 /**
  * 库存报表接口。
@@ -22,10 +27,12 @@ public class InventoryReportController {
 
     private final InventoryReportApplicationService inventoryReportApplicationService;
 
-    public InventoryReportController(InventoryReportApplicationService inventoryReportApplicationService) {
-        this.inventoryReportApplicationService = inventoryReportApplicationService;
+    /** 库存接口入口，负责接收请求、调用业务服务并返回统一响应。 */
+    public InventoryReportController(InventoryReportApplicationService inventoryReportApplicationServiceValue) {
+        this.inventoryReportApplicationService = inventoryReportApplicationServiceValue;
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/dish-consumption-outbound/report")
     public CodeDataResponse<DishConsumptionOutboundReportPage> dishConsumptionOutboundReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -56,6 +63,7 @@ public class InventoryReportController {
         ));
     }
 
+    /** 处理GetMapping。 */
     @GetMapping("/inout-detail/report")
     public CodeDataResponse<PageData<InventoryInoutDetailReportRow>> inventoryInoutDetailReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
@@ -108,6 +116,29 @@ public class InventoryReportController {
                 gift,
                 unitType,
                 queryScheme,
+                orgId
+        ));
+    }
+
+    /** 处理GetMapping。 */
+    @GetMapping("/item-batch-trace/report")
+    public CodeDataResponse<ItemBatchTraceReport> itemBatchTraceReport(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) List<String> warehouses,
+            @RequestParam(required = false) String itemCode,
+            @RequestParam(required = false) String batchNo,
+            @RequestParam(required = false) String sourceOrg,
+            @RequestParam(required = false) String unitType,
+            @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(inventoryReportApplicationService.itemBatchTraceReport(
+                startDate,
+                endDate,
+                warehouses,
+                itemCode,
+                batchNo,
+                sourceOrg,
+                unitType,
                 orgId
         ));
     }

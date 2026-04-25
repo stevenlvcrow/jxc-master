@@ -17,16 +17,11 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           const moduleId = id.replace(/\\/g, '/');
-          if (!moduleId.includes('node_modules')) {
-            return undefined;
+          if (moduleId.includes('/src/utils/mnemonic.ts') || moduleId.includes('/pinyin-pro/')) {
+            return 'mnemonic';
           }
-          if (
-            moduleId.includes('/vue/') ||
-            moduleId.includes('/@vue/') ||
-            moduleId.includes('/vue-router/') ||
-            moduleId.includes('/pinia/')
-          ) {
-            return 'vue-core';
+          if (!moduleId.includes('/node_modules/')) {
+            return undefined;
           }
           if (moduleId.includes('/axios/')) {
             return 'http-client';

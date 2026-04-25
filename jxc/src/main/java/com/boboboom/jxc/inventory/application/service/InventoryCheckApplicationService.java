@@ -1,20 +1,5 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.common.dictionary.DictionaryCodes;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
-import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
-import com.boboboom.jxc.inventory.domain.repository.InventoryCheckRepository;
-import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckBatchRequest;
-import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckSaveRequest;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -31,11 +16,34 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
+import com.boboboom.jxc.inventory.domain.repository.InventoryCheckRepository;
+import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckBatchRequest;
+import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckSaveRequest;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 /**
  * 盘点单业务服务。
  */
 @Service
 public class InventoryCheckApplicationService {
+
+    private static final int DOCUMENT_CODE_MAX_ATTEMPTS = 999;
+    private static final int DOCUMENT_CODE_SUFFIX_MODULUS = 1000;
+    private static final String DOCUMENT_CODE_SUFFIX_FORMAT = "%03d";
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int LIST_MAX_PAGE_SIZE = 100;
+    private static final int INVENTORY_QUANTITY_SCALE = 4;
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
     private static final String PRINT_STATUS_UNPRINTED = "UNPRINTED";
@@ -50,18 +58,19 @@ public class InventoryCheckApplicationService {
     private final ObjectMapper objectMapper;
     private final DictionaryLookupService dictionaryLookupService;
 
-    public InventoryCheckApplicationService(InventoryCheckRepository inventoryCheckRepository,
-                                            InventoryCheckPermissionService inventoryCheckPermissionService,
-                                            InventoryStockMutationService inventoryStockMutationService,
-                                            OrgScopeService orgScopeService,
-                                            ObjectMapper objectMapper,
-                                            DictionaryLookupService dictionaryLookupService) {
-        this.inventoryCheckRepository = inventoryCheckRepository;
-        this.inventoryCheckPermissionService = inventoryCheckPermissionService;
-        this.inventoryStockMutationService = inventoryStockMutationService;
-        this.orgScopeService = orgScopeService;
-        this.objectMapper = objectMapper;
-        this.dictionaryLookupService = dictionaryLookupService;
+    /** 盘点单业务服务，负责盘点单保存、审核、差异计算和盈亏单生成。 */
+    public InventoryCheckApplicationService(InventoryCheckRepository inventoryCheckRepositoryValue,
+                                            InventoryCheckPermissionService inventoryCheckPermissionServiceValue,
+                                            InventoryStockMutationService inventoryStockMutationServiceValue,
+                                            OrgScopeService orgScopeServiceValue,
+                                            ObjectMapper objectMapperValue,
+                                            DictionaryLookupService dictionaryLookupServiceValue) {
+        this.inventoryCheckRepository = inventoryCheckRepositoryValue;
+        this.inventoryCheckPermissionService = inventoryCheckPermissionServiceValue;
+        this.inventoryStockMutationService = inventoryStockMutationServiceValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.objectMapper = objectMapperValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
     /**
@@ -119,32 +128,74 @@ public class InventoryCheckApplicationService {
         String printKeyword = trimNullable(printStatus);
         String generatedKeyword = trimNullable(generatedStatus);
         String remarkKeyword = toLower(trimNullable(remark));
+        InventoryCheckListFilter filter = new InventoryCheckListFilter(timeType, start, end, warehouseKeyword,
+                documentCodeKeyword, itemKeyword, statusKeyword, rangeKeyword, printKeyword, generatedKeyword,
+                remarkKeyword);
 
         List<InventoryCheckRow> rows = headers.stream()
-                .filter(header -> matchDate(header, timeType, start, end))
-                .filter(header -> !StringUtils.hasText(warehouseKeyword)
-                        || toLower(defaultIfBlank(header.getWarehouseName(), "")).contains(warehouseKeyword))
-                .filter(header -> !StringUtils.hasText(documentCodeKeyword)
-                        || toLower(defaultIfBlank(header.getDocumentCode(), "")).contains(documentCodeKeyword))
-                .filter(header -> !StringUtils.hasText(statusKeyword)
-                        || Objects.equals(defaultIfBlank(header.getStatus(), draftStatus()), statusKeyword))
-                .filter(header -> !StringUtils.hasText(rangeKeyword)
-                        || Objects.equals(defaultIfBlank(header.getCheckRangeType(), ""), rangeKeyword))
-                .filter(header -> !StringUtils.hasText(printKeyword)
-                        || Objects.equals(defaultIfBlank(header.getPrintStatus(), printStatusUnprinted()), printKeyword))
-                .filter(header -> !StringUtils.hasText(generatedKeyword)
-                        || Objects.equals(defaultIfBlank(header.getGeneratedStatus(), generatedUngeneratedStatus()), generatedKeyword))
-                .filter(header -> !StringUtils.hasText(remarkKeyword)
-                        || toLower(defaultIfBlank(header.getRemark(), "")).contains(remarkKeyword))
-                .filter(header -> matchItem(lineMap.getOrDefault(header.getId(), List.of()), itemKeyword))
+                .filter(header -> matchInventoryCheckListRow(header, lineMap.getOrDefault(header.getId(), List.of()), filter))
                 .map(header -> toRow(kind, header, lineMap.getOrDefault(header.getId(), List.of())))
                 .toList();
 
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 100);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, LIST_MAX_PAGE_SIZE);
         int startIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
         int endIndex = Math.min(startIndex + safePageSize, rows.size());
         return new PageData<>(rows.subList(startIndex, endIndex), rows.size(), safePageNum, safePageSize);
+    }
+
+    private boolean matchInventoryCheckListRow(InventoryCheckHeader header,
+                                               List<InventoryCheckLine> lines,
+                                               InventoryCheckListFilter filter) {
+        return matchDate(header, filter.timeType(), filter.start(), filter.end())
+                && matchInventoryCheckKeywordFields(header, filter)
+                && matchInventoryCheckStatusFields(header, filter)
+                && matchItem(lines, filter.item());
+    }
+
+    private boolean matchInventoryCheckKeywordFields(InventoryCheckHeader header, InventoryCheckListFilter filter) {
+        return matchInventoryCheckWarehouse(header, filter.warehouse())
+                && matchInventoryCheckDocumentCode(header, filter.documentCode())
+                && matchInventoryCheckRemark(header, filter.remark());
+    }
+
+    private boolean matchInventoryCheckStatusFields(InventoryCheckHeader header, InventoryCheckListFilter filter) {
+        return matchInventoryCheckStatus(header, filter.status())
+                && matchInventoryCheckRange(header, filter.range())
+                && matchInventoryCheckPrintStatus(header, filter.printStatus())
+                && matchInventoryCheckGeneratedStatus(header, filter.generatedStatus());
+    }
+
+    private boolean matchInventoryCheckWarehouse(InventoryCheckHeader header, String warehouse) {
+        return !StringUtils.hasText(warehouse)
+                || toLower(defaultIfBlank(header.getWarehouseName(), "")).contains(warehouse);
+    }
+
+    private boolean matchInventoryCheckDocumentCode(InventoryCheckHeader header, String documentCode) {
+        return !StringUtils.hasText(documentCode)
+                || toLower(defaultIfBlank(header.getDocumentCode(), "")).contains(documentCode);
+    }
+
+    private boolean matchInventoryCheckRemark(InventoryCheckHeader header, String remark) {
+        return !StringUtils.hasText(remark) || toLower(defaultIfBlank(header.getRemark(), "")).contains(remark);
+    }
+
+    private boolean matchInventoryCheckStatus(InventoryCheckHeader header, String status) {
+        return !StringUtils.hasText(status) || Objects.equals(defaultIfBlank(header.getStatus(), draftStatus()), status);
+    }
+
+    private boolean matchInventoryCheckRange(InventoryCheckHeader header, String range) {
+        return !StringUtils.hasText(range) || Objects.equals(defaultIfBlank(header.getCheckRangeType(), ""), range);
+    }
+
+    private boolean matchInventoryCheckPrintStatus(InventoryCheckHeader header, String printStatus) {
+        return !StringUtils.hasText(printStatus)
+                || Objects.equals(defaultIfBlank(header.getPrintStatus(), printStatusUnprinted()), printStatus);
+    }
+
+    private boolean matchInventoryCheckGeneratedStatus(InventoryCheckHeader header, String generatedStatus) {
+        return !StringUtils.hasText(generatedStatus)
+                || Objects.equals(defaultIfBlank(header.getGeneratedStatus(), generatedUngeneratedStatus()), generatedStatus);
     }
 
     /**
@@ -638,39 +689,61 @@ public class InventoryCheckApplicationService {
             line.setBookQty(normalizeNullableNonNegative(item.bookQty()));
             line.setActualQty(normalizeNullableNonNegative(item.actualQty()));
             line.setBookPrice(normalizeNullableNonNegative(item.bookPrice()));
-            line.setBookAmount(line.getBookQty() != null && line.getBookPrice() != null
-                    ? line.getBookQty().multiply(line.getBookPrice()).setScale(2, RoundingMode.HALF_UP)
-                    : null);
-            line.setActualAmount(line.getActualQty() != null && line.getBookPrice() != null
-                    ? line.getActualQty().multiply(line.getBookPrice()).setScale(2, RoundingMode.HALF_UP)
-                    : null);
-            line.setDiffQty(line.getActualQty() != null && line.getBookQty() != null
-                    ? line.getActualQty().subtract(line.getBookQty()).setScale(4, RoundingMode.HALF_UP)
-                    : null);
-            line.setDiffAmount(line.getActualAmount() != null && line.getBookAmount() != null
-                    ? line.getActualAmount().subtract(line.getBookAmount()).setScale(2, RoundingMode.HALF_UP)
-                    : null);
-            line.setProfitQty(line.getDiffQty() == null
-                    ? null
-                    : (line.getDiffQty().compareTo(BigDecimal.ZERO) > 0 ? line.getDiffQty() : BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP)));
-            line.setLossQty(line.getDiffQty() == null
-                    ? null
-                    : (line.getDiffQty().compareTo(BigDecimal.ZERO) < 0 ? line.getDiffQty().abs().setScale(4, RoundingMode.HALF_UP) : BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP)));
+            applyInventoryCheckLineAmounts(line);
             line.setProfitLossReason(trimNullable(item.profitLossReason()));
             line.setProfitInboundPrice(line.getBookPrice());
-            line.setProfitAmount(line.getProfitQty() != null && line.getBookPrice() != null
-                    ? line.getProfitQty().multiply(line.getBookPrice()).setScale(2, RoundingMode.HALF_UP)
-                    : null);
+            line.setProfitAmount(calculateInventoryCheckAmount(line.getProfitQty(), line.getBookPrice()));
             line.setLossOutboundPrice(line.getBookPrice());
-            line.setLossAmount(line.getLossQty() != null && line.getBookPrice() != null
-                    ? line.getLossQty().multiply(line.getBookPrice()).setScale(2, RoundingMode.HALF_UP)
-                    : null);
-            line.setAbnormalFlag(line.getDiffQty() == null ? null : (Objects.equals(line.getDiffQty(), BigDecimal.ZERO) ? "NORMAL" : "ABNORMAL"));
+            line.setLossAmount(calculateInventoryCheckAmount(line.getLossQty(), line.getBookPrice()));
+            line.setAbnormalFlag(resolveInventoryCheckLineAbnormalFlag(line.getDiffQty()));
             line.setRemark(trimNullable(item.remark()));
             line.setExtraJson(writeJson(item.extraFields()));
             rows.add(line);
         }
         return rows;
+    }
+
+    private void applyInventoryCheckLineAmounts(InventoryCheckLine line) {
+        line.setBookAmount(calculateInventoryCheckAmount(line.getBookQty(), line.getBookPrice()));
+        line.setActualAmount(calculateInventoryCheckAmount(line.getActualQty(), line.getBookPrice()));
+        line.setDiffQty(calculateInventoryCheckDiffQty(line.getActualQty(), line.getBookQty()));
+        line.setDiffAmount(calculateInventoryCheckDiffAmount(line.getActualAmount(), line.getBookAmount()));
+        line.setProfitQty(calculateInventoryCheckProfitQty(line.getDiffQty()));
+        line.setLossQty(calculateInventoryCheckLossQty(line.getDiffQty()));
+    }
+
+    private BigDecimal calculateInventoryCheckAmount(BigDecimal qty, BigDecimal price) {
+        return qty == null || price == null ? null : qty.multiply(price).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateInventoryCheckDiffQty(BigDecimal actualQty, BigDecimal bookQty) {
+        return actualQty == null || bookQty == null ? null
+                : actualQty.subtract(bookQty).setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateInventoryCheckDiffAmount(BigDecimal actualAmount, BigDecimal bookAmount) {
+        return actualAmount == null || bookAmount == null ? null : actualAmount.subtract(bookAmount).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateInventoryCheckProfitQty(BigDecimal diffQty) {
+        if (diffQty == null) {
+            return null;
+        }
+        return diffQty.compareTo(BigDecimal.ZERO) > 0 ? diffQty
+                : BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateInventoryCheckLossQty(BigDecimal diffQty) {
+        if (diffQty == null) {
+            return null;
+        }
+        return diffQty.compareTo(BigDecimal.ZERO) < 0
+                ? diffQty.abs().setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private String resolveInventoryCheckLineAbnormalFlag(BigDecimal diffQty) {
+        return diffQty == null ? null : (Objects.equals(diffQty, BigDecimal.ZERO) ? "NORMAL" : "ABNORMAL");
     }
 
     private void applyHeaderTotals(InventoryCheckHeader header, List<InventoryCheckLine> lines) {
@@ -703,9 +776,10 @@ public class InventoryCheckApplicationService {
 
     private String generateDocumentCode(InventoryCheckKind kind, InventoryScope scope) {
         String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM", Locale.ROOT));
-        for (int cursor = 1; cursor < 999; cursor++) {
-            int seed = ThreadLocalRandom.current().nextInt(1, 999);
-            String suffix = String.format(Locale.ROOT, "%03d", (cursor + seed) % 1000);
+        for (int cursor = 1; cursor < DOCUMENT_CODE_MAX_ATTEMPTS; cursor++) {
+            int seed = ThreadLocalRandom.current().nextInt(1, DOCUMENT_CODE_MAX_ATTEMPTS);
+            String suffix = String.format(Locale.ROOT, DOCUMENT_CODE_SUFFIX_FORMAT,
+                    (cursor + seed) % DOCUMENT_CODE_SUFFIX_MODULUS);
             String candidate = kind.getDocumentPrefix() + "-" + datePart + "-" + suffix;
             if (inventoryCheckRepository.countByScopeAndKindAndDocumentCode(kind, scope.scopeType(), scope.scopeId(), candidate) == 0) {
                 return candidate;
@@ -737,12 +811,12 @@ public class InventoryCheckApplicationService {
 
     private BigDecimal normalizeNonNegative(BigDecimal value) {
         if (value == null) {
-            return BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+            return BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
         }
         if (value.compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException("数值不能小于 0");
         }
-        return value.setScale(4, RoundingMode.HALF_UP);
+        return value.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
     }
 
     private BigDecimal normalizeNullableNonNegative(BigDecimal value) {
@@ -752,7 +826,7 @@ public class InventoryCheckApplicationService {
         if (value.compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException("数值不能小于 0");
         }
-        return value.setScale(4, RoundingMode.HALF_UP);
+        return value.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
     }
 
     private String requiredTrim(String value, String message) {

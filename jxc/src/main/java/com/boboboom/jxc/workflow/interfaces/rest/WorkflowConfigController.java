@@ -1,13 +1,7 @@
 package com.boboboom.jxc.workflow.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService;
-import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService.PublishResultView;
-import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService.WorkflowConfigView;
-import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService.WorkflowPublishHistoryManageView;
-import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService.WorkflowPublishHistoryView;
-import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowConfigSaveRequest;
-import jakarta.validation.Valid;
+import java.util.List;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,14 +14,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService;
+import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService.PublishResultView;
+import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService.WorkflowConfigView;
+import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService.WorkflowPublishHistoryManageView;
+import com.boboboom.jxc.workflow.application.service.WorkflowConfigApplicationService.WorkflowPublishHistoryView;
+import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowConfigSaveRequest;
 
-@Validated
-@RestController
-@RequestMapping("/api/workflow/configs")
+import jakarta.validation.Valid;
+
 /**
  * 流程配置接口，负责当前配置查询、保存、发布、历史查询和删除。
  */
+@Validated
+@RestController
+@RequestMapping("/api/workflow/configs")
 public class WorkflowConfigController {
 
     private final WorkflowConfigApplicationService workflowConfigApplicationService;
@@ -35,10 +37,10 @@ public class WorkflowConfigController {
     /**
      * 构造流程配置接口。
      *
-     * @param workflowConfigApplicationService 流程配置服务
+     * @param workflowConfigApplicationServiceValue 流程配置服务
      */
-    public WorkflowConfigController(WorkflowConfigApplicationService workflowConfigApplicationService) {
-        this.workflowConfigApplicationService = workflowConfigApplicationService;
+    public WorkflowConfigController(WorkflowConfigApplicationService workflowConfigApplicationServiceValue) {
+        this.workflowConfigApplicationService = workflowConfigApplicationServiceValue;
     }
 
     /**

@@ -1,5 +1,18 @@
 package com.boboboom.jxc.item.application.service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.dictionary.DictionaryCodes;
@@ -15,21 +28,13 @@ import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierFinan
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierProfileDO;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierQualificationDO;
 import com.boboboom.jxc.item.interfaces.rest.request.SupplierCreateRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
+/** 供应商业务服务，负责供应商资料、资质、合同和财务信息维护。 */
 @Service
 public class SupplierApplicationService {
+
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
 
     private static final String DICT_SUPPLIER_SUPPLY_RELATION = "supplier.supply_relation";
     private static final String DICT_SUPPLIER_SCOPE_CONTROL = "supplier.scope_control";
@@ -44,22 +49,24 @@ public class SupplierApplicationService {
     private final BusinessCodeGenerator businessCodeGenerator;
     private final DictionaryLookupService dictionaryLookupService;
 
-    public SupplierApplicationService(SupplierProfileRepository supplierProfileRepository,
-                                      SupplierQualificationRepository supplierQualificationRepository,
-                                      SupplierContractRepository supplierContractRepository,
-                                      SupplierFinanceAccountRepository supplierFinanceAccountRepository,
-                                      OrgScopeService orgScopeService,
-                                      BusinessCodeGenerator businessCodeGenerator,
-                                      DictionaryLookupService dictionaryLookupService) {
-        this.supplierProfileRepository = supplierProfileRepository;
-        this.supplierQualificationRepository = supplierQualificationRepository;
-        this.supplierContractRepository = supplierContractRepository;
-        this.supplierFinanceAccountRepository = supplierFinanceAccountRepository;
-        this.orgScopeService = orgScopeService;
-        this.businessCodeGenerator = businessCodeGenerator;
-        this.dictionaryLookupService = dictionaryLookupService;
+    /** 供应商业务服务，负责供应商资料、资质、合同和财务信息维护。 */
+    public SupplierApplicationService(SupplierProfileRepository supplierProfileRepositoryValue,
+                                      SupplierQualificationRepository supplierQualificationRepositoryValue,
+                                      SupplierContractRepository supplierContractRepositoryValue,
+                                      SupplierFinanceAccountRepository supplierFinanceAccountRepositoryValue,
+                                      OrgScopeService orgScopeServiceValue,
+                                      BusinessCodeGenerator businessCodeGeneratorValue,
+                                      DictionaryLookupService dictionaryLookupServiceValue) {
+        this.supplierProfileRepository = supplierProfileRepositoryValue;
+        this.supplierQualificationRepository = supplierQualificationRepositoryValue;
+        this.supplierContractRepository = supplierContractRepositoryValue;
+        this.supplierFinanceAccountRepository = supplierFinanceAccountRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 分页查询业务列表。 */
     public PageData<SupplierListRow> list(
             Integer pageNo,
             Integer pageSize,
@@ -73,7 +80,7 @@ public class SupplierApplicationService {
     ) {
         SupplierScope scope = resolveSupplierScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         int offset = (safePageNo - 1) * safePageSize;
 
         List<SupplierProfileDO> records = filterSupplierProfiles(
@@ -121,6 +128,7 @@ public class SupplierApplicationService {
         return new PageData<>(rows, total == null ? 0 : total, safePageNo, safePageSize);
     }
 
+    /** 创建业务记录。 */
     @Transactional
     public IdPayload create(String orgId, SupplierCreateRequest request) {
         SupplierScope scope = resolveSupplierScope(orgId);
@@ -137,12 +145,14 @@ public class SupplierApplicationService {
         return new IdPayload(profile.getId());
     }
 
+    /** 查询业务详情。 */
     public SupplierDetailResponse detail(Long id, String orgId) {
         SupplierScope scope = resolveSupplierScope(orgId);
         SupplierProfileDO profile = requireSupplierInScope(scope, id, "供应商不存在或无权限访问");
         return buildSupplierDetail(profile);
     }
 
+    /** 更新业务记录。 */
     @Transactional
     public IdPayload update(Long id, String orgId, SupplierCreateRequest request) {
         SupplierScope scope = resolveSupplierScope(orgId);
@@ -507,25 +517,52 @@ public class SupplierApplicationService {
         String querySupplyRelation = normalizeQuerySupplyRelation(supplyRelation);
         String treeNodeValue = trimNullable(treeNode);
         return rows.stream()
-                .filter(row -> infoKeyword == null
-                        || contains(row.getSupplierCode(), infoKeyword)
-                        || contains(row.getSupplierName(), infoKeyword)
-                        || contains(row.getSupplierShortName(), infoKeyword)
-                        || contains(row.getSupplierMnemonic(), infoKeyword)
-                        || contains(row.getSupplierCategory(), infoKeyword))
-                .filter(row -> queryStatus == null || Objects.equals(row.getStatus(), queryStatus))
-                .filter(row -> queryBindStatus == null || Objects.equals(row.getBindStatus(), queryBindStatus))
-                .filter(row -> querySource == null || Objects.equals(row.getSource(), querySource))
-                .filter(row -> querySupplyRelation == null || Objects.equals(row.getSupplyRelation(), querySupplyRelation))
-                .filter(row -> treeNodeValue == null
-                        || Objects.equals(treeNodeValue, "all")
-                        || Objects.equals(treeNodeValue, "全部")
-                        || Objects.equals(treeNodeValue, "供应商类别")
-                        || Objects.equals(treeNodeValue, "全部供应商")
-                        || Objects.equals(row.getSupplierCategory(), treeNodeValue))
+                .filter(row -> matchesSupplierFilter(row, infoKeyword, queryStatus, queryBindStatus,
+                        querySource, querySupplyRelation, treeNodeValue))
                 .skip(offset)
                 .limit(limit)
                 .toList();
+    }
+
+    private boolean matchesSupplierFilter(SupplierProfileDO row,
+                                          String infoKeyword,
+                                          String queryStatus,
+                                          String queryBindStatus,
+                                          String querySource,
+                                          String querySupplyRelation,
+                                          String treeNodeValue) {
+        return matchesSupplierKeyword(row, infoKeyword)
+                && matchesSupplierStatus(row, queryStatus, queryBindStatus, querySource, querySupplyRelation)
+                && matchesSupplierTreeNode(row, treeNodeValue);
+    }
+
+    private boolean matchesSupplierKeyword(SupplierProfileDO row, String infoKeyword) {
+        return infoKeyword == null
+                || contains(row.getSupplierCode(), infoKeyword)
+                || contains(row.getSupplierName(), infoKeyword)
+                || contains(row.getSupplierShortName(), infoKeyword)
+                || contains(row.getSupplierMnemonic(), infoKeyword)
+                || contains(row.getSupplierCategory(), infoKeyword);
+    }
+
+    private boolean matchesSupplierStatus(SupplierProfileDO row,
+                                          String queryStatus,
+                                          String queryBindStatus,
+                                          String querySource,
+                                          String querySupplyRelation) {
+        return (queryStatus == null || Objects.equals(row.getStatus(), queryStatus))
+                && (queryBindStatus == null || Objects.equals(row.getBindStatus(), queryBindStatus))
+                && (querySource == null || Objects.equals(row.getSource(), querySource))
+                && (querySupplyRelation == null || Objects.equals(row.getSupplyRelation(), querySupplyRelation));
+    }
+
+    private boolean matchesSupplierTreeNode(SupplierProfileDO row, String treeNodeValue) {
+        return treeNodeValue == null
+                || Objects.equals(treeNodeValue, "all")
+                || Objects.equals(treeNodeValue, "全部")
+                || Objects.equals(treeNodeValue, "供应商类别")
+                || Objects.equals(treeNodeValue, "全部供应商")
+                || Objects.equals(row.getSupplierCategory(), treeNodeValue);
     }
 
     private boolean contains(String value, String keyword) {
@@ -569,6 +606,7 @@ public class SupplierApplicationService {
         return value.toString();
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record SupplierListRow(Long id,
                                   Integer index,
                                   String supplierCode,
@@ -584,12 +622,15 @@ public class SupplierApplicationService {
                                   String operatedAt) {
     }
 
+    /** 物品与供应商分页数据模型，承载列表数据和分页信息。 */
     public record PageData<T>(List<T> list, long total, int pageNo, int pageSize) {
     }
 
+    /** 物品与供应商载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id) {
     }
 
+    /** 物品与供应商响应模型，承载接口返回数据。 */
     public record SupplierDetailResponse(Long id,
                                          String supplierCode,
                                          String supplierName,
@@ -621,6 +662,7 @@ public class SupplierApplicationService {
                                          String taxpayerId,
                                          String invoicePhone,
                                          String invoiceAddress) {
+        /** 物品与供应商明细项模型，承载子表或批量操作明细。 */
         public record QualificationItem(String fileName,
                                         String fileUrl,
                                         String qualificationType,
@@ -629,6 +671,7 @@ public class SupplierApplicationService {
                                         String remark) {
         }
 
+        /** 物品与供应商明细项模型，承载子表或批量操作明细。 */
         public record ContractItem(String attachmentName,
                                    String attachmentUrl,
                                    String contractName,
@@ -637,6 +680,7 @@ public class SupplierApplicationService {
                                    String status) {
         }
 
+        /** 物品与供应商明细项模型，承载子表或批量操作明细。 */
         public record FinanceItem(String bankAccount,
                                   String accountName,
                                   String bankName,

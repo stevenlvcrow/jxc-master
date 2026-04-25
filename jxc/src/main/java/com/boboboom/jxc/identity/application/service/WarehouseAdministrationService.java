@@ -1,18 +1,20 @@
 package com.boboboom.jxc.identity.application.service;
 
-import com.boboboom.jxc.common.BusinessCodeGenerator;
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.common.dictionary.DictionaryCodes;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
-import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
-import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseCreateRequest;
-import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseUpdateRequest;
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import com.boboboom.jxc.common.BusinessCodeGenerator;
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseCreateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseUpdateRequest;
 
+/** 身份与权限服务，负责相关业务规则和流程协作。 */
 @Service
 public class WarehouseAdministrationService {
 
@@ -23,16 +25,18 @@ public class WarehouseAdministrationService {
     private final BusinessCodeGenerator businessCodeGenerator;
     private final DictionaryLookupService dictionaryLookupService;
 
-    public WarehouseAdministrationService(WarehouseRepository warehouseRepository,
-                                          IdentityAdminLookupService identityAdminLookupService,
-                                          BusinessCodeGenerator businessCodeGenerator,
-                                          DictionaryLookupService dictionaryLookupService) {
-        this.warehouseRepository = warehouseRepository;
-        this.identityAdminLookupService = identityAdminLookupService;
-        this.businessCodeGenerator = businessCodeGenerator;
-        this.dictionaryLookupService = dictionaryLookupService;
+    /** 身份与权限服务，负责相关业务规则和流程协作。 */
+    public WarehouseAdministrationService(WarehouseRepository warehouseRepositoryValue,
+                                          IdentityAdminLookupService identityAdminLookupServiceValue,
+                                          BusinessCodeGenerator businessCodeGeneratorValue,
+                                          DictionaryLookupService dictionaryLookupServiceValue) {
+        this.warehouseRepository = warehouseRepositoryValue;
+        this.identityAdminLookupService = identityAdminLookupServiceValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 查询集团仓库列表。 */
     public List<WarehouseDO> listGroupWarehouses(Long groupId,
                                                  String keyword,
                                                  String status,
@@ -40,6 +44,7 @@ public class WarehouseAdministrationService {
         return filterWarehouses(warehouseRepository.findByGroupId(groupId), keyword, status, warehouseType);
     }
 
+    /** 查询门店仓库列表。 */
     public List<WarehouseDO> listStoreWarehouses(Long storeId,
                                                  String keyword,
                                                  String status,
@@ -47,6 +52,7 @@ public class WarehouseAdministrationService {
         return filterWarehouses(warehouseRepository.findByStoreId(storeId), keyword, status, warehouseType);
     }
 
+    /** 创建仓库。 */
     @Transactional
     public WarehouseDO createWarehouse(Long storeId, WarehouseCreateRequest request) {
         StoreDO store = identityAdminLookupService.requireStore(storeId);
@@ -75,6 +81,7 @@ public class WarehouseAdministrationService {
         return warehouse;
     }
 
+    /** 更新仓库。 */
     @Transactional
     public WarehouseDO updateWarehouse(Long id, WarehouseUpdateRequest request) {
         WarehouseDO warehouse = identityAdminLookupService.requireWarehouse(id);
@@ -97,12 +104,14 @@ public class WarehouseAdministrationService {
         return warehouse;
     }
 
+    /** 删除仓库。 */
     @Transactional
     public void deleteWarehouse(Long id) {
         identityAdminLookupService.requireWarehouse(id);
         warehouseRepository.deleteById(id);
     }
 
+    /** 设置WarehouseDefault。 */
     @Transactional
     public WarehouseDO setWarehouseDefault(Long id) {
         WarehouseDO warehouse = identityAdminLookupService.requireWarehouse(id);
@@ -112,6 +121,7 @@ public class WarehouseAdministrationService {
         return warehouse;
     }
 
+    /** 更新仓库状态。 */
     @Transactional
     public WarehouseDO updateWarehouseStatus(Long id, String status) {
         WarehouseDO warehouse = identityAdminLookupService.requireWarehouse(id);
@@ -144,13 +154,22 @@ public class WarehouseAdministrationService {
         String normalizedStatus = status == null ? null : status.trim();
         String normalizedWarehouseType = warehouseType == null ? null : warehouseType.trim();
         return warehouses.stream()
-                .filter(warehouse -> normalizedKeyword == null || normalizedKeyword.isEmpty()
-                        || containsAny(warehouse, normalizedKeyword))
-                .filter(warehouse -> normalizedStatus == null || normalizedStatus.isEmpty()
-                        || normalizedStatus.equals(warehouse.getStatus()))
-                .filter(warehouse -> normalizedWarehouseType == null || normalizedWarehouseType.isEmpty()
-                        || normalizedWarehouseType.equals(warehouse.getWarehouseType()))
+                .filter(warehouse -> matchesKeyword(warehouse, normalizedKeyword))
+                .filter(warehouse -> matchesStatus(warehouse, normalizedStatus))
+                .filter(warehouse -> matchesWarehouseType(warehouse, normalizedWarehouseType))
                 .toList();
+    }
+
+    private boolean matchesKeyword(WarehouseDO warehouse, String keyword) {
+        return keyword == null || keyword.isEmpty() || containsAny(warehouse, keyword);
+    }
+
+    private boolean matchesStatus(WarehouseDO warehouse, String status) {
+        return status == null || status.isEmpty() || status.equals(warehouse.getStatus());
+    }
+
+    private boolean matchesWarehouseType(WarehouseDO warehouse, String warehouseType) {
+        return warehouseType == null || warehouseType.isEmpty() || warehouseType.equals(warehouse.getWarehouseType());
     }
 
     private boolean containsAny(WarehouseDO warehouse, String keyword) {

@@ -1,5 +1,21 @@
 package com.boboboom.jxc.item.application.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.dictionary.DictionaryCodes;
@@ -15,24 +31,15 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
-import java.util.stream.Collectors;
-
+/** 物品业务服务，负责物品资料、单位、供应关系和扩展字段维护。 */
 @Service
 public class ItemApplicationService {
+
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
+    private static final int GENERATED_ID_RANDOM_LENGTH = 12;
+    private static final int UNIT_ATTRIBUTE_SCALE = 3;
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
     private static final String STATUS_ALL = "全部";
@@ -47,18 +54,20 @@ public class ItemApplicationService {
     private final OrgScopeService orgScopeService;
     private final DictionaryLookupService dictionaryLookupService;
 
-    public ItemApplicationService(ItemProfileRepository itemProfileRepository,
-                                 ObjectMapper objectMapper,
-                                 BusinessCodeGenerator businessCodeGenerator,
-                                 OrgScopeService orgScopeService,
-                                 DictionaryLookupService dictionaryLookupService) {
-        this.itemProfileRepository = itemProfileRepository;
-        this.objectMapper = objectMapper;
-        this.businessCodeGenerator = businessCodeGenerator;
-        this.orgScopeService = orgScopeService;
-        this.dictionaryLookupService = dictionaryLookupService;
+    /** 物品业务服务，负责物品资料、单位、供应关系和扩展字段维护。 */
+    public ItemApplicationService(ItemProfileRepository itemProfileRepositoryValue,
+                                 ObjectMapper objectMapperValue,
+                                 BusinessCodeGenerator businessCodeGeneratorValue,
+                                 OrgScopeService orgScopeServiceValue,
+                                 DictionaryLookupService dictionaryLookupServiceValue) {
+        this.itemProfileRepository = itemProfileRepositoryValue;
+        this.objectMapper = objectMapperValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 创建业务记录。 */
     @Transactional
     public IdPayload create(String orgId, ItemCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -76,6 +85,7 @@ public class ItemApplicationService {
         return new IdPayload(entity.getItemId());
     }
 
+    /** 保存业务草稿。 */
     @Transactional
     public IdPayload saveDraft(String orgId, ItemCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -92,12 +102,14 @@ public class ItemApplicationService {
         return new IdPayload(entity.getItemId());
     }
 
+    /** 查询业务详情。 */
     public ItemCreateRequest detail(String id, String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         ItemProfileDO entity = requireItem(id, scope, true);
         return parseRequestJson(entity.getDetailJson());
     }
 
+    /** 更新业务记录。 */
     @Transactional
     public void update(String id, String orgId, ItemCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -112,6 +124,7 @@ public class ItemApplicationService {
         itemProfileRepository.update(entity);
     }
 
+    /** 分页查询业务列表。 */
     public PageData<ItemListRow> list(Integer pageNo,
                                       Integer pageSize,
                                       String keyword,
@@ -124,7 +137,7 @@ public class ItemApplicationService {
                                       String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
 
         String keywordValue = trimNullable(keyword);
         Set<String> categorySet = parseCategorySet(trimNullable(category));
@@ -156,6 +169,7 @@ public class ItemApplicationService {
         return new PageData<>(pageRows, total, safePageNo, safePageSize);
     }
 
+    /** 批量更新业务状态。 */
     @Transactional
     public void batchUpdateStatus(String orgId, ItemBatchStatusUpdateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -169,6 +183,7 @@ public class ItemApplicationService {
         }
     }
 
+    /** 批量删除业务记录。 */
     @Transactional
     public void batchDelete(String orgId, ItemBatchDeleteRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -392,7 +407,7 @@ public class ItemApplicationService {
         if (rows == null || rows.isEmpty()) {
             return "0.000";
         }
-        return defaultIfBlank(normalizeDecimal(rows.get(0).volume(), 3), "0.000");
+        return defaultIfBlank(normalizeDecimal(rows.get(0).volume(), UNIT_ATTRIBUTE_SCALE), "0.000");
     }
 
     private String resolveWeight(ItemCreateRequest request) {
@@ -400,7 +415,7 @@ public class ItemApplicationService {
         if (rows == null || rows.isEmpty()) {
             return "0.000";
         }
-        return defaultIfBlank(normalizeDecimal(rows.get(0).weight(), 3), "0.000");
+        return defaultIfBlank(normalizeDecimal(rows.get(0).weight(), UNIT_ATTRIBUTE_SCALE), "0.000");
     }
 
     private String normalizeStatus(String status) {
@@ -493,7 +508,7 @@ public class ItemApplicationService {
     }
 
     private String generateId(String prefix) {
-        return prefix + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        return prefix + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, GENERATED_ID_RANDOM_LENGTH);
     }
 
     private String generateItemCode(ItemScope scope) {
@@ -510,6 +525,7 @@ public class ItemApplicationService {
         return new ItemScope(scope.scopeType(), scope.scopeId());
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record ItemListRow(String id,
                               Integer index,
                               String code,
@@ -541,9 +557,11 @@ public class ItemApplicationService {
                               String updatedAt) {
     }
 
+    /** 物品与供应商分页数据模型，承载列表数据和分页信息。 */
     public record PageData<T>(List<T> list, long total, int pageNo, int pageSize) {
     }
 
+    /** 物品与供应商载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(String id) {
     }
 

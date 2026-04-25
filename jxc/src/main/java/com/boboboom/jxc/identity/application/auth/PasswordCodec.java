@@ -4,11 +4,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
+/** 身份与权限类型，负责密码Codec相关处理。 */
 public final class PasswordCodec {
 
     private PasswordCodec() {
     }
 
+    /** 加密用户密码。 */
     public static String encode(String rawPassword) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -23,6 +25,7 @@ public final class PasswordCodec {
         }
     }
 
+    /** 校验明文密码与密文是否匹配。 */
     public static boolean matches(String rawPassword, String encodedPassword) {
         return encode(rawPassword).equals(encodedPassword);
     }

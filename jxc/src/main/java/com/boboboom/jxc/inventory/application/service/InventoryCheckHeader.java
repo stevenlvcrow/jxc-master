@@ -39,235 +39,293 @@ public class InventoryCheckHeader {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    /** 获取Id。 */
     public Long getId() {
         return id;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    /** 设置Id。 */
+    public void setId(Long idValue) {
+        this.id = idValue;
     }
 
+    /** 获取ScopeType。 */
     public String getScopeType() {
         return scopeType;
     }
 
-    public void setScopeType(String scopeType) {
-        this.scopeType = scopeType;
+    /** 设置ScopeType。 */
+    public void setScopeType(String scopeTypeValue) {
+        this.scopeType = scopeTypeValue;
     }
 
+    /** 获取ScopeId。 */
     public Long getScopeId() {
         return scopeId;
     }
 
-    public void setScopeId(Long scopeId) {
-        this.scopeId = scopeId;
+    /** 设置ScopeId。 */
+    public void setScopeId(Long scopeIdValue) {
+        this.scopeId = scopeIdValue;
     }
 
+    /** 获取DocumentCode。 */
     public String getDocumentCode() {
         return documentCode;
     }
 
-    public void setDocumentCode(String documentCode) {
-        this.documentCode = documentCode;
+    /** 设置DocumentCode。 */
+    public void setDocumentCode(String documentCodeValue) {
+        this.documentCode = documentCodeValue;
     }
 
+    /** 获取CheckDate。 */
     public LocalDate getCheckDate() {
         return checkDate;
     }
 
-    public void setCheckDate(LocalDate checkDate) {
-        this.checkDate = checkDate;
+    /** 设置CheckDate。 */
+    public void setCheckDate(LocalDate checkDateValue) {
+        this.checkDate = checkDateValue;
     }
 
+    /** 获取WarehouseName。 */
     public String getWarehouseName() {
         return warehouseName;
     }
 
-    public void setWarehouseName(String warehouseName) {
-        this.warehouseName = warehouseName;
+    /** 设置WarehouseName。 */
+    public void setWarehouseName(String warehouseNameValue) {
+        this.warehouseName = warehouseNameValue;
     }
 
+    /** 获取CheckRangeType。 */
     public String getCheckRangeType() {
         return checkRangeType;
     }
 
-    public void setCheckRangeType(String checkRangeType) {
-        this.checkRangeType = checkRangeType;
+    /** 设置CheckRangeType。 */
+    public void setCheckRangeType(String checkRangeTypeValue) {
+        this.checkRangeType = checkRangeTypeValue;
     }
 
+    /** 获取FreezeStock。 */
     public Boolean getFreezeStock() {
         return freezeStock;
     }
 
-    public void setFreezeStock(Boolean freezeStock) {
-        this.freezeStock = freezeStock;
+    /** 设置FreezeStock。 */
+    public void setFreezeStock(Boolean freezeStockValue) {
+        this.freezeStock = freezeStockValue;
     }
 
+    /** 获取CollaborativeFlag。 */
     public Boolean getCollaborativeFlag() {
         return collaborativeFlag;
     }
 
-    public void setCollaborativeFlag(Boolean collaborativeFlag) {
-        this.collaborativeFlag = collaborativeFlag;
+    /** 设置CollaborativeFlag。 */
+    public void setCollaborativeFlag(Boolean collaborativeFlagValue) {
+        this.collaborativeFlag = collaborativeFlagValue;
     }
 
+    /** 获取PlanName。 */
     public String getPlanName() {
         return planName;
     }
 
-    public void setPlanName(String planName) {
-        this.planName = planName;
+    /** 设置PlanName。 */
+    public void setPlanName(String planNameValue) {
+        this.planName = planNameValue;
     }
 
+    /** 获取ThirdPartyDocument。 */
     public String getThirdPartyDocument() {
         return thirdPartyDocument;
     }
 
-    public void setThirdPartyDocument(String thirdPartyDocument) {
-        this.thirdPartyDocument = thirdPartyDocument;
+    /** 设置ThirdPartyDocument。 */
+    public void setThirdPartyDocument(String thirdPartyDocumentValue) {
+        this.thirdPartyDocument = thirdPartyDocumentValue;
     }
 
+    /** 获取SalesmanUserId。 */
     public Long getSalesmanUserId() {
         return salesmanUserId;
     }
 
-    public void setSalesmanUserId(Long salesmanUserId) {
-        this.salesmanUserId = salesmanUserId;
+    /** 设置SalesmanUserId。 */
+    public void setSalesmanUserId(Long salesmanUserIdValue) {
+        this.salesmanUserId = salesmanUserIdValue;
     }
 
+    /** 获取SalesmanName。 */
     public String getSalesmanName() {
         return salesmanName;
     }
 
-    public void setSalesmanName(String salesmanName) {
-        this.salesmanName = salesmanName;
+    /** 设置SalesmanName。 */
+    public void setSalesmanName(String salesmanNameValue) {
+        this.salesmanName = salesmanNameValue;
     }
 
+    /** 获取ItemCount。 */
     public Integer getItemCount() {
         return itemCount;
     }
 
-    public void setItemCount(Integer itemCount) {
-        this.itemCount = itemCount;
+    /** 设置ItemCount。 */
+    public void setItemCount(Integer itemCountValue) {
+        this.itemCount = itemCountValue;
     }
 
+    /** 获取TotalBookAmount。 */
     public BigDecimal getTotalBookAmount() {
         return totalBookAmount;
     }
 
-    public void setTotalBookAmount(BigDecimal totalBookAmount) {
-        this.totalBookAmount = totalBookAmount;
+    /** 设置TotalBookAmount。 */
+    public void setTotalBookAmount(BigDecimal totalBookAmountValue) {
+        this.totalBookAmount = totalBookAmountValue;
     }
 
+    /** 获取TotalActualAmount。 */
     public BigDecimal getTotalActualAmount() {
         return totalActualAmount;
     }
 
-    public void setTotalActualAmount(BigDecimal totalActualAmount) {
-        this.totalActualAmount = totalActualAmount;
+    /** 设置TotalActualAmount。 */
+    public void setTotalActualAmount(BigDecimal totalActualAmountValue) {
+        this.totalActualAmount = totalActualAmountValue;
     }
 
+    /** 获取TotalDiffAmount。 */
     public BigDecimal getTotalDiffAmount() {
         return totalDiffAmount;
     }
 
-    public void setTotalDiffAmount(BigDecimal totalDiffAmount) {
-        this.totalDiffAmount = totalDiffAmount;
+    /** 设置TotalDiffAmount。 */
+    public void setTotalDiffAmount(BigDecimal totalDiffAmountValue) {
+        this.totalDiffAmount = totalDiffAmountValue;
     }
 
+    /** 获取DiffStatus。 */
     public String getDiffStatus() {
         return diffStatus;
     }
 
-    public void setDiffStatus(String diffStatus) {
-        this.diffStatus = diffStatus;
+    /** 设置DiffStatus。 */
+    public void setDiffStatus(String diffStatusValue) {
+        this.diffStatus = diffStatusValue;
     }
 
+    /** 获取GeneratedStatus。 */
     public String getGeneratedStatus() {
         return generatedStatus;
     }
 
-    public void setGeneratedStatus(String generatedStatus) {
-        this.generatedStatus = generatedStatus;
+    /** 设置GeneratedStatus。 */
+    public void setGeneratedStatus(String generatedStatusValue) {
+        this.generatedStatus = generatedStatusValue;
     }
 
+    /** 获取PrintStatus。 */
     public String getPrintStatus() {
         return printStatus;
     }
 
-    public void setPrintStatus(String printStatus) {
-        this.printStatus = printStatus;
+    /** 设置PrintStatus。 */
+    public void setPrintStatus(String printStatusValue) {
+        this.printStatus = printStatusValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 
+    /** 获取Remark。 */
     public String getRemark() {
         return remark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    /** 设置Remark。 */
+    public void setRemark(String remarkValue) {
+        this.remark = remarkValue;
     }
 
+    /** 获取RejectionReason。 */
     public String getRejectionReason() {
         return rejectionReason;
     }
 
-    public void setRejectionReason(String rejectionReason) {
-        this.rejectionReason = rejectionReason;
+    /** 设置RejectionReason。 */
+    public void setRejectionReason(String rejectionReasonValue) {
+        this.rejectionReason = rejectionReasonValue;
     }
 
+    /** 获取ExtraJson。 */
     public String getExtraJson() {
         return extraJson;
     }
 
-    public void setExtraJson(String extraJson) {
-        this.extraJson = extraJson;
+    /** 设置ExtraJson。 */
+    public void setExtraJson(String extraJsonValue) {
+        this.extraJson = extraJsonValue;
     }
 
+    /** 获取CreatedBy。 */
     public Long getCreatedBy() {
         return createdBy;
     }
 
-    public void setCreatedBy(Long createdBy) {
-        this.createdBy = createdBy;
+    /** 设置CreatedBy。 */
+    public void setCreatedBy(Long createdByValue) {
+        this.createdBy = createdByValue;
     }
 
+    /** 获取ApprovedBy。 */
     public Long getApprovedBy() {
         return approvedBy;
     }
 
-    public void setApprovedBy(Long approvedBy) {
-        this.approvedBy = approvedBy;
+    /** 设置ApprovedBy。 */
+    public void setApprovedBy(Long approvedByValue) {
+        this.approvedBy = approvedByValue;
     }
 
+    /** 获取ApprovedAt。 */
     public LocalDateTime getApprovedAt() {
         return approvedAt;
     }
 
-    public void setApprovedAt(LocalDateTime approvedAt) {
-        this.approvedAt = approvedAt;
+    /** 设置ApprovedAt。 */
+    public void setApprovedAt(LocalDateTime approvedAtValue) {
+        this.approvedAt = approvedAtValue;
     }
 
+    /** 获取CreatedAt。 */
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    /** 设置CreatedAt。 */
+    public void setCreatedAt(LocalDateTime createdAtValue) {
+        this.createdAt = createdAtValue;
     }
 
+    /** 获取UpdatedAt。 */
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    /** 设置UpdatedAt。 */
+    public void setUpdatedAt(LocalDateTime updatedAtValue) {
+        this.updatedAt = updatedAtValue;
     }
 }

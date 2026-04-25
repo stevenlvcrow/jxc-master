@@ -1,15 +1,5 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService;
-import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.BatchExportResult;
-import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.CreateResult;
-import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.PageResult;
-import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.StatisticsTypeDetailItem;
-import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.StatisticsTypeListItem;
-import com.boboboom.jxc.item.interfaces.rest.request.StatisticsTypeBatchExportRequest;
-import com.boboboom.jxc.item.interfaces.rest.request.StatisticsTypeCreateRequest;
-import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,12 +10,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Validated
-@RestController
-@RequestMapping("/api/items/statistics-types")
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService;
+import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.BatchExportResult;
+import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.CreateResult;
+import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.PageResult;
+import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.StatisticsTypeDetailItem;
+import com.boboboom.jxc.item.application.service.ItemStatisticsTypeApplicationService.StatisticsTypeListItem;
+import com.boboboom.jxc.item.interfaces.rest.request.StatisticsTypeBatchExportRequest;
+import com.boboboom.jxc.item.interfaces.rest.request.StatisticsTypeCreateRequest;
+
+import jakarta.validation.Valid;
+
 /**
  * 商品统计类别接口，负责统计类别的分页查询、详情、新建和批量导出。
  */
+@Validated
+@RestController
+@RequestMapping("/api/items/statistics-types")
 public class ItemStatisticsTypeController {
 
     private final ItemStatisticsTypeApplicationService itemStatisticsTypeApplicationService;
@@ -33,10 +35,10 @@ public class ItemStatisticsTypeController {
     /**
      * 构造商品统计类别接口。
      *
-     * @param itemStatisticsTypeApplicationService 商品统计类别服务
+     * @param itemStatisticsTypeApplicationServiceValue 商品统计类别服务
      */
-    public ItemStatisticsTypeController(ItemStatisticsTypeApplicationService itemStatisticsTypeApplicationService) {
-        this.itemStatisticsTypeApplicationService = itemStatisticsTypeApplicationService;
+    public ItemStatisticsTypeController(ItemStatisticsTypeApplicationService itemStatisticsTypeApplicationServiceValue) {
+        this.itemStatisticsTypeApplicationService = itemStatisticsTypeApplicationServiceValue;
     }
 
     /**
@@ -57,7 +59,6 @@ public class ItemStatisticsTypeController {
         return CodeDataResponse.ok(itemStatisticsTypeApplicationService.list(pageNo, pageSize, keyword, orgId));
     }
 
-    @GetMapping("/{id}")
     /**
      * 查询商品统计类别详情。
      *
@@ -65,6 +66,7 @@ public class ItemStatisticsTypeController {
      * @param orgId 机构标识
      * @return 详情结果
      */
+    @GetMapping("/{id}")
     public CodeDataResponse<StatisticsTypeDetailItem> detail(@PathVariable Long id,
                                                              @RequestParam(required = false) String orgId) {
         return CodeDataResponse.ok(itemStatisticsTypeApplicationService.detail(id, orgId));

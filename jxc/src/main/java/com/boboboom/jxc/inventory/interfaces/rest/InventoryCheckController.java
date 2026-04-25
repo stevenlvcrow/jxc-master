@@ -1,12 +1,5 @@
 package com.boboboom.jxc.inventory.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
-import com.boboboom.jxc.inventory.application.service.InventoryCheckApplicationService;
-import com.boboboom.jxc.inventory.application.service.InventoryCheckKind;
-import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckBatchRequest;
-import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckSaveRequest;
-import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -19,6 +12,15 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
+import com.boboboom.jxc.inventory.application.service.InventoryCheckApplicationService;
+import com.boboboom.jxc.inventory.application.service.InventoryCheckKind;
+import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckBatchRequest;
+import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckSaveRequest;
+
+import jakarta.validation.Valid;
+
 /**
  * 盘点单接口。
  */
@@ -29,8 +31,9 @@ public class InventoryCheckController {
 
     private final InventoryCheckApplicationService inventoryCheckApplicationService;
 
-    public InventoryCheckController(InventoryCheckApplicationService inventoryCheckApplicationService) {
-        this.inventoryCheckApplicationService = inventoryCheckApplicationService;
+    /** 库存接口入口，负责接收请求、调用业务服务并返回统一响应。 */
+    public InventoryCheckController(InventoryCheckApplicationService inventoryCheckApplicationServiceValue) {
+        this.inventoryCheckApplicationService = inventoryCheckApplicationServiceValue;
     }
 
     /**

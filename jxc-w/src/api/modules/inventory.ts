@@ -241,6 +241,10 @@ export type GenericInventoryDocumentDetail = {
   salesmanName: string;
   remark: string;
   rejectionReason: string;
+  creator: string;
+  createdAt: string;
+  auditor: string;
+  auditedAt: string;
   extraFields: Record<string, string>;
   items: Array<{
     itemCode: string;
@@ -380,7 +384,7 @@ export type InventoryBalancePage = {
 };
 
 export const fetchInventoryBalancesApi = (params: InventoryBalanceQueryParams, orgId?: string) =>
-  apiClient.get<InventoryBalancePage>('/api/inventory/purchase-inbound/balances', {
+  apiClient.get<InventoryBalancePage>('/api/inventory/balances', {
     params: withOrgParams(params, orgId),
   });
 
@@ -539,6 +543,83 @@ export const fetchInventoryInoutDetailReportApi = (
 ) => apiClient.get<InventoryInoutDetailReportPage>('/api/inventory/inout-detail/report', {
   params: withOrgParams(params, orgId),
 });
+
+export type ItemBatchTraceReportParams = {
+  startDate?: string;
+  endDate?: string;
+  warehouses?: string;
+  itemCode: string;
+  batchNo: string;
+  sourceOrg?: string;
+  unitType?: string;
+};
+
+export type ItemBatchTraceSourceRow = {
+  id: string;
+  sourceOrg: string;
+  inboundOrg: string;
+  inboundWarehouse: string;
+  inboundType: string;
+  inboundDocumentNo: string;
+  upstreamDocumentNo: string;
+  inboundDate: string;
+  inboundCreatedAt: string;
+  batchNo: string;
+  manufacturer: string;
+  itemCode: string;
+  itemName: string;
+  specModel: string;
+  unit: string;
+  inboundQty: number;
+};
+
+export type ItemBatchTraceInternalFlowRow = {
+  id: string;
+  orgName: string;
+  warehouse: string;
+  inoutType: string;
+  documentNo: string;
+  upstreamDocumentNo: string;
+  documentDate: string;
+  documentCreatedAt: string;
+  batchNo: string;
+  itemCode: string;
+  itemName: string;
+  specModel: string;
+  unit: string;
+  inoutQty: number;
+  currentBalanceQty: number;
+};
+
+export type ItemBatchTraceExternalFlowRow = {
+  id: string;
+  orgName: string;
+  warehouse: string;
+  targetOrg: string;
+  outboundType: string;
+  outboundDocumentNo: string;
+  upstreamDocumentNo: string;
+  outboundDate: string;
+  outboundCreatedAt: string;
+  batchNo: string;
+  itemCode: string;
+  itemName: string;
+  specModel: string;
+  unit: string;
+  inoutQty: number;
+  targetBalanceQty: number;
+};
+
+export type ItemBatchTraceReport = {
+  sourceRows: ItemBatchTraceSourceRow[];
+  internalFlowRows: ItemBatchTraceInternalFlowRow[];
+  externalFlowRows: ItemBatchTraceExternalFlowRow[];
+};
+
+export const fetchItemBatchTraceReportApi = (params: ItemBatchTraceReportParams, orgId?: string) =>
+  apiClient.get<ItemBatchTraceReport>('/api/inventory/item-batch-trace/report', {
+    params: withOrgParams(params, orgId),
+  });
 
 export type InventoryReportPage<T> = {
   list: T[];
@@ -1158,3 +1239,4 @@ export const generateMultiInventoryCheckApi = (ids: number[], orgId?: string) =>
   apiClient.post<void>('/api/inventory/multi-inventory-checks/generate', { ids }, {
     params: withOrgParams(undefined, orgId),
   });
+

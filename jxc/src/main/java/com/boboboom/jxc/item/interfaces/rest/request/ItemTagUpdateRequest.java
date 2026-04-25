@@ -3,6 +3,7 @@ package com.boboboom.jxc.item.interfaces.rest.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+/** 物品与供应商请求参数，承载接口入参。 */
 public record ItemTagUpdateRequest(
         @NotBlank(message = "标签编码不能为空")
         @Size(max = 64, message = "标签编码长度不能超过64")

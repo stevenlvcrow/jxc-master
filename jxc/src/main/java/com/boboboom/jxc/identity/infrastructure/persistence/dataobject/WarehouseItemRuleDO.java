@@ -1,11 +1,13 @@
 package com.boboboom.jxc.identity.infrastructure.persistence.dataobject;
 
+import java.time.LocalDateTime;
+
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
-import java.time.LocalDateTime;
 
+/** 身份与权限数据对象，映射数据库表记录。 */
 @TableName("warehouse_item_rule")
 public class WarehouseItemRuleDO {
 
@@ -37,107 +39,133 @@ public class WarehouseItemRuleDO {
 
     private LocalDateTime updatedAt;
 
+    /** 获取Id。 */
     public Long getId() {
         return id;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    /** 设置Id。 */
+    public void setId(Long idValue) {
+        this.id = idValue;
     }
 
+    /** 获取GroupId。 */
     public Long getGroupId() {
         return groupId;
     }
 
-    public void setGroupId(Long groupId) {
-        this.groupId = groupId;
+    /** 设置GroupId。 */
+    public void setGroupId(Long groupIdValue) {
+        this.groupId = groupIdValue;
     }
 
+    /** 获取RuleCode。 */
     public String getRuleCode() {
         return ruleCode;
     }
 
-    public void setRuleCode(String ruleCode) {
-        this.ruleCode = ruleCode;
+    /** 设置RuleCode。 */
+    public void setRuleCode(String ruleCodeValue) {
+        this.ruleCode = ruleCodeValue;
     }
 
+    /** 获取RuleName。 */
     public String getRuleName() {
         return ruleName;
     }
 
-    public void setRuleName(String ruleName) {
-        this.ruleName = ruleName;
+    /** 设置RuleName。 */
+    public void setRuleName(String ruleNameValue) {
+        this.ruleName = ruleNameValue;
     }
 
+    /** 获取BusinessControl。 */
     public Boolean getBusinessControl() {
         return businessControl;
     }
 
-    public void setBusinessControl(Boolean businessControl) {
-        this.businessControl = businessControl;
+    /** 设置BusinessControl。 */
+    public void setBusinessControl(Boolean businessControlValue) {
+        this.businessControl = businessControlValue;
     }
 
+    /** 获取ControlOrder。 */
     public Boolean getControlOrder() {
         return controlOrder;
     }
 
-    public void setControlOrder(Boolean controlOrder) {
-        this.controlOrder = controlOrder;
+    /** 设置ControlOrder。 */
+    public void setControlOrder(Boolean controlOrderValue) {
+        this.controlOrder = controlOrderValue;
     }
 
+    /** 获取ControlPurchaseInbound。 */
     public Boolean getControlPurchaseInbound() {
         return controlPurchaseInbound;
     }
 
-    public void setControlPurchaseInbound(Boolean controlPurchaseInbound) {
-        this.controlPurchaseInbound = controlPurchaseInbound;
+    /** 设置ControlPurchaseInbound。 */
+    public void setControlPurchaseInbound(Boolean controlPurchaseInboundValue) {
+        this.controlPurchaseInbound = controlPurchaseInboundValue;
     }
 
+    /** 获取ControlTransferInbound。 */
     public Boolean getControlTransferInbound() {
         return controlTransferInbound;
     }
 
-    public void setControlTransferInbound(Boolean controlTransferInbound) {
-        this.controlTransferInbound = controlTransferInbound;
+    /** 设置ControlTransferInbound。 */
+    public void setControlTransferInbound(Boolean controlTransferInboundValue) {
+        this.controlTransferInbound = controlTransferInboundValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 
+    /** 获取CreatedBy。 */
     public String getCreatedBy() {
         return createdBy;
     }
 
-    public void setCreatedBy(String createdBy) {
-        this.createdBy = createdBy;
+    /** 设置CreatedBy。 */
+    public void setCreatedBy(String createdByValue) {
+        this.createdBy = createdByValue;
     }
 
+    /** 获取CreatedAt。 */
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    /** 设置CreatedAt。 */
+    public void setCreatedAt(LocalDateTime createdAtValue) {
+        this.createdAt = createdAtValue;
     }
 
+    /** 获取UpdatedBy。 */
     public String getUpdatedBy() {
         return updatedBy;
     }
 
-    public void setUpdatedBy(String updatedBy) {
-        this.updatedBy = updatedBy;
+    /** 设置UpdatedBy。 */
+    public void setUpdatedBy(String updatedByValue) {
+        this.updatedBy = updatedByValue;
     }
 
+    /** 获取UpdatedAt。 */
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    /** 设置UpdatedAt。 */
+    public void setUpdatedAt(LocalDateTime updatedAtValue) {
+        this.updatedAt = updatedAtValue;
     }
 }

@@ -1,10 +1,9 @@
 package com.boboboom.jxc.identity.interfaces.rest;
 
-import com.boboboom.jxc.identity.application.service.DictionaryApplicationService;
-import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
-import jakarta.validation.Valid;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -16,9 +15,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import com.boboboom.jxc.identity.application.service.DictionaryApplicationService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
+
+import jakarta.validation.Valid;
 
 /**
  * 字典管理与业务字典查询接口。
@@ -27,19 +29,22 @@ import java.util.Map;
 @RestController
 public class DictionaryController {
 
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
+
     private final DictionaryApplicationService dictionaryApplicationService;
     private final IdentityAdminSupport identityAdminSupport;
 
     /**
      * 构造字典接口。
      *
-     * @param dictionaryApplicationService 字典应用服务
-     * @param identityAdminSupport 管理员辅助服务
+     * @param dictionaryApplicationServiceValue 字典应用服务
+     * @param identityAdminSupportValue 管理员辅助服务
      */
-    public DictionaryController(DictionaryApplicationService dictionaryApplicationService,
-                                IdentityAdminSupport identityAdminSupport) {
-        this.dictionaryApplicationService = dictionaryApplicationService;
-        this.identityAdminSupport = identityAdminSupport;
+    public DictionaryController(DictionaryApplicationService dictionaryApplicationServiceValue,
+                                IdentityAdminSupport identityAdminSupportValue) {
+        this.dictionaryApplicationService = dictionaryApplicationServiceValue;
+        this.identityAdminSupport = identityAdminSupportValue;
     }
 
     /**
@@ -221,7 +226,7 @@ public class DictionaryController {
 
     private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
         int toIndex = Math.min(fromIndex + safePageSize, rows.size());
         return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);

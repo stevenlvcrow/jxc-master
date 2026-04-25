@@ -24,7 +24,7 @@ import {
 } from '@/api/modules/purchase';
 import { resolveArchiveOrgId } from '@/views/items/org';
 
-type ReviewStatus = '待审核' | '已审核' | '已驳回';
+type ReviewStatus = '未审核' | '已审核';
 type TreeNode = {
   value: string;
   label: string;
@@ -65,7 +65,7 @@ const {
   loadSupplierOptions,
 } = useSupplierArchiveOptions();
 
-const reviewStatusOptions: ReviewStatus[] = ['待审核', '已审核', '已驳回'];
+const reviewStatusOptions: ReviewStatus[] = ['未审核', '已审核'];
 const querySchemeOptions = ['系统默认方案'];
 const query = reactive({
   documentDateRange: [] as string[],
@@ -73,7 +73,7 @@ const query = reactive({
   warehouse: '',
   supplier: '',
   itemCategory: '',
-  reviewStatus: '待审核' as ReviewStatus | '',
+  reviewStatus: '未审核' as ReviewStatus | '',
   itemCode: '',
   queryScheme: '系统默认方案',
 });
@@ -166,10 +166,7 @@ const toReviewStatus = (document: PurchaseDocument, line: PurchaseDocumentLine):
   if (status === '已审核') {
     return '已审核';
   }
-  if (status === '已驳回') {
-    return '已驳回';
-  }
-  return '待审核';
+  return '未审核';
 };
 
 const mapLine = (document: PurchaseDocument, line: PurchaseDocumentLine): PurchaseApplicationReviewRow => ({
@@ -380,7 +377,7 @@ const handleReset = () => {
   query.warehouse = '';
   query.supplier = '';
   query.itemCategory = '';
-  query.reviewStatus = '待审核';
+  query.reviewStatus = '未审核';
   query.itemCode = '';
   query.queryScheme = '系统默认方案';
   currentPage.value = 1;
@@ -439,7 +436,7 @@ onMounted(() => {
         <el-tree-select v-model="query.itemCategory" :data="itemCategoryTree" clearable filterable placeholder="请选择" style="width: 180px" />
       </el-form-item>
       <el-form-item label="审核状态">
-        <el-select v-model="query.reviewStatus" clearable placeholder="待审核" style="width: 140px">
+        <el-select v-model="query.reviewStatus" clearable placeholder="未审核" style="width: 140px">
           <el-option v-for="option in reviewStatusOptions" :key="option" :label="option" :value="option" />
         </el-select>
       </el-form-item>
@@ -507,7 +504,7 @@ onMounted(() => {
       <el-table-column prop="applicant" label="申请人" min-width="100" show-overflow-tooltip />
       <el-table-column prop="reviewStatus" label="审核状态" min-width="100">
         <template #default="{ row }">
-          <el-tag :type="row.reviewStatus === '已审核' ? 'success' : row.reviewStatus === '已驳回' ? 'danger' : 'warning'" size="small">
+          <el-tag :type="row.reviewStatus === '已审核' ? 'success' : 'warning'" size="small">
             {{ row.reviewStatus }}
           </el-tag>
         </template>

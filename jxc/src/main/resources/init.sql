@@ -216,7 +216,7 @@ CREATE TABLE IF NOT EXISTS sys_role
     updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_sys_role_tenant_code UNIQUE (tenant_group_id, role_code),
     CONSTRAINT ck_sys_role_type CHECK (role_type IN ('PLATFORM', 'GROUP', 'STORE')),
-    CONSTRAINT ck_sys_role_scope CHECK (data_scope_type IN ('ALL', 'GROUP', 'STORE', 'SELF', 'CUSTOM')),
+    CONSTRAINT ck_sys_role_scope CHECK (data_scope_type IN ('ALL', 'GROUP', 'STORE', 'SELF')),
     CONSTRAINT ck_sys_role_status CHECK (status IN ('ENABLED', 'DISABLED'))
 );
 
@@ -226,7 +226,7 @@ COMMENT ON COLUMN sys_role.role_type IS '角色层级：平台/集团/门店';
 COMMENT ON COLUMN sys_role.role_code IS '角色编码';
 COMMENT ON COLUMN sys_role.role_name IS '角色名称';
 COMMENT ON COLUMN sys_role.builtin IS '是否内置模板角色：TRUE=模板角色，FALSE=真实角色';
-COMMENT ON COLUMN sys_role.data_scope_type IS '数据权限范围：ALL/GROUP/STORE/SELF/CUSTOM';
+COMMENT ON COLUMN sys_role.data_scope_type IS '数据权限范围：ALL/GROUP/STORE/SELF';
 COMMENT ON COLUMN sys_role.description IS '角色说明';
 COMMENT ON COLUMN sys_role.status IS '状态：ENABLED/DISABLED';
 COMMENT ON COLUMN sys_role.created_by IS '创建人';
@@ -800,6 +800,10 @@ VALUES ('PLATFORM_SUPER_ADMIN', '平台超级管理员', 'PLATFORM', 'ALL', '系
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role (role_code, role_name, role_type, data_scope_type, description, status)
+VALUES ('PLATFORM_ADMIN', '平台管理员', 'PLATFORM', 'ALL', '平台新增用户默认角色', 'ENABLED')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_role (role_code, role_name, role_type, data_scope_type, description, status)
 VALUES ('GROUP_ADMIN', '集团管理员', 'GROUP', 'GROUP', '系统初始化集团管理员角色', 'ENABLED')
 ON CONFLICT DO NOTHING;
 
@@ -907,6 +911,21 @@ VALUES (
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
+VALUES (
+    'MENU_MAINTENANCE',
+    '菜单维护',
+    (SELECT id FROM sys_menu WHERE menu_code = 'SYS_MGMT'),
+    'MENU',
+    '/system/menus',
+    'system:menu:manage',
+    'menu',
+    15,
+    TRUE,
+    'ENABLED'
+)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES ('GROUP_WORKBENCH', '集团工作台', NULL, 'MENU', '/group/dashboard', 'group:dashboard:view', 'office', 20, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
 
@@ -936,8 +955,12 @@ ON CONFLICT DO NOTHING;
 
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
-VALUES ('GROUP_WORKFLOW_HISTORY_MGMT', '流程发布历史管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_WORKBENCH'), 'MENU', '/group/workflow-history', 'group:workflow:history:view', 'setting', 50, TRUE, 'ENABLED')
+VALUES ('GROUP_WORKFLOW_HISTORY_MGMT', '流程发布管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_WORKBENCH'), 'MENU', '/group/workflow-history', 'group:workflow:history:view', 'setting', 50, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
+
+UPDATE sys_menu
+SET menu_name = '流程发布管理'
+WHERE menu_code = 'GROUP_WORKFLOW_HISTORY_MGMT';
 
 UPDATE sys_menu
 SET menu_name = '用户管理'
@@ -1014,6 +1037,13 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_role_menu_rel (role_id, menu_id)
 VALUES (
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'PLATFORM_SUPER_ADMIN'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'MENU_MAINTENANCE')
+)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_role_menu_rel (role_id, menu_id)
+VALUES (
     (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_ADMIN'),
     (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_WORKBENCH')
 )
@@ -1038,6 +1068,22 @@ WHERE m.menu_code IN (
     'GROUP_ROLE_MGMT',
     'GROUP_MENU_PERMISSION_MGMT',
     'GROUP_WORKFLOW_HISTORY_MGMT'
+)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_role_menu_rel (role_id, menu_id)
+SELECT
+    (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'PLATFORM_ADMIN'),
+    m.id
+FROM sys_menu m
+WHERE m.menu_code IN (
+    'SYS_MGMT',
+    'ROLE_MGMT',
+    'GROUP_MGMT_ADMIN',
+    'USER_MGMT',
+    'MENU_PERMISSION_MGMT',
+    'MENU_MAINTENANCE',
+    'DICT_MGMT'
 )
 ON CONFLICT DO NOTHING;
 
@@ -1074,7 +1120,7 @@ ON CONFLICT DO NOTHING;
 -- ??????????jxc-w/src/config/jxc-menu.json??????????????/???????
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MOD_01',
+    'STORE_BIZ_MOD_ORDER',
     '订货管理',
     NULL,
     'DIRECTORY',
@@ -1094,9 +1140,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_01_03',
+    'STORE_BIZ_GRP_ORDER_DOCUMENT',
     '单据',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_ORDER'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -1109,9 +1155,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_01_03_01',
+    'STORE_BIZ_MENU_ORDER_DOCUMENT',
     '订货单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_01_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ORDER_DOCUMENT'),
     'MENU',
     '/order/order-documents',
     'store:order:order-documents:view',
@@ -1124,9 +1170,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_01_03_02',
+    'STORE_BIZ_MENU_RECEIPT_DOCUMENT',
     '收货单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_01_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ORDER_DOCUMENT'),
     'MENU',
     '/order/receipt-documents',
     'store:order:receipt-documents:view',
@@ -1139,9 +1185,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_01_03_03',
+    'STORE_BIZ_MENU_DIFFERENCE_DOCUMENT',
     '差异单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_01_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ORDER_DOCUMENT'),
     'MENU',
     '/order/difference-documents',
     'store:order:difference-documents:view',
@@ -1154,9 +1200,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_01_03_04',
+    'STORE_BIZ_MENU_RETURN_DOCUMENT',
     '返货单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_01_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ORDER_DOCUMENT'),
     'MENU',
     '/order/return-documents',
     'store:order:return-documents:view',
@@ -1169,9 +1215,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_01_03_05',
+    'STORE_BIZ_MENU_THIRD_PARTY_TRANSFER_DOCUMENT',
     '三方调拨单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_01_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ORDER_DOCUMENT'),
     'MENU',
     '/order/third-party-transfer-documents',
     'store:order:third-party-transfer-documents:view',
@@ -1184,7 +1230,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MOD_02',
+    'STORE_BIZ_MOD_PURCHASE',
     '采购管理',
     NULL,
     'DIRECTORY',
@@ -1199,9 +1245,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_02_01',
+    'STORE_BIZ_GRP_PURCHASE_PRICING',
     '价格管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_PURCHASE'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -1214,9 +1260,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_02_01_01',
+    'STORE_BIZ_MENU_PURCHASE_PRICING',
     '采购单定价',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_02_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_PURCHASE_PRICING'),
     'MENU',
     '/purchase/pricing',
     'store:purchase:pricing:view',
@@ -1229,9 +1275,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_02_01_02',
+    'STORE_BIZ_MENU_PURCHASE_PRICING_ADJUSTMENT',
     '采购定价明细调整单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_02_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_PURCHASE_PRICING'),
     'MENU',
     '/purchase/pricing-adjustments',
     'store:purchase:pricing-adjustments:view',
@@ -1244,9 +1290,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_02_01_03',
+    'STORE_BIZ_MENU_PURCHASE_PRICING_DETAIL',
     '采购定价明细',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_02_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_PURCHASE_PRICING'),
     'MENU',
     '/purchase/pricing-details',
     'store:purchase:pricing-details:view',
@@ -1265,9 +1311,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_02_04',
+    'STORE_BIZ_GRP_PURCHASE_DOCUMENT',
     '单据',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_PURCHASE'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -1280,9 +1326,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_02_04_01',
+    'STORE_BIZ_MENU_PURCHASE_APPLICATION',
     '采购单申请',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_02_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_PURCHASE_DOCUMENT'),
     'MENU',
     '/purchase/applications',
     'store:purchase:applications:view',
@@ -1295,9 +1341,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_02_04_02',
+    'STORE_BIZ_MENU_PURCHASE_APPLICATION_REVIEW',
     '采购单申请审核',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_02_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_PURCHASE_DOCUMENT'),
     'MENU',
     '/purchase/application-reviews',
     'store:purchase:application-reviews:view',
@@ -1310,9 +1356,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_02_04_03',
+    'STORE_BIZ_MENU_PURCHASE_ORDER',
     '采购订单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_02_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_PURCHASE_DOCUMENT'),
     'MENU',
     '/purchase/orders',
     'store:purchase:orders:view',
@@ -1325,9 +1371,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_02_04_04',
+    'STORE_BIZ_MENU_PURCHASE_RECEIPT',
     '采购收货单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_02_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_PURCHASE_DOCUMENT'),
     'MENU',
     '/purchase/receipts',
     'store:purchase:receipts:view',
@@ -1340,9 +1386,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_02_04_05',
+    'STORE_BIZ_MENU_PURCHASE_RETURN',
     '采购退货单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_02_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_PURCHASE_DOCUMENT'),
     'MENU',
     '/purchase/returns',
     'store:purchase:returns:view',
@@ -1367,7 +1413,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MOD_04',
+    'STORE_BIZ_MOD_INVENTORY',
     '库存管理',
     NULL,
     'DIRECTORY',
@@ -1382,9 +1428,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_04_01',
+    'STORE_BIZ_GRP_INVENTORY_DOCUMENT',
     '库存单据',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_INVENTORY'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -1397,9 +1443,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_01',
+    'STORE_BIZ_MENU_WAREHOUSE_OPENING_BALANCE',
     '仓库期初',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/warehouse-opening-balances',
     'store:inventory:warehouse-opening-balances:view',
@@ -1412,9 +1458,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_02',
+    'STORE_BIZ_MENU_PURCHASE_INBOUND',
     '采购入库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/purchase-inbounds',
     'store:inventory:purchase-inbounds:view',
@@ -1427,9 +1473,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_03',
+    'STORE_BIZ_MENU_PURCHASE_RETURN_OUTBOUND',
     '采购退货出库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/purchase-return-outbounds',
     'store:inventory:purchase-return-outbounds:view',
@@ -1442,9 +1488,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_04',
+    'STORE_BIZ_MENU_DEPARTMENT_PICKING',
     '部门领料',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/department-pickings',
     'store:inventory:department-pickings:view',
@@ -1457,9 +1503,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_05',
+    'STORE_BIZ_MENU_DEPARTMENT_RETURN',
     '部门退料',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/department-returns',
     'store:inventory:department-returns:view',
@@ -1472,9 +1518,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_06',
+    'STORE_BIZ_MENU_STOCK_TRANSFER',
     '移库单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/stock-transfers',
     'store:inventory:stock-transfers:view',
@@ -1487,9 +1533,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_07',
+    'STORE_BIZ_MENU_STOCK_TRANSFER_INBOUND',
     '移库入库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/stock-transfer-inbounds',
     'store:inventory:stock-transfer-inbounds:view',
@@ -1502,9 +1548,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_08',
+    'STORE_BIZ_MENU_DEPARTMENT_TRANSFER',
     '部门调拨',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/department-transfers',
     'store:inventory:department-transfers:view',
@@ -1517,9 +1563,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_09',
+    'STORE_BIZ_MENU_STORE_TRANSFER',
     '店间调拨',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/store-transfers',
     'store:inventory:store-transfers:view',
@@ -1532,9 +1578,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_10',
+    'STORE_BIZ_MENU_DAMAGE_OUTBOUND',
     '报损出库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/damage-outbounds',
     'store:inventory:damage-outbounds:view',
@@ -1547,9 +1593,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_11',
+    'STORE_BIZ_MENU_OTHER_INBOUND',
     '其他入库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/other-inbounds',
     'store:inventory:other-inbounds:view',
@@ -1562,9 +1608,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_12',
+    'STORE_BIZ_MENU_OTHER_OUTBOUND',
     '其他出库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/other-outbounds',
     'store:inventory:other-outbounds:view',
@@ -1577,9 +1623,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_13',
+    'STORE_BIZ_MENU_PRODUCTION_INBOUND',
     '生产入库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/production-inbounds',
     'store:inventory:production-inbounds:view',
@@ -1592,9 +1638,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_14',
+    'STORE_BIZ_MENU_CUSTOMER_SALES_OUTBOUND',
     '客户销售出库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/customer-sales-outbounds',
     'store:inventory:customer-sales-outbounds:view',
@@ -1607,9 +1653,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_15',
+    'STORE_BIZ_MENU_CUSTOMER_RETURN_INBOUND',
     '客户退货入库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/customer-return-inbounds',
     'store:inventory:customer-return-inbounds:view',
@@ -1622,9 +1668,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_01_16',
+    'STORE_BIZ_MENU_STOCK_TRANSFER_OUTBOUND',
     '移库出库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
     '/inventory/stock-transfer-outbounds',
     'store:inventory:stock-transfer-outbounds:view',
@@ -1637,9 +1683,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_04_02',
+    'STORE_BIZ_GRP_INVENTORY_CHECK',
     '盘点管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_INVENTORY'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -1652,9 +1698,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_02_01',
+    'STORE_BIZ_MENU_INVENTORY_CHECK',
     '盘点单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_CHECK'),
     'MENU',
     '/inventory/inventory-checks',
     'store:inventory:inventory-checks:view',
@@ -1667,9 +1713,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_02_02',
+    'STORE_BIZ_MENU_MULTI_INVENTORY_CHECK',
     '多人盘点单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_CHECK'),
     'MENU',
     '/inventory/multi-inventory-checks',
     'store:inventory:multi-inventory-checks:view',
@@ -1680,26 +1726,27 @@ VALUES (
 )
 ON CONFLICT DO NOTHING;
 
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
+INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status, component_key)
 VALUES (
-    'STORE_BIZ_MENU_04_02_03',
+    'STORE_BIZ_MENU_PROFIT_INBOUND',
     '盘盈单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_CHECK'),
     'MENU',
     '/inventory/profit-inbounds',
     'store:inventory:profit-inbounds:view',
     NULL,
     104023,
     TRUE,
-    'ENABLED'
+    'ENABLED',
+    'inventory.profit-inbound.index'
 )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_02_04',
+    'STORE_BIZ_MENU_LOSS_OUTBOUND',
     '盘亏单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_CHECK'),
     'MENU',
     '/inventory/loss-outbounds',
     'store:inventory:loss-outbounds:view',
@@ -1712,9 +1759,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_04_03',
+    'STORE_BIZ_GRP_INVENTORY_AUTO_OUTBOUND',
     '自动出库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_INVENTORY'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -1727,9 +1774,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_03_01',
+    'STORE_BIZ_MENU_DISH_CONSUMPTION_OUTBOUND',
     '菜品消耗出库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_AUTO_OUTBOUND'),
     'MENU',
     '/inventory/dish-consumption-outbounds',
     'store:inventory:dish-consumption-outbounds:view',
@@ -1742,9 +1789,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_04_04',
+    'STORE_BIZ_GRP_INVENTORY_BATCH',
     '批次管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_INVENTORY'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -1757,9 +1804,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_04_01',
+    'STORE_BIZ_MENU_BATCH_ADJUSTMENT',
     '批次调整单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_BATCH'),
     'MENU',
     '/inventory/batch-adjustments',
     'store:inventory:batch-adjustments:view',
@@ -1772,9 +1819,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_04_05',
+    'STORE_BIZ_GRP_INVENTORY_RULE',
     '库存规则',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_04'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_INVENTORY'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -1787,9 +1834,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_05_01',
+    'STORE_BIZ_MENU_INVENTORY_TEMPLATE',
     '库存模板',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_RULE'),
     'MENU',
     '/inventory/inventory-templates',
     'store:inventory:inventory-templates:view',
@@ -1802,9 +1849,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_05_02',
+    'STORE_BIZ_MENU_TRANSFER_GROUP',
     '调拨分组',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_RULE'),
     'MENU',
     '/inventory/transfer-groups',
     'store:inventory:transfer-groups:view',
@@ -1817,14 +1864,14 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_05_03',
+    'STORE_BIZ_MENU_STOCK_LIMIT',
     '库存上下限',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_RULE'),
     'MENU',
     '/inventory/stock-limits',
     'store:inventory:stock-limits:view',
     NULL,
-    104053,
+    104102,
     TRUE,
     'ENABLED'
 )
@@ -1832,14 +1879,14 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_05_04',
+    'STORE_BIZ_MENU_STOCK_LOCK',
     '库存锁库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_RULE'),
     'MENU',
     '/inventory/stock-locks',
     'store:inventory:stock-locks:view',
     NULL,
-    104054,
+    104103,
     TRUE,
     'ENABLED'
 )
@@ -1847,14 +1894,14 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_04_05_05',
+    'STORE_BIZ_MENU_STOCK_LOCK_LOG',
     '锁库日志',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_04_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_RULE'),
     'MENU',
     '/inventory/stock-lock-logs',
     'store:inventory:stock-lock-logs:view',
     NULL,
-    104055,
+    104104,
     TRUE,
     'ENABLED'
 )
@@ -1891,7 +1938,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MOD_07',
+    'STORE_BIZ_MOD_REPORT',
     '报表管理',
     NULL,
     'DIRECTORY',
@@ -1914,9 +1961,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_07_03',
+    'STORE_BIZ_GRP_REPORT_PURCHASE',
     '采购报表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_07'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_REPORT'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -1929,9 +1976,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_03_01',
+    'STORE_BIZ_MENU_PURCHASE_ORDER_STATUS_TRACKING',
     '采购订单状态跟踪表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_PURCHASE'),
     'MENU',
     '/report/purchase-order-status-tracking',
     'store:report:purchase-order-status-tracking:view',
@@ -1944,9 +1991,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_03_02',
+    'STORE_BIZ_MENU_PURCHASE_RETURN_STATUS_TRACKING',
     '退货单状态跟踪表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_PURCHASE'),
     'MENU',
     '/report/purchase-return-status-tracking',
     'store:report:purchase-return-status-tracking:view',
@@ -1959,9 +2006,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_03_03',
+    'STORE_BIZ_MENU_PURCHASE_ITEM_PRICE_ANALYSIS',
     '采购物品价格分析表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_PURCHASE'),
     'MENU',
     '/report/purchase-item-price-analysis',
     'store:report:purchase-item-price-analysis:view',
@@ -1986,9 +2033,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_07_05',
+    'STORE_BIZ_GRP_REPORT_INVENTORY',
     '库存报表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_07'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_REPORT'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -2001,9 +2048,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_01',
+    'STORE_BIZ_MENU_REALTIME_STOCK_QUERY',
     '实时库存查询表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/realtime-stock-query',
     'store:report:realtime-stock-query:view',
@@ -2016,9 +2063,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_02',
+    'STORE_BIZ_MENU_DISH_CONSUMPTION_OUTBOUND_QUERY',
     '菜品消耗出库查询表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/dish-consumption-outbound-query',
     'store:report:dish-consumption-outbound-query:view',
@@ -2031,9 +2078,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_03',
+    'STORE_BIZ_MENU_INVENTORY_PROFIT_LOSS',
     '盘点盈亏表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/inventory-profit-loss',
     'store:report:inventory-profit-loss:view',
@@ -2046,9 +2093,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_04',
+    'STORE_BIZ_MENU_INVENTORY_INOUT_DETAIL',
     '出入库明细表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/inventory-inout-details',
     'store:report:inventory-inout-details:view',
@@ -2061,9 +2108,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_05',
+    'STORE_BIZ_MENU_INVENTORY_INOUT_SUMMARY',
     '出入库汇总表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/inventory-inout-summary',
     'store:report:inventory-inout-summary:view',
@@ -2076,9 +2123,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_06',
+    'STORE_BIZ_MENU_STOCK_INOUT_SUMMARY',
     '库存进出汇总表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/stock-inout-summary',
     'store:report:stock-inout-summary:view',
@@ -2091,9 +2138,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_07',
+    'STORE_BIZ_MENU_OTHER_INOUT_SUMMARY',
     '其他出入库汇总表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/other-inout-summary',
     'store:report:other-inout-summary:view',
@@ -2106,9 +2153,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_08',
+    'STORE_BIZ_MENU_INTER_ORG_TRANSFER_DETAIL',
     '机构间调拨明细表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/inter-org-transfer-detail',
     'store:report:inter-org-transfer-detail:view',
@@ -2121,9 +2168,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_09',
+    'STORE_BIZ_MENU_INTER_ORG_TRANSFER_SUMMARY',
     '机构间调拨汇总表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/inter-org-transfer-summary',
     'store:report:inter-org-transfer-summary:view',
@@ -2138,9 +2185,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_12',
+    'STORE_BIZ_MENU_ITEM_BATCH_TRACE',
     '物品批次全流程跟踪表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/item-batch-trace',
     'store:report:item-batch-trace:view',
@@ -2153,9 +2200,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_13',
+    'STORE_BIZ_MENU_STAGNANT_STOCK',
     '库存呆滞品查询表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/stagnant-stock',
     'store:report:stagnant-stock:view',
@@ -2168,9 +2215,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_14',
+    'STORE_BIZ_MENU_STOCK_TURNOVER_RATE',
     '库存周转率统计表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/stock-turnover-rate',
     'store:report:stock-turnover-rate:view',
@@ -2183,9 +2230,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_07_05_15',
+    'STORE_BIZ_MENU_STOCK_WARNING',
     '库存预警表',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_07_05'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_REPORT_INVENTORY'),
     'MENU',
     '/report/stock-warning',
     'store:report:stock-warning:view',
@@ -2195,6 +2242,39 @@ VALUES (
     'ENABLED'
 )
 ON CONFLICT DO NOTHING;
+
+UPDATE sys_menu
+SET component_key = CASE menu_code
+    WHEN 'STORE_BIZ_MENU_REALTIME_STOCK_QUERY' THEN 'report.realtime-stock-query.index'
+    WHEN 'STORE_BIZ_MENU_DISH_CONSUMPTION_OUTBOUND_QUERY' THEN 'report.dish-consumption-outbound-report.index'
+    WHEN 'STORE_BIZ_MENU_INVENTORY_PROFIT_LOSS' THEN 'report.inventory-profit-loss.index'
+    WHEN 'STORE_BIZ_MENU_INVENTORY_INOUT_DETAIL' THEN 'report.inventory-inout-detail-report.index'
+    WHEN 'STORE_BIZ_MENU_INVENTORY_INOUT_SUMMARY' THEN 'report.inventory-inout-summary.index'
+    WHEN 'STORE_BIZ_MENU_STOCK_INOUT_SUMMARY' THEN 'report.stock-inout-summary.index'
+    WHEN 'STORE_BIZ_MENU_OTHER_INOUT_SUMMARY' THEN 'report.other-inout-summary.index'
+    WHEN 'STORE_BIZ_MENU_INTER_ORG_TRANSFER_DETAIL' THEN 'report.inter-org-transfer-detail.index'
+    WHEN 'STORE_BIZ_MENU_INTER_ORG_TRANSFER_SUMMARY' THEN 'report.inter-org-transfer-summary.index'
+    WHEN 'STORE_BIZ_MENU_ITEM_BATCH_TRACE' THEN 'report.item-batch-trace.index'
+    WHEN 'STORE_BIZ_MENU_STAGNANT_STOCK' THEN 'report.stagnant-stock.index'
+    WHEN 'STORE_BIZ_MENU_STOCK_TURNOVER_RATE' THEN 'report.stock-turnover-rate.index'
+    WHEN 'STORE_BIZ_MENU_STOCK_WARNING' THEN 'report.stock-warning.index'
+    ELSE component_key
+END
+WHERE menu_code IN (
+    'STORE_BIZ_MENU_REALTIME_STOCK_QUERY',
+    'STORE_BIZ_MENU_DISH_CONSUMPTION_OUTBOUND_QUERY',
+    'STORE_BIZ_MENU_INVENTORY_PROFIT_LOSS',
+    'STORE_BIZ_MENU_INVENTORY_INOUT_DETAIL',
+    'STORE_BIZ_MENU_INVENTORY_INOUT_SUMMARY',
+    'STORE_BIZ_MENU_STOCK_INOUT_SUMMARY',
+    'STORE_BIZ_MENU_OTHER_INOUT_SUMMARY',
+    'STORE_BIZ_MENU_INTER_ORG_TRANSFER_DETAIL',
+    'STORE_BIZ_MENU_INTER_ORG_TRANSFER_SUMMARY',
+    'STORE_BIZ_MENU_ITEM_BATCH_TRACE',
+    'STORE_BIZ_MENU_STAGNANT_STOCK',
+    'STORE_BIZ_MENU_STOCK_TURNOVER_RATE',
+    'STORE_BIZ_MENU_STOCK_WARNING'
+);
 
 
 
@@ -2209,7 +2289,7 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MOD_08',
+    'STORE_BIZ_MOD_ARCHIVE',
     '档案管理',
     NULL,
     'DIRECTORY',
@@ -2224,9 +2304,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_08_01',
+    'STORE_BIZ_GRP_ARCHIVE_ITEM',
     '物品',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_08'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_ARCHIVE'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -2239,9 +2319,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_01_01',
+    'STORE_BIZ_MENU_ITEM',
     '物品管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_ITEM'),
     'MENU',
     '/archive/items',
     'store:archive:items:view',
@@ -2254,9 +2334,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_01_02',
+    'STORE_BIZ_MENU_ITEM_CATEGORY',
     '物品类别管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_ITEM'),
     'MENU',
     '/archive/item-categories',
     'store:archive:item-categories:view',
@@ -2269,9 +2349,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_01_03',
+    'STORE_BIZ_MENU_UNIT',
     '单位管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_ITEM'),
     'MENU',
     '/archive/units',
     'store:archive:units:view',
@@ -2284,9 +2364,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_01_04',
+    'STORE_BIZ_MENU_STATISTICS_TYPE',
     '统计类型管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_ITEM'),
     'MENU',
     '/archive/statistics-types',
     'store:archive:statistics-types:view',
@@ -2299,9 +2379,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_01_05',
+    'STORE_BIZ_MENU_ITEM_TAG',
     '物品标签管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_01'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_ITEM'),
     'MENU',
     '/archive/item-tags',
     'store:archive:item-tags:view',
@@ -2314,9 +2394,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_08_02',
+    'STORE_BIZ_GRP_ARCHIVE_COST',
     '成本设置',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_08'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_ARCHIVE'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -2329,9 +2409,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_02_01',
+    'STORE_BIZ_MENU_COST_CARD_ARCHIVE',
     '成本卡档案',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_COST'),
     'MENU',
     '/archive/cost-card-archives',
     'store:archive:cost-card-archives:view',
@@ -2344,9 +2424,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_02_02',
+    'STORE_BIZ_MENU_COST_CARD_SETTING',
     '成本卡设置',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_COST'),
     'MENU',
     '/archive/cost-card-settings',
     'store:archive:cost-card-settings:view',
@@ -2359,9 +2439,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_02_03',
+    'STORE_BIZ_MENU_DISH_WAREHOUSE_LINK',
     '菜品关联仓库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_COST'),
     'MENU',
     '/archive/dish-warehouse-links',
     'store:archive:dish-warehouse-links:view',
@@ -2374,9 +2454,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_02_04',
+    'STORE_BIZ_MENU_EXPENSE_WAREHOUSE_LINK',
     '费用关联仓库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_02'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_COST'),
     'MENU',
     '/archive/expense-warehouse-links',
     'store:archive:expense-warehouse-links:view',
@@ -2392,9 +2472,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_08_03',
+    'STORE_BIZ_GRP_ARCHIVE_SUPPLIER',
     '供应商',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_08'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_ARCHIVE'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -2407,9 +2487,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_03_01',
+    'STORE_BIZ_MENU_SUPPLIER',
     '供应商档案',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_03'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_SUPPLIER'),
     'MENU',
     '/archive/suppliers',
     'store:archive:suppliers:view',
@@ -2433,9 +2513,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_08_06',
+    'STORE_BIZ_GRP_ARCHIVE_ORGANIZATION',
     '机构',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_08'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_ARCHIVE'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -2448,9 +2528,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_06_01',
+    'STORE_BIZ_MENU_ORGANIZATION',
     '机构管理',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_06'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_ORGANIZATION'),
     'MENU',
     '/archive/organizations',
     'store:archive:organizations:view',
@@ -2463,9 +2543,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_GRP_08_07',
+    'STORE_BIZ_GRP_ARCHIVE_WAREHOUSE',
     '仓库',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_08'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_MOD_ARCHIVE'),
     'DIRECTORY',
     NULL,
     NULL,
@@ -2478,9 +2558,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_07_01',
+    'STORE_BIZ_MENU_WAREHOUSE',
     '仓库档案',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_07'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_WAREHOUSE'),
     'MENU',
     '/archive/warehouses',
     'store:archive:warehouses:view',
@@ -2493,9 +2573,9 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
-    'STORE_BIZ_MENU_08_07_02',
+    'STORE_BIZ_MENU_WAREHOUSE_ITEM_RULE',
     '仓库物品规则',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_08_07'),
+    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_ARCHIVE_WAREHOUSE'),
     'MENU',
     '/archive/warehouse-item-rules',
     'store:archive:warehouse-item-rules:view',
@@ -2551,12 +2631,12 @@ SELECT
     m.id
 FROM sys_menu m
 WHERE m.menu_code IN (
-    'STORE_BIZ_MOD_08',
-    'STORE_BIZ_GRP_08_01',
-    'STORE_BIZ_MENU_08_01_02',
-    'STORE_BIZ_MENU_08_01_03',
-    'STORE_BIZ_MENU_08_01_04',
-    'STORE_BIZ_MENU_08_01_05'
+    'STORE_BIZ_MOD_ARCHIVE',
+    'STORE_BIZ_GRP_ARCHIVE_ITEM',
+    'STORE_BIZ_MENU_ITEM_CATEGORY',
+    'STORE_BIZ_MENU_UNIT',
+    'STORE_BIZ_MENU_STATISTICS_TYPE',
+    'STORE_BIZ_MENU_ITEM_TAG'
 )
 ON CONFLICT DO NOTHING;
 
@@ -3333,7 +3413,7 @@ CREATE TABLE IF NOT EXISTS purchase_document
     source_document_code       VARCHAR(64),
     downstream_document_code   VARCHAR(64),
     document_status            VARCHAR(32)    NOT NULL DEFAULT '草稿',
-    review_status              VARCHAR(32)    NOT NULL DEFAULT '待审核',
+    review_status              VARCHAR(32)    NOT NULL DEFAULT '未审核',
     ship_status                VARCHAR(32),
     receive_status             VARCHAR(32),
     reconciliation_status      VARCHAR(32),
@@ -3367,7 +3447,8 @@ CREATE TABLE IF NOT EXISTS purchase_document
     updated_at                 TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_purchase_document_scope_code UNIQUE (scope_type, scope_id, document_type, document_code),
     CONSTRAINT ck_purchase_document_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE')),
-    CONSTRAINT ck_purchase_document_type CHECK (document_type IN ('APPLICATION', 'ORDER', 'RECEIPT', 'RETURN'))
+    CONSTRAINT ck_purchase_document_type CHECK (document_type IN ('APPLICATION', 'ORDER', 'RECEIPT', 'RETURN')),
+    CONSTRAINT ck_purchase_document_review_status CHECK (review_status IN ('已审核', '未审核'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_purchase_document_scope_type ON purchase_document (scope_type, scope_id, document_type);
@@ -3396,9 +3477,10 @@ CREATE TABLE IF NOT EXISTS purchase_document_line
     is_gift                    BOOLEAN        NOT NULL DEFAULT FALSE,
     warehouse_name             VARCHAR(128),
     expected_arrival_date      DATE,
-    review_status              VARCHAR(32)    NOT NULL DEFAULT '待审核',
+    review_status              VARCHAR(32)    NOT NULL DEFAULT '未审核',
     remark                     VARCHAR(500),
     created_at                 TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_purchase_document_line_review_status CHECK (review_status IN ('已审核', '未审核')),
     CONSTRAINT fk_purchase_document_line_header FOREIGN KEY (document_id) REFERENCES purchase_document (id) ON DELETE CASCADE
 );
 
@@ -3482,16 +3564,105 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('INVENTORY_CHECK', '盘点单流程'),
         ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
 )
-INSERT INTO workflow_process_registry (scope_type, scope_id, process_code, business_name, created_by, updated_by)
+INSERT INTO workflow_process_registry (scope_type, scope_id, process_code, business_name, template_id, created_by, updated_by)
 SELECT 'GROUP',
        g.id,
        seed.process_code,
        seed.business_name,
+       'BUILTIN_DEFAULT_APPROVAL',
        NULL,
        NULL
 FROM workflow_process_seed seed
          CROSS JOIN (SELECT id FROM sys_group WHERE group_code = 'GP00001') g
 ON CONFLICT (scope_type, scope_id, process_code) DO NOTHING;
+
+WITH workflow_process_seed(process_code, business_name) AS (
+    VALUES
+        ('PURCHASE_APPLICATION', '采购单申请流程'),
+        ('PURCHASE_ORDER', '采购订单流程'),
+        ('PURCHASE_RECEIPT', '采购收货单流程'),
+        ('PURCHASE_RETURN', '采购退货单流程'),
+        ('PURCHASE_INBOUND', '采购入库流程'),
+        ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
+        ('DEPARTMENT_PICKING', '部门领料流程'),
+        ('DEPARTMENT_RETURN', '部门退料流程'),
+        ('STOCK_TRANSFER', '移库单流程'),
+        ('STOCK_TRANSFER_INBOUND', '移库入库流程'),
+        ('DEPARTMENT_TRANSFER', '部门调拨流程'),
+        ('DAMAGE_OUTBOUND', '报损出库流程'),
+        ('OTHER_INBOUND', '其他入库流程'),
+        ('OTHER_OUTBOUND', '其他出库流程'),
+        ('PRODUCTION_INBOUND', '生产入库流程'),
+        ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
+        ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
+        ('DISH_CONSUMPTION_OUTBOUND', '菜品消耗出库流程'),
+        ('INVENTORY_CHECK', '盘点单流程'),
+        ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
+)
+UPDATE workflow_process_registry registry
+SET template_id = 'BUILTIN_DEFAULT_APPROVAL'
+FROM workflow_process_seed seed,
+     (SELECT id FROM sys_group WHERE group_code = 'GP00001') g
+WHERE registry.scope_type = 'GROUP'
+  AND registry.scope_id = g.id
+  AND registry.process_code = seed.process_code
+  AND COALESCE(registry.template_id, '') <> 'BUILTIN_DEFAULT_APPROVAL';
+
+WITH workflow_process_seed(process_code, business_name) AS (
+    VALUES
+        ('PURCHASE_APPLICATION', '采购单申请流程'),
+        ('PURCHASE_ORDER', '采购订单流程'),
+        ('PURCHASE_RECEIPT', '采购收货单流程'),
+        ('PURCHASE_RETURN', '采购退货单流程'),
+        ('PURCHASE_INBOUND', '采购入库流程'),
+        ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
+        ('DEPARTMENT_PICKING', '部门领料流程'),
+        ('DEPARTMENT_RETURN', '部门退料流程'),
+        ('STOCK_TRANSFER', '移库单流程'),
+        ('STOCK_TRANSFER_INBOUND', '移库入库流程'),
+        ('DEPARTMENT_TRANSFER', '部门调拨流程'),
+        ('DAMAGE_OUTBOUND', '报损出库流程'),
+        ('OTHER_INBOUND', '其他入库流程'),
+        ('OTHER_OUTBOUND', '其他出库流程'),
+        ('PRODUCTION_INBOUND', '生产入库流程'),
+        ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
+        ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
+        ('DISH_CONSUMPTION_OUTBOUND', '菜品消耗出库流程'),
+        ('INVENTORY_CHECK', '盘点单流程'),
+        ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
+)
+INSERT INTO workflow_definition_config (
+    scope_type,
+    scope_id,
+    business_code,
+    workflow_code,
+    workflow_name,
+    status,
+    version_no,
+    node_config_json,
+    created_by,
+    updated_by
+)
+SELECT 'GROUP',
+       g.id,
+       seed.process_code,
+       'BUILTIN_DEFAULT_APPROVAL',
+       seed.business_name,
+       'DRAFT',
+       0,
+       '[
+  {"nodeKey":"start_node","nodeName":"开始","x":88,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"START","conditionExpression":"","triggerActions":[]},
+  {"nodeKey":"business_fill","nodeName":"业务填报","x":340,"y":76,"approverRoleCode":"SALESMAN","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"NORMAL","conditionExpression":"","triggerActions":["CREATE","UPDATE","DELETE"]},
+  {"nodeKey":"finance_approval","nodeName":"财务审批","x":632,"y":76,"approverRoleCode":"FINANCE","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"NORMAL","conditionExpression":"","triggerActions":[]},
+  {"nodeKey":"success_node","nodeName":"成功","x":924,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":true,"nodeType":"SUCCESS","conditionExpression":"","triggerActions":[]},
+  {"nodeKey":"fail_node","nodeName":"失败","x":412,"y":324,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"FAIL","conditionExpression":"","triggerActions":[]},
+  {"nodeKey":"end_node","nodeName":"结束","x":722,"y":324,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"END","conditionExpression":"","triggerActions":[]}
+]',
+       NULL,
+       NULL
+FROM workflow_process_seed seed
+         CROSS JOIN (SELECT id FROM sys_group WHERE group_code = 'GP00001') g
+ON CONFLICT (scope_type, scope_id, business_code, workflow_code) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS workflow_approval_notification
 (
@@ -3502,6 +3673,7 @@ CREATE TABLE IF NOT EXISTS workflow_approval_notification
     business_name VARCHAR(128)  NOT NULL,
     business_id   BIGINT        NOT NULL,
     approval_no   VARCHAR(64)   NOT NULL,
+    approver_user_id BIGINT,
     approver_name VARCHAR(64)   NOT NULL,
     approver_role VARCHAR(128)  NOT NULL,
     target_approver_user_id BIGINT,
@@ -3518,6 +3690,8 @@ CREATE TABLE IF NOT EXISTS workflow_approval_notification
 CREATE INDEX IF NOT EXISTS idx_workflow_approval_notification_scope ON workflow_approval_notification (scope_type, scope_id, audited_at DESC);
 
 ALTER TABLE workflow_approval_notification
+    ADD COLUMN IF NOT EXISTS approver_user_id BIGINT;
+ALTER TABLE workflow_approval_notification
     ADD COLUMN IF NOT EXISTS target_approver_user_id BIGINT;
 ALTER TABLE workflow_approval_notification
     ADD COLUMN IF NOT EXISTS target_approver_role_code VARCHAR(64);
@@ -3527,6 +3701,7 @@ ALTER TABLE workflow_approval_notification
 COMMENT ON TABLE workflow_approval_notification IS '流程审批通知';
 COMMENT ON COLUMN workflow_approval_notification.approval_no IS '审批编号';
 COMMENT ON COLUMN workflow_approval_notification.business_name IS '流程名称';
+COMMENT ON COLUMN workflow_approval_notification.approver_user_id IS '审批操作人ID';
 COMMENT ON COLUMN workflow_approval_notification.approver_name IS '审批人';
 COMMENT ON COLUMN workflow_approval_notification.approver_role IS '审批角色';
 COMMENT ON COLUMN workflow_approval_notification.target_approver_user_id IS '待审批目标人员ID';
@@ -4853,8 +5028,7 @@ FROM (VALUES
     ('identity.data_scope_type', 'ALL', 'ALL', '全部数据', 10),
     ('identity.data_scope_type', 'GROUP', 'GROUP', '集团数据', 20),
     ('identity.data_scope_type', 'STORE', 'STORE', '门店数据', 30),
-    ('identity.data_scope_type', 'SELF', 'SELF', '本人数据', 40),
-    ('identity.data_scope_type', 'CUSTOM', 'CUSTOM', '自定义数据', 50),
+    ('identity.data_scope_type', 'SELF', 'SELF', '仅自己', 40),
     ('identity.menu_type', 'DIRECTORY', 'DIRECTORY', '目录', 10),
     ('identity.menu_type', 'MENU', 'MENU', '菜单', 20),
     ('identity.menu_type', 'BUTTON', 'BUTTON', '按钮', 30),
@@ -4962,7 +5136,6 @@ ALTER TABLE sys_unit DROP CONSTRAINT IF EXISTS ck_sys_unit_type;
 ALTER TABLE sys_unit DROP CONSTRAINT IF EXISTS ck_sys_unit_status;
 ALTER TABLE sys_user DROP CONSTRAINT IF EXISTS ck_sys_user_status;
 ALTER TABLE sys_role DROP CONSTRAINT IF EXISTS ck_sys_role_type;
-ALTER TABLE sys_role DROP CONSTRAINT IF EXISTS ck_sys_role_scope;
 ALTER TABLE sys_role DROP CONSTRAINT IF EXISTS ck_sys_role_status;
 ALTER TABLE sys_menu DROP CONSTRAINT IF EXISTS ck_sys_menu_type;
 ALTER TABLE sys_menu DROP CONSTRAINT IF EXISTS ck_sys_menu_status;

@@ -1,13 +1,14 @@
 package com.boboboom.jxc.identity.application.service;
 
+import java.util.List;
+import java.util.Objects;
+
+import org.springframework.stereotype.Service;
+
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.domain.repository.DictionaryRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictItemDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictTypeDO;
-import org.springframework.stereotype.Service;
-
-import java.util.List;
-import java.util.Objects;
 
 /**
  * 字典查询与校验服务，供业务服务统一校验可配置状态和下拉值。
@@ -22,10 +23,10 @@ public class DictionaryLookupService {
     /**
      * 构造字典查询服务。
      *
-     * @param dictionaryRepository 字典仓储
+     * @param dictionaryRepositoryValue 字典仓储
      */
-    public DictionaryLookupService(DictionaryRepository dictionaryRepository) {
-        this.dictionaryRepository = dictionaryRepository;
+    public DictionaryLookupService(DictionaryRepository dictionaryRepositoryValue) {
+        this.dictionaryRepository = dictionaryRepositoryValue;
     }
 
     /**

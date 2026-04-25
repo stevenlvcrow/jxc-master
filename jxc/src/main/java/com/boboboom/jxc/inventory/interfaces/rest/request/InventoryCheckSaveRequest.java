@@ -1,12 +1,12 @@
 package com.boboboom.jxc.inventory.interfaces.rest.request;
 
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
-
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 
 /**
  * 盘点单保存请求。

@@ -1,5 +1,11 @@
 package com.boboboom.jxc.identity.application.service;
 
+import java.time.LocalDateTime;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.PasswordCodec;
@@ -11,11 +17,6 @@ import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreAdminRelDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
 
 /**
  * 组织管理员初始化服务，负责创建集团/门店管理员账号并绑定内置角色。
@@ -37,18 +38,19 @@ public class OrgAdminProvisioningService {
     private final UserCodeGenerator userCodeGenerator;
     private final DictionaryLookupService dictionaryLookupService;
 
-    public OrgAdminProvisioningService(UserAccountRepository userAccountRepository,
-                                       RoleRepository roleRepository,
-                                       UserRoleRelRepository userRoleRelRepository,
-                                       StoreAdminRelRepository storeAdminRelRepository,
-                                       UserCodeGenerator userCodeGenerator,
-                                       DictionaryLookupService dictionaryLookupService) {
-        this.userAccountRepository = userAccountRepository;
-        this.roleRepository = roleRepository;
-        this.userRoleRelRepository = userRoleRelRepository;
-        this.storeAdminRelRepository = storeAdminRelRepository;
-        this.userCodeGenerator = userCodeGenerator;
-        this.dictionaryLookupService = dictionaryLookupService;
+    /** 身份与权限服务，负责相关业务规则和流程协作。 */
+    public OrgAdminProvisioningService(UserAccountRepository userAccountRepositoryValue,
+                                       RoleRepository roleRepositoryValue,
+                                       UserRoleRelRepository userRoleRelRepositoryValue,
+                                       StoreAdminRelRepository storeAdminRelRepositoryValue,
+                                       UserCodeGenerator userCodeGeneratorValue,
+                                       DictionaryLookupService dictionaryLookupServiceValue) {
+        this.userAccountRepository = userAccountRepositoryValue;
+        this.roleRepository = roleRepositoryValue;
+        this.userRoleRelRepository = userRoleRelRepositoryValue;
+        this.storeAdminRelRepository = storeAdminRelRepositoryValue;
+        this.userCodeGenerator = userCodeGeneratorValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
     /**
@@ -79,6 +81,14 @@ public class OrgAdminProvisioningService {
     @Transactional(propagation = Propagation.MANDATORY)
     public void createStoreAdmin(Long groupId, Long storeId, Long operatorId, String realName, String phone) {
         UserAccountDO user = createAdminUser(realName, phone, SCOPE_STORE, storeId);
+        assignStoreAdmin(groupId, storeId, operatorId, user.getId());
+    }
+
+    /** 处理Transactional。 */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void assignStoreAdmin(Long groupId, Long storeId, Long operatorId, Long adminUserId) {
+        UserAccountDO user = userAccountRepository.findById(adminUserId)
+                .orElseThrow(() -> new BusinessException("请选择有效的门店管理员"));
         RoleDO role = roleRepository.findByTenantGroupIdAndRoleCode(groupId, STORE_ADMIN_ROLE_CODE)
                 .orElseThrow(() -> new BusinessException("门店管理员角色未初始化"));
         bindRole(user.getId(), role.getId(), SCOPE_STORE, storeId, operatorId);

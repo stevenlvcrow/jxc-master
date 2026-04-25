@@ -24,123 +24,153 @@ public class InventoryDocumentLine {
     private String extraJson;
     private LocalDateTime createdAt;
 
+    /** 获取Id。 */
     public Long getId() {
         return id;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    /** 设置Id。 */
+    public void setId(Long idValue) {
+        this.id = idValue;
     }
 
+    /** 获取HeaderId。 */
     public Long getHeaderId() {
         return headerId;
     }
 
-    public void setHeaderId(Long headerId) {
-        this.headerId = headerId;
+    /** 设置HeaderId。 */
+    public void setHeaderId(Long headerIdValue) {
+        this.headerId = headerIdValue;
     }
 
+    /** 获取ItemCode。 */
     public String getItemCode() {
         return itemCode;
     }
 
-    public void setItemCode(String itemCode) {
-        this.itemCode = itemCode;
+    /** 设置ItemCode。 */
+    public void setItemCode(String itemCodeValue) {
+        this.itemCode = itemCodeValue;
     }
 
+    /** 获取ItemName。 */
     public String getItemName() {
         return itemName;
     }
 
-    public void setItemName(String itemName) {
-        this.itemName = itemName;
+    /** 设置ItemName。 */
+    public void setItemName(String itemNameValue) {
+        this.itemName = itemNameValue;
     }
 
+    /** 获取Spec。 */
     public String getSpec() {
         return spec;
     }
 
-    public void setSpec(String spec) {
-        this.spec = spec;
+    /** 设置Spec。 */
+    public void setSpec(String specValue) {
+        this.spec = specValue;
     }
 
+    /** 获取Category。 */
     public String getCategory() {
         return category;
     }
 
-    public void setCategory(String category) {
-        this.category = category;
+    /** 设置Category。 */
+    public void setCategory(String categoryValue) {
+        this.category = categoryValue;
     }
 
+    /** 获取UnitName。 */
     public String getUnitName() {
         return unitName;
     }
 
-    public void setUnitName(String unitName) {
-        this.unitName = unitName;
+    /** 设置UnitName。 */
+    public void setUnitName(String unitNameValue) {
+        this.unitName = unitNameValue;
     }
 
+    /** 获取AvailableQty。 */
     public BigDecimal getAvailableQty() {
         return availableQty;
     }
 
-    public void setAvailableQty(BigDecimal availableQty) {
-        this.availableQty = availableQty;
+    /** 设置AvailableQty。 */
+    public void setAvailableQty(BigDecimal availableQtyValue) {
+        this.availableQty = availableQtyValue;
     }
 
+    /** 获取Quantity。 */
     public BigDecimal getQuantity() {
         return quantity;
     }
 
-    public void setQuantity(BigDecimal quantity) {
-        this.quantity = quantity;
+    /** 设置Quantity。 */
+    public void setQuantity(BigDecimal quantityValue) {
+        this.quantity = quantityValue;
     }
 
+    /** 获取UnitPrice。 */
     public BigDecimal getUnitPrice() {
         return unitPrice;
     }
 
-    public void setUnitPrice(BigDecimal unitPrice) {
-        this.unitPrice = unitPrice;
+    /** 设置UnitPrice。 */
+    public void setUnitPrice(BigDecimal unitPriceValue) {
+        this.unitPrice = unitPriceValue;
     }
 
+    /** 获取Amount。 */
     public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
+    /** 设置Amount。 */
+    public void setAmount(BigDecimal amountValue) {
+        this.amount = amountValue;
     }
 
+    /** 获取LineReason。 */
     public String getLineReason() {
         return lineReason;
     }
 
-    public void setLineReason(String lineReason) {
-        this.lineReason = lineReason;
+    /** 设置LineReason。 */
+    public void setLineReason(String lineReasonValue) {
+        this.lineReason = lineReasonValue;
     }
 
+    /** 获取Remark。 */
     public String getRemark() {
         return remark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    /** 设置Remark。 */
+    public void setRemark(String remarkValue) {
+        this.remark = remarkValue;
     }
 
+    /** 获取ExtraJson。 */
     public String getExtraJson() {
         return extraJson;
     }
 
-    public void setExtraJson(String extraJson) {
-        this.extraJson = extraJson;
+    /** 设置ExtraJson。 */
+    public void setExtraJson(String extraJsonValue) {
+        this.extraJson = extraJsonValue;
     }
 
+    /** 获取CreatedAt。 */
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    /** 设置CreatedAt。 */
+    public void setCreatedAt(LocalDateTime createdAtValue) {
+        this.createdAt = createdAtValue;
     }
 }

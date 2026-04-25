@@ -1,14 +1,7 @@
 package com.boboboom.jxc.purchase.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService;
-import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.BatchActionRequest;
-import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.IdPayload;
-import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.LineReviewBatchRequest;
-import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.LineUpdateBatchRequest;
-import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.PageData;
-import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.PurchaseDocumentView;
-import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.SavePurchaseDocumentRequest;
+import java.util.Map;
+
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,8 +13,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService;
+import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.BatchActionRequest;
+import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.IdPayload;
+import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.LineReviewBatchRequest;
+import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.LineUpdateBatchRequest;
+import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.PageData;
+import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.PurchaseDocumentView;
+import com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService.SavePurchaseDocumentRequest;
 
+/** 采购单据接口，负责采购相关 HTTP 请求的协议适配。 */
 @Validated
 @RestController
 @RequestMapping("/api/purchase/documents")
@@ -29,16 +31,19 @@ public class PurchaseDocumentController {
 
     private final PurchaseDocumentApplicationService purchaseDocumentApplicationService;
 
-    public PurchaseDocumentController(PurchaseDocumentApplicationService purchaseDocumentApplicationService) {
-        this.purchaseDocumentApplicationService = purchaseDocumentApplicationService;
+    /** 采购单据接口，负责采购相关 HTTP 请求的协议适配。 */
+    public PurchaseDocumentController(PurchaseDocumentApplicationService purchaseDocumentApplicationServiceValue) {
+        this.purchaseDocumentApplicationService = purchaseDocumentApplicationServiceValue;
     }
 
+    /** 分页查询业务数据。 */
     @GetMapping("/{documentType}")
     public CodeDataResponse<PageData<PurchaseDocumentView>> page(@PathVariable String documentType,
                                                                   @RequestParam Map<String, String> params) {
         return CodeDataResponse.ok(purchaseDocumentApplicationService.page(documentType, params));
     }
 
+    /** 查询业务详情。 */
     @GetMapping("/{documentType}/{id:\\d+}")
     public CodeDataResponse<PurchaseDocumentView> detail(@PathVariable String documentType,
                                                          @PathVariable Long id,
@@ -46,6 +51,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok(purchaseDocumentApplicationService.detail(documentType, id, orgId));
     }
 
+    /** 创建业务记录。 */
     @PostMapping("/{documentType}")
     public CodeDataResponse<IdPayload> create(@PathVariable String documentType,
                                               @RequestParam(required = false) String orgId,
@@ -53,6 +59,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok(purchaseDocumentApplicationService.create(documentType, request, orgId));
     }
 
+    /** 更新业务记录。 */
     @PutMapping("/{documentType}/{id:\\d+}")
     public CodeDataResponse<Void> update(@PathVariable String documentType,
                                          @PathVariable Long id,
@@ -62,6 +69,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 删除业务记录。 */
     @DeleteMapping("/{documentType}/{id:\\d+}")
     public CodeDataResponse<Void> delete(@PathVariable String documentType,
                                          @PathVariable Long id,
@@ -70,6 +78,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 批量删除业务记录。 */
     @PostMapping("/{documentType}/batch-delete")
     public CodeDataResponse<Void> batchDelete(@PathVariable String documentType,
                                               @RequestParam(required = false) String orgId,
@@ -78,6 +87,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/{documentType}/batch-submit")
     public CodeDataResponse<Void> batchSubmit(@PathVariable String documentType,
                                               @RequestParam(required = false) String orgId,
@@ -86,6 +96,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/{documentType}/batch-approve")
     public CodeDataResponse<Void> batchApprove(@PathVariable String documentType,
                                                @RequestParam(required = false) String orgId,
@@ -94,6 +105,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/{documentType}/batch-reject")
     public CodeDataResponse<Void> batchReject(@PathVariable String documentType,
                                               @RequestParam(required = false) String orgId,
@@ -102,6 +114,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/{documentType}/batch-unapprove")
     public CodeDataResponse<Void> batchUnapprove(@PathVariable String documentType,
                                                  @RequestParam(required = false) String orgId,
@@ -110,6 +123,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/{documentType}/batch-print")
     public CodeDataResponse<Void> batchPrint(@PathVariable String documentType,
                                              @RequestParam(required = false) String orgId,
@@ -118,6 +132,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/{documentType}/batch-close")
     public CodeDataResponse<Void> batchClose(@PathVariable String documentType,
                                              @RequestParam(required = false) String orgId,
@@ -126,6 +141,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/{documentType}/batch-cancel-close")
     public CodeDataResponse<Void> batchCancelClose(@PathVariable String documentType,
                                                    @RequestParam(required = false) String orgId,
@@ -134,6 +150,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/{documentType}/batch-receive")
     public CodeDataResponse<Void> batchReceive(@PathVariable String documentType,
                                                @RequestParam(required = false) String orgId,
@@ -142,6 +159,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/{documentType}/batch-cancel-receive")
     public CodeDataResponse<Void> batchCancelReceive(@PathVariable String documentType,
                                                      @RequestParam(required = false) String orgId,
@@ -150,6 +168,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/applications/review-lines")
     public CodeDataResponse<Void> reviewApplicationLines(@RequestParam(required = false) String orgId,
                                                          @RequestBody LineReviewBatchRequest request) {
@@ -157,6 +176,7 @@ public class PurchaseDocumentController {
         return CodeDataResponse.ok();
     }
 
+    /** 处理PostMapping。 */
     @PostMapping("/applications/update-lines")
     public CodeDataResponse<Void> updateApplicationLines(@RequestParam(required = false) String orgId,
                                                          @RequestBody LineUpdateBatchRequest request) {

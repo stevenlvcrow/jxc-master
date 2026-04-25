@@ -10,6 +10,7 @@ public final class PurchaseInboundWorkflowBridge {
     private PurchaseInboundWorkflowBridge() {
     }
 
+    /** 转换为单头。 */
     public static InventoryDocumentHeader toHeader(PurchaseInboundDO source) {
         InventoryDocumentHeader header = new InventoryDocumentHeader();
         header.setId(source.getId());
@@ -41,6 +42,7 @@ public final class PurchaseInboundWorkflowBridge {
         return header;
     }
 
+    /** 回写单头。 */
     public static void applyHeader(PurchaseInboundDO target, InventoryDocumentHeader source) {
         target.setScopeType(source.getScopeType());
         target.setScopeId(source.getScopeId());

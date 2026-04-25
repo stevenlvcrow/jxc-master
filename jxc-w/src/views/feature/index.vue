@@ -37,7 +37,6 @@ import CustomerSalesOutboundView from '@/views/inventory/customer-sales-outbound
 import CustomerReturnInboundView from '@/views/inventory/customer-return-inbound.vue';
 import InventoryCheckView from '@/views/inventory/inventory-check.vue';
 import MultiInventoryCheckView from '@/views/inventory/multi-inventory-check.vue';
-import ProfitInboundView from '@/views/inventory/profit-inbound.vue';
 import LossOutboundView from '@/views/inventory/loss-outbound.vue';
 import DishConsumptionOutboundView from '@/views/inventory/dish-consumption-outbound.vue';
 import BatchAdjustmentView from '@/views/inventory/batch-adjustment.vue';
@@ -95,7 +94,6 @@ const isCustomerSalesOutbound = computed(() => title.value === '客户销售出�
 const isCustomerReturnInbound = computed(() => title.value === '客户退货入库');
 const isInventoryCheck = computed(() => title.value === '盘点单');
 const isMultiInventoryCheck = computed(() => title.value === '多人盘点单');
-const isProfitInbound = computed(() => title.value === '盘盈单');
 const isLossOutbound = computed(() => title.value === '盘亏单');
 const isDishConsumptionOutbound = computed(() => title.value === '菜品消耗出库');
 const isBatchAdjustment = computed(() => title.value === '批次调整单');
@@ -223,9 +221,6 @@ const pendingTasks = [
   </div>
   <div v-else-if="isMultiInventoryCheck" class="page-grid single">
     <MultiInventoryCheckView />
-  </div>
-  <div v-else-if="isProfitInbound" class="page-grid single">
-    <ProfitInboundView />
   </div>
   <div v-else-if="isLossOutbound" class="page-grid single">
     <LossOutboundView />

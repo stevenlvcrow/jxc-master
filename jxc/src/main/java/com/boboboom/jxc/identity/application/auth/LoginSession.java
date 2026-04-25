@@ -3,6 +3,7 @@ package com.boboboom.jxc.identity.application.auth;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
+/** 身份与权限类型，负责Login会话相关处理。 */
 public class LoginSession implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -14,51 +15,63 @@ public class LoginSession implements Serializable {
     private String realName;
     private LocalDateTime loginAt;
 
+    /** 获取Token。 */
     public String getToken() {
         return token;
     }
 
-    public void setToken(String token) {
-        this.token = token;
+    /** 设置Token。 */
+    public void setToken(String tokenValue) {
+        this.token = tokenValue;
     }
 
+    /** 获取RefreshToken。 */
     public String getRefreshToken() {
         return refreshToken;
     }
 
-    public void setRefreshToken(String refreshToken) {
-        this.refreshToken = refreshToken;
+    /** 设置RefreshToken。 */
+    public void setRefreshToken(String refreshTokenValue) {
+        this.refreshToken = refreshTokenValue;
     }
 
+    /** 获取UserId。 */
     public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(Long userId) {
-        this.userId = userId;
+    /** 设置UserId。 */
+    public void setUserId(Long userIdValue) {
+        this.userId = userIdValue;
     }
 
+    /** 获取Phone。 */
     public String getPhone() {
         return phone;
     }
 
-    public void setPhone(String phone) {
-        this.phone = phone;
+    /** 设置Phone。 */
+    public void setPhone(String phoneValue) {
+        this.phone = phoneValue;
     }
 
+    /** 获取RealName。 */
     public String getRealName() {
         return realName;
     }
 
-    public void setRealName(String realName) {
-        this.realName = realName;
+    /** 设置RealName。 */
+    public void setRealName(String realNameValue) {
+        this.realName = realNameValue;
     }
 
+    /** 获取LoginAt。 */
     public LocalDateTime getLoginAt() {
         return loginAt;
     }
 
-    public void setLoginAt(LocalDateTime loginAt) {
-        this.loginAt = loginAt;
+    /** 设置LoginAt。 */
+    public void setLoginAt(LocalDateTime loginAtValue) {
+        this.loginAt = loginAtValue;
     }
 }

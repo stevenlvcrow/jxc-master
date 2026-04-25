@@ -53,7 +53,7 @@ const form = reactive<RoleUpsertPayload>({
 });
 
 const roleTypeOptions = ['PLATFORM', 'GROUP', 'STORE'];
-const dataScopeValues = ['ALL', 'GROUP', 'STORE', 'CUSTOM'];
+const dataScopeValues = ['ALL', 'GROUP', 'STORE', 'SELF'];
 const builtinOptions = [
   { label: '内置', value: true },
   { label: '非内置', value: false },
@@ -88,13 +88,40 @@ const roleTypeFormOptions = computed(() => (
     }
   ))
 ));
-const dataScopeFormOptions = computed(() => (
-  dataScopeDictionaryOptions.value.filter((item) => dataScopeValues.includes(item.itemCode))
-));
 const roleTypeLabel = (value: string) => (
   roleTypeDictionaryOptions.value.find((item) => item.itemCode === value)?.itemLabel ?? value
 );
 const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
+
+const normalizeDataScopeForRole = (roleType: string, dataScopeType?: string) => {
+  if (roleType === 'PLATFORM') {
+    return 'ALL';
+  }
+  if (roleType === 'GROUP') {
+    return dataScopeType === 'GROUP' ? 'GROUP' : 'SELF';
+  }
+  if (roleType === 'STORE') {
+    return dataScopeType === 'STORE' ? 'STORE' : 'SELF';
+  }
+  return 'SELF';
+};
+
+const allowedDataScopesByRoleType = computed(() => {
+  if (form.roleType === 'PLATFORM') {
+    return ['ALL'];
+  }
+  if (form.roleType === 'GROUP') {
+    return ['SELF', 'GROUP'];
+  }
+  if (form.roleType === 'STORE') {
+    return ['SELF', 'STORE'];
+  }
+  return ['SELF'];
+});
+const dataScopeFormOptions = computed(() => (
+  dataScopeDictionaryOptions.value.filter((item) => dataScopeValues.includes(item.itemCode)
+    && allowedDataScopesByRoleType.value.includes(item.itemCode))
+));
 
 const filteredRoles = computed(() => {
   const keyword = queryForm.keyword.trim().toLowerCase();
@@ -121,7 +148,7 @@ const resetForm = () => {
   form.roleName = '';
   form.builtin = false;
   form.roleType = sessionStore.platformAdminMode ? 'PLATFORM' : 'GROUP';
-  form.dataScopeType = sessionStore.platformAdminMode ? 'ALL' : 'GROUP';
+  form.dataScopeType = sessionStore.platformAdminMode ? 'ALL' : 'SELF';
   form.description = '';
   form.status = enabledStatus.value;
   form.menuIds = [];
@@ -162,7 +189,7 @@ const openCreate = () => {
   if (!sessionStore.platformAdminMode) {
     form.builtin = false;
     form.roleType = 'GROUP';
-    form.dataScopeType = 'GROUP';
+    form.dataScopeType = 'SELF';
   }
   dialogVisible.value = true;
 };
@@ -173,7 +200,7 @@ const openEdit = (row: RoleAdminItem) => {
   form.roleName = row.roleName;
   form.builtin = Boolean(row.builtin);
   form.roleType = row.roleType;
-  form.dataScopeType = row.dataScopeType;
+  form.dataScopeType = normalizeDataScopeForRole(row.roleType, row.dataScopeType);
   form.description = row.description ?? '';
   form.status = row.status;
   form.menuIds = row.menuIds ?? [];
@@ -197,7 +224,7 @@ const handleSave = async () => {
       roleName: form.roleName.trim(),
       builtin: Boolean(form.builtin),
       roleType: form.roleType ?? 'PLATFORM',
-      dataScopeType: form.dataScopeType ?? 'ALL',
+      dataScopeType: normalizeDataScopeForRole(form.roleType ?? 'PLATFORM', form.dataScopeType),
       description: form.description?.trim(),
       status: form.status ?? enabledStatus.value,
       menuIds: form.menuIds ?? [],
@@ -264,15 +291,11 @@ watch(
       if (!roleTypeOptions.includes(form.roleType)) {
         form.roleType = 'PLATFORM';
       }
-      if (!form.dataScopeType) {
-        form.dataScopeType = form.roleType === 'PLATFORM' ? 'ALL' : form.roleType;
-      }
+      form.dataScopeType = normalizeDataScopeForRole(form.roleType, form.dataScopeType);
       return;
     }
     form.roleType = 'PLATFORM';
-    if (form.dataScopeType !== 'ALL' && form.dataScopeType !== 'CUSTOM') {
-      form.dataScopeType = 'ALL';
-    }
+    form.dataScopeType = 'ALL';
   },
   { immediate: true },
 );
@@ -283,19 +306,7 @@ watch(
     if (!roleType) {
       return;
     }
-    if (roleType === 'PLATFORM') {
-      if (form.dataScopeType !== 'ALL' && form.dataScopeType !== 'CUSTOM') {
-        form.dataScopeType = 'ALL';
-      }
-      return;
-    }
-    if (roleType === 'GROUP' && form.dataScopeType === 'ALL') {
-      form.dataScopeType = 'GROUP';
-      return;
-    }
-    if (roleType === 'STORE' && (form.dataScopeType === 'ALL' || form.dataScopeType === 'GROUP')) {
-      form.dataScopeType = 'STORE';
-    }
+    form.dataScopeType = normalizeDataScopeForRole(roleType, form.dataScopeType);
   },
   { immediate: true },
 );

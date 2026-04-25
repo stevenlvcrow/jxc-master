@@ -1,14 +1,5 @@
 package com.boboboom.jxc.cost.interfaces.rest;
 
-import com.boboboom.jxc.cost.application.service.CostCardApplicationService;
-import com.boboboom.jxc.cost.application.service.CostCardApplicationService.CostCardDetail;
-import com.boboboom.jxc.cost.application.service.CostCardApplicationService.CostCardRow;
-import com.boboboom.jxc.cost.application.service.CostCardApplicationService.CostCardSaveRequest;
-import com.boboboom.jxc.cost.application.service.CostCardApplicationService.DishCostCardBindingRequest;
-import com.boboboom.jxc.cost.application.service.CostCardApplicationService.IdPayload;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
-import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +11,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.boboboom.jxc.cost.application.service.CostCardApplicationService;
+import com.boboboom.jxc.cost.application.service.CostCardApplicationService.CostCardDetail;
+import com.boboboom.jxc.cost.application.service.CostCardApplicationService.CostCardRow;
+import com.boboboom.jxc.cost.application.service.CostCardApplicationService.CostCardSaveRequest;
+import com.boboboom.jxc.cost.application.service.CostCardApplicationService.DishCostCardBindingRequest;
+import com.boboboom.jxc.cost.application.service.CostCardApplicationService.IdPayload;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
+
+import jakarta.validation.Valid;
+
 /**
  * 成本卡接口，提供成本卡档案、版本启停和菜品绑定能力。
  */
@@ -30,8 +32,9 @@ public class CostCardController {
 
     private final CostCardApplicationService costCardApplicationService;
 
-    public CostCardController(CostCardApplicationService costCardApplicationService) {
-        this.costCardApplicationService = costCardApplicationService;
+    /** 成本卡接口入口，负责接收请求、调用业务服务并返回统一响应。 */
+    public CostCardController(CostCardApplicationService costCardApplicationServiceValue) {
+        this.costCardApplicationService = costCardApplicationServiceValue;
     }
 
     /**

@@ -78,7 +78,16 @@ export type UserAdminItem = {
   phone: string;
   status: string;
   createdAt: string;
+  groups: Array<{ groupId: number; groupName: string }>;
   roles: RoleAssignment[];
+};
+
+export type GroupUserOptionItem = {
+  userId: number;
+  username: string;
+  realName: string;
+  phone: string;
+  status: string;
 };
 
 export type SalesmanCandidateItem = {
@@ -109,9 +118,26 @@ export type MenuAdminItem = {
   parentId: number | null;
   menuType: 'DIRECTORY' | 'MENU' | 'BUTTON' | 'API';
   routePath: string | null;
+  componentKey: string | null;
   permissionCode: string | null;
+  icon: string | null;
   status: string;
+  visible?: boolean;
   sortNo: number;
+};
+
+export type MenuMaintenancePayload = {
+  menuCode: string;
+  menuName: string;
+  parentId: number | null;
+  menuType: 'DIRECTORY' | 'MENU' | 'BUTTON' | 'API';
+  routePath?: string | null;
+  componentKey?: string | null;
+  permissionCode?: string | null;
+  icon?: string | null;
+  sortNo: number;
+  visible: boolean;
+  status: string;
 };
 
 export type RoleUpsertPayload = {
@@ -155,11 +181,13 @@ export const deleteAdminGroupApi = (id: number) =>
 export const fetchGroupStoresApi = (groupId: number) =>
   fetchAdminPagedList<GroupStoreItem>(`/api/identity/admin/groups/${groupId}/stores`);
 
+export const fetchGroupUsersApi = (groupId: number) =>
+  fetchAdminPagedList<GroupUserOptionItem>(`/api/identity/admin/groups/${groupId}/users`);
+
 export const createGroupStoreApi = (groupId: number, payload: {
   storeCode?: string;
   storeName: string;
-  adminRealName: string;
-  adminPhone: string;
+  adminUserId: number;
   status?: string;
   contactName?: string;
   contactPhone?: string;
@@ -229,3 +257,18 @@ export const fetchAdminMenusApi = (orgId?: string) =>
 
 export const assignAdminRoleMenusApi = (id: number, menuIds: number[]) =>
   apiClient.put<void>(`/api/identity/admin/roles/${id}/menus`, { menuIds });
+
+export const fetchMenuMaintenanceApi = () =>
+  apiClient.get<MenuAdminItem[]>('/api/identity/admin/menu-maintenance');
+
+export const createMenuMaintenanceApi = (payload: MenuMaintenancePayload) =>
+  apiClient.post<{ id: number }>('/api/identity/admin/menu-maintenance', payload);
+
+export const updateMenuMaintenanceApi = (id: number, payload: MenuMaintenancePayload) =>
+  apiClient.put<void>(`/api/identity/admin/menu-maintenance/${id}`, payload);
+
+export const deleteMenuMaintenanceApi = (id: number) =>
+  apiClient.delete<void>(`/api/identity/admin/menu-maintenance/${id}`);
+
+export const sortMenuMaintenanceApi = (items: Array<{ id: number; parentId: number | null; sortNo: number }>) =>
+  apiClient.put<void>('/api/identity/admin/menu-maintenance/sort', { items });

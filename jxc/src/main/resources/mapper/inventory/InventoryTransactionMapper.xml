@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.inventory.infrastructure.persistence.mapper.InventoryTransactionMapper">
+
+    <resultMap id="InventoryTransactionDOResultMap" type="com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryTransactionDO">
+        <id property="id" column="id"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="bizType" column="biz_type"/>
+        <result property="bizId" column="biz_id"/>
+        <result property="bizLineId" column="biz_line_id"/>
+        <result property="warehouseName" column="warehouse_name"/>
+        <result property="itemCode" column="item_code"/>
+        <result property="itemName" column="item_name"/>
+        <result property="quantityDelta" column="quantity_delta"/>
+        <result property="beforeQty" column="before_qty"/>
+        <result property="afterQty" column="after_qty"/>
+        <result property="operatorId" column="operator_id"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <resultMap id="InventoryBalanceDOResultMap" type="com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO">
+        <id property="id" column="id"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="warehouseName" column="warehouse_name"/>
+        <result property="itemCode" column="item_code"/>
+        <result property="itemName" column="item_name"/>
+        <result property="quantity" column="quantity"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="InventoryTransactionColumns">
+        id, scope_type, scope_id, biz_type, biz_id, biz_line_id, warehouse_name, item_code, item_name,
+        quantity_delta, before_qty, after_qty, operator_id, created_at
+    </sql>
+
+    <select id="selectByScopeOrdered" resultMap="InventoryTransactionDOResultMap">
+        select
+        <include refid="InventoryTransactionColumns"/>
+        from inventory_transaction
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+        order by created_at asc, id asc
+    </select>
+
+    <select id="selectByScopeAndCreatedAtRange" resultMap="InventoryTransactionDOResultMap">
+        select
+        <include refid="InventoryTransactionColumns"/>
+        from inventory_transaction
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+        <if test="startTime != null">
+          and created_at &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+          and created_at &lt;= #{endTime}
+        </if>
+        order by created_at asc, id asc
+    </select>
+
+    <select id="selectLatestBalancesBefore" resultMap="InventoryBalanceDOResultMap">
+        select id, scope_type, scope_id, warehouse_name, item_code, item_name, quantity, created_at, updated_at
+        from (
+            select id,
+                   scope_type,
+                   scope_id,
+                   warehouse_name,
+                   item_code,
+                   item_name,
+                   after_qty as quantity,
+                   created_at,
+                   created_at as updated_at,
+                   row_number() over (partition by warehouse_name, item_code order by created_at desc, id desc) rn
+            from inventory_transaction
+            where scope_type = #{scopeType}
+              and scope_id = #{scopeId}
+              and created_at &lt;= #{cutoff}
+            <if test="warehouseName != null and warehouseName != ''">
+              and warehouse_name = #{warehouseName}
+            </if>
+        ) t
+        where rn = 1
+        order by warehouse_name, item_code
+    </select>
+</mapper>

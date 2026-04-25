@@ -368,6 +368,27 @@ const handleApprove = async (row: GenericInventoryDocumentRow) => {
   }
 };
 
+const handleUnapprove = async (row: GenericInventoryDocumentRow) => {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入撤销期初原因', '撤销期初', {
+      confirmButtonText: '确认撤销',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '请输入撤销期初原因',
+      inputValidator: (input: string) => input.trim() ? true : '请填写撤销期初原因',
+    });
+    try {
+      await batchUnapproveGenericInventoryDocumentApi(props.meta.type, [row.id], value.trim(), orgId.value);
+      ElMessage.success('撤销期初成功');
+      await loadRows();
+    } catch {
+      ElMessage.error('撤销期初失败');
+    }
+  } catch {
+    // 用户取消时不提示
+  }
+};
+
 const handleSelectionChange = (items: GenericInventoryDocumentRow[]) => {
   selectedIds.value = items.map((item) => item.id);
 };
@@ -495,7 +516,7 @@ onMounted(() => {
         <el-table-column
           v-else-if="column.type === 'operation'"
           :label="column.label"
-          :width="isWarehouseOpeningBalance ? 240 : (column.width ?? 160)"
+          :width="isWarehouseOpeningBalance ? 300 : (column.width ?? 160)"
           :fixed="column.fixed ?? 'right'"
         >
           <template #default="{ row }">
@@ -512,6 +533,12 @@ onMounted(() => {
                 <el-button v-if="permissions.canUpdate" text @click="handleEdit(row)">编辑</el-button>
                 <el-button v-if="permissions.canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
                 <el-button v-if="canConfirmCurrentType" text type="primary" @click="handleApprove(row)">确认期初</el-button>
+              </template>
+              <template v-else-if="row.status === approvedStatus">
+                <el-button text type="primary" @click="handleView(row)">查看</el-button>
+                <el-button v-if="permissions.canUnapprove" text type="danger" @click="handleUnapprove(row)">
+                  撤销期初
+                </el-button>
               </template>
             </template>
             <template v-else>

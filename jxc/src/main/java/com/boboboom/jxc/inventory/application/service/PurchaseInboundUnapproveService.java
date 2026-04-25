@@ -1,15 +1,16 @@
 package com.boboboom.jxc.inventory.application.service;
 
+import java.util.List;
+import java.util.Objects;
+
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
 import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-
-import java.util.List;
-import java.util.Objects;
 
 /**
  * 采购入库反审核编排服务。
@@ -27,16 +28,17 @@ public class PurchaseInboundUnapproveService {
     private final PurchaseInboundRepository purchaseInboundRepository;
     private final DictionaryLookupService dictionaryLookupService;
 
-    public PurchaseInboundUnapproveService(InventoryDocumentWorkflowService inventoryDocumentWorkflowService,
-                                           PurchaseInboundNotificationService purchaseInboundNotificationService,
-                                           InventoryStockMutationService inventoryStockMutationService,
-                                           PurchaseInboundRepository purchaseInboundRepository,
-                                           DictionaryLookupService dictionaryLookupService) {
-        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowService;
-        this.purchaseInboundNotificationService = purchaseInboundNotificationService;
-        this.inventoryStockMutationService = inventoryStockMutationService;
-        this.purchaseInboundRepository = purchaseInboundRepository;
-        this.dictionaryLookupService = dictionaryLookupService;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public PurchaseInboundUnapproveService(InventoryDocumentWorkflowService inventoryDocumentWorkflowServiceValue,
+                                           PurchaseInboundNotificationService purchaseInboundNotificationServiceValue,
+                                           InventoryStockMutationService inventoryStockMutationServiceValue,
+                                           PurchaseInboundRepository purchaseInboundRepositoryValue,
+                                           DictionaryLookupService dictionaryLookupServiceValue) {
+        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowServiceValue;
+        this.purchaseInboundNotificationService = purchaseInboundNotificationServiceValue;
+        this.inventoryStockMutationService = inventoryStockMutationServiceValue;
+        this.purchaseInboundRepository = purchaseInboundRepositoryValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
     /**

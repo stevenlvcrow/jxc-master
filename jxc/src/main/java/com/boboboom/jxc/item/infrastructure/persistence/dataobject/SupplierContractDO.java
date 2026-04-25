@@ -1,11 +1,12 @@
 package com.boboboom.jxc.item.infrastructure.persistence.dataobject;
 
+import java.time.LocalDate;
+
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.BaseAuditDO;
 
-import java.time.LocalDate;
-
-@TableName("dev.supplier_contract")
+/** 物品与供应商数据对象，映射数据库表记录。 */
+@TableName("supplier_contract")
 public class SupplierContractDO extends BaseAuditDO {
 
     private Long supplierId;
@@ -17,68 +18,84 @@ public class SupplierContractDO extends BaseAuditDO {
     private LocalDate validTo;
     private String status;
 
+    /** 获取SupplierId。 */
     public Long getSupplierId() {
         return supplierId;
     }
 
-    public void setSupplierId(Long supplierId) {
-        this.supplierId = supplierId;
+    /** 设置SupplierId。 */
+    public void setSupplierId(Long supplierIdValue) {
+        this.supplierId = supplierIdValue;
     }
 
+    /** 获取SortNo。 */
     public Integer getSortNo() {
         return sortNo;
     }
 
-    public void setSortNo(Integer sortNo) {
-        this.sortNo = sortNo;
+    /** 设置SortNo。 */
+    public void setSortNo(Integer sortNoValue) {
+        this.sortNo = sortNoValue;
     }
 
+    /** 获取AttachmentName。 */
     public String getAttachmentName() {
         return attachmentName;
     }
 
-    public void setAttachmentName(String attachmentName) {
-        this.attachmentName = attachmentName;
+    /** 设置AttachmentName。 */
+    public void setAttachmentName(String attachmentNameValue) {
+        this.attachmentName = attachmentNameValue;
     }
 
+    /** 获取AttachmentUrl。 */
     public String getAttachmentUrl() {
         return attachmentUrl;
     }
 
-    public void setAttachmentUrl(String attachmentUrl) {
-        this.attachmentUrl = attachmentUrl;
+    /** 设置AttachmentUrl。 */
+    public void setAttachmentUrl(String attachmentUrlValue) {
+        this.attachmentUrl = attachmentUrlValue;
     }
 
+    /** 获取ContractName。 */
     public String getContractName() {
         return contractName;
     }
 
-    public void setContractName(String contractName) {
-        this.contractName = contractName;
+    /** 设置ContractName。 */
+    public void setContractName(String contractNameValue) {
+        this.contractName = contractNameValue;
     }
 
+    /** 获取ContractCode。 */
     public String getContractCode() {
         return contractCode;
     }
 
-    public void setContractCode(String contractCode) {
-        this.contractCode = contractCode;
+    /** 设置ContractCode。 */
+    public void setContractCode(String contractCodeValue) {
+        this.contractCode = contractCodeValue;
     }
 
+    /** 获取ValidTo。 */
     public LocalDate getValidTo() {
         return validTo;
     }
 
-    public void setValidTo(LocalDate validTo) {
-        this.validTo = validTo;
+    /** 设置ValidTo。 */
+    public void setValidTo(LocalDate validToValue) {
+        this.validTo = validToValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 }
 

@@ -1,26 +1,5 @@
 package com.boboboom.jxc.workflow.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.common.dictionary.DictionaryCodes;
-import com.boboboom.jxc.inventory.application.service.InventoryDocumentType;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
-import com.boboboom.jxc.identity.domain.repository.StoreRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
-import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
-import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRepository;
-import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
-import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
-import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessStoreBindingDO;
-import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowProcessStoreBindRequest;
-import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowProcessUpsertRequest;
-import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowTemplateBindRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -35,6 +14,30 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
+import com.boboboom.jxc.identity.domain.repository.StoreRepository;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
+import com.boboboom.jxc.inventory.application.service.InventoryDocumentType;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRepository;
+import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
+import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
+import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessStoreBindingDO;
+import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowProcessBatchStoreBindRequest;
+import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowProcessStoreBindRequest;
+import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowProcessUpsertRequest;
+import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowTemplateBindRequest;
+
+/** 流程管理业务服务，负责流程定义、模板绑定和门店绑定维护。 */
 @Service
 public class WorkflowProcessApplicationService {
 
@@ -66,22 +69,24 @@ public class WorkflowProcessApplicationService {
     private final DictionaryLookupService dictionaryLookupService;
     private final InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService;
 
-    public WorkflowProcessApplicationService(WorkflowProcessRegistryRepository processRegistryRepository,
-                                             WorkflowProcessStoreBindingRepository processStoreBindingRepository,
-                                             WorkflowDefinitionConfigRepository configRepository,
-                                             StoreRepository storeRepository,
-                                             OrgScopeService orgScopeService,
-                                             DictionaryLookupService dictionaryLookupService,
-                                             InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService) {
-        this.processRegistryRepository = processRegistryRepository;
-        this.processStoreBindingRepository = processStoreBindingRepository;
-        this.configRepository = configRepository;
-        this.storeRepository = storeRepository;
-        this.orgScopeService = orgScopeService;
-        this.dictionaryLookupService = dictionaryLookupService;
-        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapService;
+    /** 流程管理业务服务，负责流程定义、模板绑定和门店绑定维护。 */
+    public WorkflowProcessApplicationService(WorkflowProcessRegistryRepository processRegistryRepositoryValue,
+                                             WorkflowProcessStoreBindingRepository processStoreBindingRepositoryValue,
+                                             WorkflowDefinitionConfigRepository configRepositoryValue,
+                                             StoreRepository storeRepositoryValue,
+                                             OrgScopeService orgScopeServiceValue,
+                                             DictionaryLookupService dictionaryLookupServiceValue,
+                                             InventoryWorkflowBootstrapService inventoryWorkflowBootstrapServiceValue) {
+        this.processRegistryRepository = processRegistryRepositoryValue;
+        this.processStoreBindingRepository = processStoreBindingRepositoryValue;
+        this.configRepository = configRepositoryValue;
+        this.storeRepository = storeRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
+        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapServiceValue;
     }
 
+    /** 分页查询业务列表。 */
     public List<WorkflowProcessView> list(String orgId) {
         Long groupId = resolveGroupScope(orgId);
         inventoryWorkflowBootstrapService.ensureDefaults(groupId, AuthContextHolder.requireUserId("登录已失效，请重新登录"));
@@ -109,7 +114,7 @@ public class WorkflowProcessApplicationService {
                 continue;
             }
             processStoreNamesMap.computeIfAbsent(binding.getProcessRegistryId(), key -> new ArrayList<>())
-                    .add((store.getStoreName() == null ? "" : store.getStoreName()) + "(" + store.getStoreCode() + ")");
+                    .add(store.getStoreName() == null ? "" : store.getStoreName());
         }
 
         return processes.stream()
@@ -120,6 +125,7 @@ public class WorkflowProcessApplicationService {
                 .toList();
     }
 
+    /** 查询可绑定门店列表。 */
     public List<StoreOptionView> listStores(String orgId) {
         Long groupId = resolveGroupScope(orgId);
         return storeRepository.findByGroupId(groupId).stream()
@@ -129,14 +135,13 @@ public class WorkflowProcessApplicationService {
                 .toList();
     }
 
+    /** 创建业务记录。 */
     @Transactional
     public IdPayload create(String orgId, WorkflowProcessUpsertRequest request) {
         Long groupId = resolveGroupScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         String processCode = normalizeCode(request.process_code(), "业务编码不能为空");
         String businessName = normalizeName(request.businessName(), "业务名称不能为空");
-        String templateId = trimNullable(request.templateId());
-        ensureTemplatePublished(groupId, processCode, templateId);
         ensureProcessCodeUnique(groupId, processCode, null);
 
         WorkflowProcessRegistryDO row = new WorkflowProcessRegistryDO();
@@ -144,13 +149,16 @@ public class WorkflowProcessApplicationService {
         row.setScopeId(groupId);
         row.setProcessCode(processCode);
         row.setBusinessName(businessName);
-        row.setTemplateId(templateId);
+        row.setTemplateId(InventoryWorkflowBootstrapService.DEFAULT_WORKFLOW_CODE);
         row.setCreatedBy(operatorId);
         row.setUpdatedBy(operatorId);
         processRegistryRepository.save(row);
+        inventoryWorkflowBootstrapService.ensureDefaultWorkflowConfig(groupId, operatorId, row, businessName);
+        ensureTemplatePublished(groupId, processCode, row.getTemplateId());
         return new IdPayload(row.getId());
     }
 
+    /** 更新业务记录。 */
     @Transactional
     public void update(Long id, String orgId, WorkflowProcessUpsertRequest request) {
         Long groupId = resolveGroupScope(orgId);
@@ -169,6 +177,7 @@ public class WorkflowProcessApplicationService {
         processRegistryRepository.update(row);
     }
 
+    /** 绑定流程模板。 */
     @Transactional
     public void bindTemplate(Long id, String orgId, WorkflowTemplateBindRequest request) {
         Long groupId = resolveGroupScope(orgId);
@@ -181,6 +190,7 @@ public class WorkflowProcessApplicationService {
         processRegistryRepository.update(row);
     }
 
+    /** 绑定流程适用门店。 */
     @Transactional
     public void bindStores(Long id, String orgId, WorkflowProcessStoreBindRequest request) {
         Long groupId = resolveGroupScope(orgId);
@@ -191,6 +201,35 @@ public class WorkflowProcessApplicationService {
                 .distinct()
                 .toList();
         validateStoreIds(groupId, storeIds);
+        applyStoreBindings(groupId, operatorId, row, storeIds);
+    }
+
+    /** 批量绑定流程适用门店。 */
+    @Transactional
+    public void batchBindStores(String orgId, WorkflowProcessBatchStoreBindRequest request) {
+        Long groupId = resolveGroupScope(orgId);
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        List<Long> processIds = request.processIds() == null ? List.of() : request.processIds().stream()
+                .filter(item -> item != null && item > 0)
+                .distinct()
+                .toList();
+        if (processIds.isEmpty()) {
+            throw new BusinessException("请选择要绑定门店的业务");
+        }
+        List<Long> storeIds = request.storeIds() == null ? List.of() : request.storeIds().stream()
+                .filter(item -> item != null && item > 0)
+                .distinct()
+                .toList();
+        validateStoreIds(groupId, storeIds);
+        for (Long processId : processIds) {
+            applyStoreBindings(groupId, operatorId, requireProcess(processId, groupId), storeIds);
+        }
+    }
+
+    private void applyStoreBindings(Long groupId,
+                                    Long operatorId,
+                                    WorkflowProcessRegistryDO row,
+                                    List<Long> storeIds) {
         List<WorkflowProcessStoreBindingDO> existingBindings = processStoreBindingRepository
                 .findByGroupAndProcessRegistryId(groupId, row.getId());
         Set<Long> existingStoreIds = existingBindings.stream()
@@ -217,15 +256,10 @@ public class WorkflowProcessApplicationService {
         }
     }
 
+    /** 删除业务记录。 */
     @Transactional
     public void delete(Long id, String orgId) {
-        Long groupId = resolveGroupScope(orgId);
-        WorkflowProcessRegistryDO row = requireProcess(id, groupId);
-        if (ALL_PROTECTED_PROCESS_CODES.contains(row.getProcessCode())) {
-            throw new BusinessException("内置流程业务不允许删除");
-        }
-        processStoreBindingRepository.deleteByGroupAndProcessRegistryId(groupId, row.getId());
-        processRegistryRepository.deleteById(row.getId());
+        throw new BusinessException("流程业务不允许删除");
     }
 
     private void validateStoreIds(Long groupId, List<Long> storeIds) {
@@ -331,6 +365,7 @@ public class WorkflowProcessApplicationService {
         return dictionaryLookupService.codeOf(DictionaryCodes.WORKFLOW_DEFINITION_STATUS, DictionaryCodes.PUBLISHED);
     }
 
+    /** 审批流程视图模型，承载页面展示数据。 */
     public record WorkflowProcessView(Long id,
                                       String process_code,
                                       String businessName,
@@ -343,11 +378,13 @@ public class WorkflowProcessApplicationService {
                                       List<String> storeNames) {
     }
 
+    /** 审批流程视图模型，承载页面展示数据。 */
     public record StoreOptionView(Long storeId,
                                   String storeCode,
                                   String storeName) {
     }
 
+    /** 审批流程载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id) {
     }
 }

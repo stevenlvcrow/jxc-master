@@ -1,5 +1,12 @@
 package com.boboboom.jxc.identity.application.service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.springframework.stereotype.Service;
+
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
@@ -9,13 +16,8 @@ import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserRoleAssignRequest;
-import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-
+/** 身份与权限服务，负责相关业务规则和流程协作。 */
 @Service
 public class UserRoleAssignmentService {
 
@@ -30,16 +32,18 @@ public class UserRoleAssignmentService {
     private final UserRoleRelRepository userRoleRelRepository;
     private final DictionaryLookupService dictionaryLookupService;
 
-    public UserRoleAssignmentService(RoleRepository roleRepository,
-                                     UserAccountRepository userAccountRepository,
-                                     UserRoleRelRepository userRoleRelRepository,
-                                     DictionaryLookupService dictionaryLookupService) {
-        this.roleRepository = roleRepository;
-        this.userAccountRepository = userAccountRepository;
-        this.userRoleRelRepository = userRoleRelRepository;
-        this.dictionaryLookupService = dictionaryLookupService;
+    /** 身份与权限服务，负责相关业务规则和流程协作。 */
+    public UserRoleAssignmentService(RoleRepository roleRepositoryValue,
+                                     UserAccountRepository userAccountRepositoryValue,
+                                     UserRoleRelRepository userRoleRelRepositoryValue,
+                                     DictionaryLookupService dictionaryLookupServiceValue) {
+        this.roleRepository = roleRepositoryValue;
+        this.userAccountRepository = userAccountRepositoryValue;
+        this.userRoleRelRepository = userRoleRelRepositoryValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 分配用户角色。 */
     public void assignUserRoles(Long targetUserId,
                                 Long operatorId,
                                 boolean platformAdmin,
@@ -57,27 +61,15 @@ public class UserRoleAssignmentService {
         List<UserRoleAssignRequest.UserRoleAssignment> safeAssignments = assignments == null ? List.of() : assignments;
         boolean containsPlatformSuperAdminRole = false;
         for (UserRoleAssignRequest.UserRoleAssignment assignment : safeAssignments) {
-            if (assignment.getRoleId() == null) {
-                throw new BusinessException("角色ID不能为空");
-            }
-            RoleDO role = roleRepository.findById(assignment.getRoleId()).orElse(null);
-            if (role == null) {
-                throw new BusinessException("角色不存在");
-            }
-            if (!platformAdmin && SCOPE_PLATFORM.equals(role.getRoleType())) {
-                throw new BusinessException("当前账号无平台角色授权权限");
-            }
-            if (PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode())) {
+            RoleDO role = requireAssignableRole(assignment.getRoleId(), platformAdmin);
+            if (isPlatformSuperAdminRole(role)) {
                 containsPlatformSuperAdminRole = true;
-                if (!ADMIN_USERNAME.equalsIgnoreCase(targetUser.getUsername())) {
-                    throw new BusinessException("PLATFORM_SUPER_ADMIN 仅允许绑定 admin 账号");
-                }
+                ensureAdminAccount(targetUser);
             }
             String scopeType = normalizeScopeType(assignment.getScopeType(), role.getRoleType());
             Long scopeId = normalizeScopeId(scopeType, assignment.getScopeId());
-            if (!platformAdmin && !isAllowedScope(scopeType, scopeId, managedGroupIds, managedStoreIds)) {
-                throw new BusinessException("包含无权限授权范围");
-            }
+            ensureRoleScopeMatches(role, scopeType);
+            ensureAllowedAssignmentScope(platformAdmin, scopeType, scopeId, managedGroupIds, managedStoreIds);
             String key = buildAssignmentKey(scopeType, scopeId, assignment.getRoleId());
             if (!seenKeys.add(key)) {
                 throw new BusinessException("同一用户同一门店只能分配一个角色");
@@ -97,21 +89,60 @@ public class UserRoleAssignmentService {
             throw new BusinessException("admin 账号必须保留 PLATFORM_SUPER_ADMIN");
         }
 
-        if (platformAdmin) {
-            userRoleRelRepository.deleteByUserId(targetUserId);
-        } else {
-            if (!managedGroupIds.isEmpty() && !managedStoreIds.isEmpty()) {
-                userRoleRelRepository.deleteByUserIdAndGroupScopes(targetUserId, managedGroupIds);
-                userRoleRelRepository.deleteByUserIdAndStoreScopes(targetUserId, managedStoreIds);
-            } else if (!managedGroupIds.isEmpty()) {
-                userRoleRelRepository.deleteByUserIdAndGroupScopes(targetUserId, managedGroupIds);
-            } else {
-                userRoleRelRepository.deleteByUserIdAndStoreScopes(targetUserId, managedStoreIds);
-            }
-        }
+        replaceExistingAssignments(targetUserId, platformAdmin, managedGroupIds, managedStoreIds);
 
         for (UserRoleRelDO rel : toInsert) {
             userRoleRelRepository.save(rel);
+        }
+    }
+
+    private RoleDO requireAssignableRole(Long roleId, boolean platformAdmin) {
+        if (roleId == null) {
+            throw new BusinessException("角色ID不能为空");
+        }
+        RoleDO role = roleRepository.findById(roleId).orElse(null);
+        if (role == null) {
+            throw new BusinessException("角色不存在");
+        }
+        if (!platformAdmin && SCOPE_PLATFORM.equals(role.getRoleType())) {
+            throw new BusinessException("当前账号无平台角色授权权限");
+        }
+        return role;
+    }
+
+    private boolean isPlatformSuperAdminRole(RoleDO role) {
+        return PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode());
+    }
+
+    private void ensureAdminAccount(UserAccountDO targetUser) {
+        if (!ADMIN_USERNAME.equalsIgnoreCase(targetUser.getUsername())) {
+            throw new BusinessException("PLATFORM_SUPER_ADMIN 仅允许绑定 admin 账号");
+        }
+    }
+
+    private void ensureAllowedAssignmentScope(boolean platformAdmin,
+                                              String scopeType,
+                                              Long scopeId,
+                                              Set<Long> managedGroupIds,
+                                              Set<Long> managedStoreIds) {
+        if (!platformAdmin && !isAllowedScope(scopeType, scopeId, managedGroupIds, managedStoreIds)) {
+            throw new BusinessException("包含无权限授权范围");
+        }
+    }
+
+    private void replaceExistingAssignments(Long targetUserId,
+                                            boolean platformAdmin,
+                                            Set<Long> managedGroupIds,
+                                            Set<Long> managedStoreIds) {
+        if (platformAdmin) {
+            userRoleRelRepository.deleteByUserId(targetUserId);
+            return;
+        }
+        if (!managedGroupIds.isEmpty()) {
+            userRoleRelRepository.deleteByUserIdAndGroupScopes(targetUserId, managedGroupIds);
+        }
+        if (!managedStoreIds.isEmpty()) {
+            userRoleRelRepository.deleteByUserIdAndStoreScopes(targetUserId, managedStoreIds);
         }
     }
 
@@ -152,6 +183,20 @@ public class UserRoleAssignmentService {
         return rawScopeId;
     }
 
+    private void ensureRoleScopeMatches(RoleDO role, String scopeType) {
+        String roleType = trimToNull(role.getRoleType());
+        if (SCOPE_PLATFORM.equals(roleType) && SCOPE_PLATFORM.equals(scopeType)) {
+            return;
+        }
+        if (SCOPE_GROUP.equals(roleType) && SCOPE_GROUP.equals(scopeType)) {
+            return;
+        }
+        if (SCOPE_STORE.equals(roleType) && SCOPE_STORE.equals(scopeType)) {
+            return;
+        }
+        throw new BusinessException("角色类型与授权范围不匹配");
+    }
+
     private boolean isAllowedScope(String scopeType,
                                    Long scopeId,
                                    Set<Long> managedGroupIds,
@@ -174,10 +219,6 @@ public class UserRoleAssignmentService {
         }
 
         if (!hasEnabledRoleAssignments(targetUserId)) {
-            UserAccountDO user = userAccountRepository.findById(targetUserId).orElse(null);
-            if (matchesCreatedScope(user, managedGroupIds, managedStoreIds)) {
-                return;
-            }
             throw new BusinessException("当前账号无该用户操作权限");
         }
 
@@ -193,21 +234,6 @@ public class UserRoleAssignmentService {
         }
         Long count = userRoleRelRepository.countByUserIdAndStatus(userId, enabledStatus());
         return count != null && count > 0;
-    }
-
-    private boolean matchesCreatedScope(UserAccountDO user,
-                                        Set<Long> managedGroupIds,
-                                        Set<Long> managedStoreIds) {
-        if (user == null || user.getCreatedScopeId() == null) {
-            return false;
-        }
-        if (SCOPE_GROUP.equals(user.getCreatedScopeType())) {
-            return managedGroupIds != null && managedGroupIds.contains(user.getCreatedScopeId());
-        }
-        if (SCOPE_STORE.equals(user.getCreatedScopeType())) {
-            return managedStoreIds != null && managedStoreIds.contains(user.getCreatedScopeId());
-        }
-        return false;
     }
 
     private String trimToNull(String value) {

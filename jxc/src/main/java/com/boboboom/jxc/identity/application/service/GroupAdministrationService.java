@@ -1,26 +1,29 @@
 package com.boboboom.jxc.identity.application.service;
 
+import java.util.List;
+import java.util.Objects;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.event.DomainEventPublisher;
+import com.boboboom.jxc.identity.application.event.GroupCreatedEvent;
+import com.boboboom.jxc.identity.application.event.StoreCreatedEvent;
 import com.boboboom.jxc.identity.domain.repository.GroupRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreAdminRelRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
+import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
-import com.boboboom.jxc.identity.application.event.GroupCreatedEvent;
-import com.boboboom.jxc.identity.application.event.StoreCreatedEvent;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupStoreCreateRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.GroupUpsertRequest;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Objects;
-
+/** 身份与权限服务，负责相关业务规则和流程协作。 */
 @Service
 public class GroupAdministrationService {
 
@@ -28,6 +31,7 @@ public class GroupAdministrationService {
     private static final String STORE_CODE_PREFIX = "MDBM";
 
     private final UserRoleRelRepository userRoleRelRepository;
+    private final UserAccountRepository userAccountRepository;
     private final GroupRepository groupRepository;
     private final StoreRepository storeRepository;
     private final StoreAdminRelRepository storeAdminRelRepository;
@@ -36,24 +40,28 @@ public class GroupAdministrationService {
     private final BusinessCodeGenerator businessCodeGenerator;
     private final DomainEventPublisher domainEventPublisher;
 
-    public GroupAdministrationService(UserRoleRelRepository userRoleRelRepository,
-                                      GroupRepository groupRepository,
-                                      StoreRepository storeRepository,
-                                      StoreAdminRelRepository storeAdminRelRepository,
-                                      WorkflowProcessStoreBindingRepository workflowProcessStoreBindingRepository,
-                                      IdentityAdminLookupService identityAdminLookupService,
-                                      BusinessCodeGenerator businessCodeGenerator,
-                                      DomainEventPublisher domainEventPublisher) {
-        this.userRoleRelRepository = userRoleRelRepository;
-        this.groupRepository = groupRepository;
-        this.storeRepository = storeRepository;
-        this.storeAdminRelRepository = storeAdminRelRepository;
-        this.workflowProcessStoreBindingRepository = workflowProcessStoreBindingRepository;
-        this.identityAdminLookupService = identityAdminLookupService;
-        this.businessCodeGenerator = businessCodeGenerator;
-        this.domainEventPublisher = domainEventPublisher;
+    /** 身份与权限服务，负责相关业务规则和流程协作。 */
+    public GroupAdministrationService(UserRoleRelRepository userRoleRelRepositoryValue,
+                                      UserAccountRepository userAccountRepositoryValue,
+                                      GroupRepository groupRepositoryValue,
+                                      StoreRepository storeRepositoryValue,
+                                      StoreAdminRelRepository storeAdminRelRepositoryValue,
+                                      WorkflowProcessStoreBindingRepository workflowProcessStoreBindingRepositoryValue,
+                                      IdentityAdminLookupService identityAdminLookupServiceValue,
+                                      BusinessCodeGenerator businessCodeGeneratorValue,
+                                      DomainEventPublisher domainEventPublisherValue) {
+        this.userRoleRelRepository = userRoleRelRepositoryValue;
+        this.userAccountRepository = userAccountRepositoryValue;
+        this.groupRepository = groupRepositoryValue;
+        this.storeRepository = storeRepositoryValue;
+        this.storeAdminRelRepository = storeAdminRelRepositoryValue;
+        this.workflowProcessStoreBindingRepository = workflowProcessStoreBindingRepositoryValue;
+        this.identityAdminLookupService = identityAdminLookupServiceValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.domainEventPublisher = domainEventPublisherValue;
     }
 
+    /** 查询集团列表。 */
     public List<GroupDO> listGroups(Long operatorId, boolean platformAdmin) {
         if (platformAdmin) {
             return groupRepository.findAllOrdered();
@@ -71,6 +79,7 @@ public class GroupAdministrationService {
         return groupRepository.findByIdsOrdered(groupIds);
     }
 
+    /** 创建集团。 */
     @Transactional
     public GroupDO createGroup(GroupUpsertRequest request, Long operatorId) {
         String groupCode = generateGroupCode();
@@ -89,6 +98,7 @@ public class GroupAdministrationService {
         return group;
     }
 
+    /** 更新集团。 */
     @Transactional
     public GroupDO updateGroup(Long id, GroupUpsertRequest request) {
         GroupDO group = identityAdminLookupService.requireGroup(id);
@@ -108,6 +118,7 @@ public class GroupAdministrationService {
         return group;
     }
 
+    /** 删除集团。 */
     @Transactional
     public void deleteGroup(Long id) {
         identityAdminLookupService.requireGroup(id);
@@ -119,6 +130,7 @@ public class GroupAdministrationService {
         groupRepository.deleteById(id);
     }
 
+    /** 更新集团状态。 */
     @Transactional
     public GroupDO updateGroupStatus(Long id, String status) {
         GroupDO group = identityAdminLookupService.requireGroup(id);
@@ -127,10 +139,12 @@ public class GroupAdministrationService {
         return group;
     }
 
+    /** 查询集团门店列表。 */
     public List<com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO> listGroupStores(Long groupId) {
         return storeRepository.findByGroupId(groupId);
     }
 
+    /** 创建集团门店。 */
     @Transactional
     public StoreDO createGroupStore(Long groupId, GroupStoreCreateRequest request, Long operatorId) {
         identityAdminLookupService.requireGroup(groupId);
@@ -139,8 +153,15 @@ public class GroupAdministrationService {
         if (storeRepository.findByStoreCode(storeCode).isPresent()) {
             throw new BusinessException("门店编码已存在");
         }
-        String adminRealName = identityAdminLookupService.trim(request.getAdminRealName());
-        String adminPhone = identityAdminLookupService.normalizePhone(request.getAdminPhone());
+        Long adminUserId = request.getAdminUserId();
+        if (adminUserId == null || adminUserId <= 0) {
+            throw new BusinessException("请选择门店管理员");
+        }
+        boolean userInGroup = userAccountRepository.findByGroupScope(groupId).stream()
+                .anyMatch(user -> adminUserId.equals(user.getId()));
+        if (!userInGroup) {
+            throw new BusinessException("门店管理员不属于当前集团");
+        }
 
         StoreDO store = new StoreDO();
         store.setGroupId(groupId);
@@ -152,10 +173,11 @@ public class GroupAdministrationService {
         store.setAddress(identityAdminLookupService.trimNullable(request.getAddress()));
         store.setRemark(identityAdminLookupService.trimNullable(request.getRemark()));
         storeRepository.save(store);
-        domainEventPublisher.publish(new StoreCreatedEvent(groupId, store.getId(), operatorId, adminRealName, adminPhone));
+        domainEventPublisher.publish(new StoreCreatedEvent(groupId, store.getId(), operatorId, adminUserId));
         return store;
     }
 
+    /** 更新集团门店。 */
     @Transactional
     public StoreDO updateGroupStore(Long groupId, Long storeId, GroupStoreCreateRequest request) {
         identityAdminLookupService.requireGroup(groupId);
@@ -173,6 +195,7 @@ public class GroupAdministrationService {
         return store;
     }
 
+    /** 删除集团门店。 */
     @Transactional
     public void deleteGroupStore(Long groupId, Long storeId) {
         identityAdminLookupService.requireGroup(groupId);
@@ -190,6 +213,7 @@ public class GroupAdministrationService {
         storeRepository.deleteById(storeId);
     }
 
+    /** 校验并保证集团Builtin角色满足业务规则。 */
     public void ensureGroupBuiltinRoles(Long groupId, Long operatorId) {
         identityAdminLookupService.ensureGroupBuiltinRoles(groupId, operatorId);
     }

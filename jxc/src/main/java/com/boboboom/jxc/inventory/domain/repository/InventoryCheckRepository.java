@@ -1,11 +1,11 @@
 package com.boboboom.jxc.inventory.domain.repository;
 
+import java.util.List;
+import java.util.Optional;
+
 import com.boboboom.jxc.inventory.application.service.InventoryCheckHeader;
 import com.boboboom.jxc.inventory.application.service.InventoryCheckKind;
 import com.boboboom.jxc.inventory.application.service.InventoryCheckLine;
-
-import java.util.List;
-import java.util.Optional;
 
 /**
  * 盘点单仓储。

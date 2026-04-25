@@ -1,20 +1,21 @@
 package com.boboboom.jxc.cost.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.cost.domain.repository.CostCardRepository;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.cost.domain.repository.CostCardRepository;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 
 /**
  * 成本卡业务服务，负责成本卡版本、明细和菜品绑定的业务校验。
@@ -28,9 +29,10 @@ public class CostCardApplicationService {
     private final CostCardRepository costCardRepository;
     private final OrgScopeService orgScopeService;
 
-    public CostCardApplicationService(CostCardRepository costCardRepository, OrgScopeService orgScopeService) {
-        this.costCardRepository = costCardRepository;
-        this.orgScopeService = orgScopeService;
+    /** 成本卡业务服务，负责菜品成本卡版本、明细和绑定关系维护。 */
+    public CostCardApplicationService(CostCardRepository costCardRepositoryValue, OrgScopeService orgScopeServiceValue) {
+        this.costCardRepository = costCardRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
     }
 
     /**
@@ -255,36 +257,44 @@ public class CostCardApplicationService {
         return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
 
+    /** 成本卡载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id, String cardCode) {
     }
 
+    /** 成本卡行数据模型，承载列表或报表明细。 */
     public record CostCardRow(Long id, String cardCode, String cardName, String cardType, String status,
                               Long effectiveVersionId, Integer linkedDishCount, String remark) {
     }
 
+    /** 成本卡数据模型，承载成本卡单头数据。 */
     public record CostCardHeader(Long id, String scopeType, Long scopeId, String cardCode, String cardName,
                                  String cardType, String status, Long effectiveVersionId, Integer linkedDishCount,
                                  String remark, Long createdBy) {
     }
 
+    /** 成本卡数据模型，承载成本卡明细数据。 */
     public record CostCardDetail(Long id, String scopeType, Long scopeId, String cardCode, String cardName,
                                  String cardType, String status, Long effectiveVersionId, Integer linkedDishCount,
                                  String remark, Long createdBy, List<CostCardVersion> versions) {
     }
 
+    /** 成本卡数据模型，承载成本卡版本数据。 */
     public record CostCardVersion(Long id, Long cardId, Integer versionNo, LocalDate effectiveDate,
                                   String versionStatus, Boolean referenced, String remark) {
     }
 
+    /** 成本卡数据模型，承载成本卡明细行数据。 */
     public record CostCardLine(String itemCode, String itemName, String unitName, BigDecimal quantity,
                                BigDecimal conversionRate, BigDecimal lossRate, String defaultWarehouse,
                                String remark) {
     }
 
+    /** 成本卡请求参数，承载接口入参。 */
     public record CostCardSaveRequest(String cardName, String cardType, String effectiveDate, String remark,
                                       List<CostCardLine> lines) {
     }
 
+    /** 成本卡请求参数，承载接口入参。 */
     public record DishCostCardBindingRequest(String dishId, String defaultWarehouse, boolean enabled) {
     }
 

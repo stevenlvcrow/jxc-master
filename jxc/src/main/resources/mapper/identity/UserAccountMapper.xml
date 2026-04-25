@@ -32,6 +32,7 @@
         <result property="roleCode" column="role_code"/>
         <result property="roleName" column="role_name"/>
         <result property="roleType" column="role_type"/>
+        <result property="dataScopeType" column="data_scope_type"/>
         <result property="scopeType" column="scope_type"/>
         <result property="scopeId" column="scope_id"/>
         <result property="scopeName" column="scope_name"/>
@@ -71,6 +72,57 @@
             <foreach collection="groupIds" item="groupId" open="(" separator="," close=")">
                 #{groupId}
             </foreach>
+        order by u.created_at desc, u.id desc
+    </select>
+
+    <select id="selectUsersByGroupScope" resultMap="UserAccountDOResultMap">
+        select distinct u.id,
+               u.username,
+               u.real_name,
+               u.phone,
+               u.password_hash,
+               u.password_salt,
+               u.status,
+               u.source_type,
+               u.created_scope_type,
+               u.created_scope_id,
+               u.first_login_changed_pwd,
+               u.last_login_at,
+               u.last_login_ip,
+               u.created_at,
+               u.updated_at
+        from sys_user u
+        where (
+            u.created_scope_type = 'GROUP'
+            and u.created_scope_id = #{groupId}
+        )
+           or (
+            u.created_scope_type = 'STORE'
+            and exists (
+                select 1
+                from sys_store cs
+                where cs.id = u.created_scope_id
+                  and cs.group_id = #{groupId}
+            )
+        )
+           or exists (
+            select 1
+            from sys_user_role_rel urr
+            where urr.user_id = u.id
+              and urr.status = 'ENABLED'
+              and (
+                (urr.scope_type = 'GROUP' and urr.scope_id = #{groupId})
+                or (
+                    urr.scope_type = 'STORE'
+                    and exists (
+                        select 1
+                        from sys_store rs
+                        where rs.id = urr.scope_id
+                          and rs.group_id = #{groupId}
+                    )
+                )
+              )
+        )
         order by u.created_at desc, u.id desc
     </select>
 
@@ -128,6 +180,7 @@
                r.role_code,
                r.role_name,
                r.role_type,
+               r.data_scope_type,
                urr.scope_type,
                urr.scope_id,
                case
@@ -155,6 +208,7 @@
                r.role_code,
                r.role_name,
                r.role_type,
+               r.data_scope_type,
                urr.scope_type,
                urr.scope_id,
                case
@@ -185,6 +239,7 @@
                r.role_code,
                r.role_name,
                r.role_type,
+               r.data_scope_type,
                urr.scope_type,
                urr.scope_id,
                case

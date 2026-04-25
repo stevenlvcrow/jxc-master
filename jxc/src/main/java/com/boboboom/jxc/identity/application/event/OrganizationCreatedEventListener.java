@@ -1,12 +1,13 @@
 package com.boboboom.jxc.identity.application.event;
 
+import org.springframework.context.event.EventListener;
+import org.springframework.core.annotation.Order;
+import org.springframework.stereotype.Component;
+
 import com.boboboom.jxc.identity.application.service.IdentityAdminLookupService;
 import com.boboboom.jxc.identity.application.service.OrgAdminProvisioningService;
 import com.boboboom.jxc.identity.application.service.StoreSampleDataInitializationService;
 import com.boboboom.jxc.workflow.application.service.InventoryWorkflowBootstrapService;
-import org.springframework.context.event.EventListener;
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
 
 /**
  * 组织创建事件订阅者，集中编排集团和门店创建后的初始化动作。
@@ -19,14 +20,15 @@ public class OrganizationCreatedEventListener {
     private final InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService;
     private final StoreSampleDataInitializationService storeSampleDataInitializationService;
 
-    public OrganizationCreatedEventListener(IdentityAdminLookupService identityAdminLookupService,
-                                            OrgAdminProvisioningService orgAdminProvisioningService,
-                                            InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService,
-                                            StoreSampleDataInitializationService storeSampleDataInitializationService) {
-        this.identityAdminLookupService = identityAdminLookupService;
-        this.orgAdminProvisioningService = orgAdminProvisioningService;
-        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapService;
-        this.storeSampleDataInitializationService = storeSampleDataInitializationService;
+    /** 身份与权限事件监听器，负责响应领域事件并触发后续处理。 */
+    public OrganizationCreatedEventListener(IdentityAdminLookupService identityAdminLookupServiceValue,
+                                            OrgAdminProvisioningService orgAdminProvisioningServiceValue,
+                                            InventoryWorkflowBootstrapService inventoryWorkflowBootstrapServiceValue,
+                                            StoreSampleDataInitializationService storeSampleDataInitializationServiceValue) {
+        this.identityAdminLookupService = identityAdminLookupServiceValue;
+        this.orgAdminProvisioningService = orgAdminProvisioningServiceValue;
+        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapServiceValue;
+        this.storeSampleDataInitializationService = storeSampleDataInitializationServiceValue;
     }
 
     /**
@@ -86,12 +88,11 @@ public class OrganizationCreatedEventListener {
     @Order(20)
     @EventListener
     public void createStoreAdmin(StoreCreatedEvent event) {
-        orgAdminProvisioningService.createStoreAdmin(
+        orgAdminProvisioningService.assignStoreAdmin(
                 event.groupId(),
                 event.storeId(),
                 event.operatorId(),
-                event.adminRealName(),
-                event.adminPhone()
+                event.adminUserId()
         );
     }
 }

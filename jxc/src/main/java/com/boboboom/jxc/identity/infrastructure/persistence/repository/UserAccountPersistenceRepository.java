@@ -1,20 +1,23 @@
 package com.boboboom.jxc.identity.infrastructure.persistence.repository;
 
+import java.util.Optional;
+
+import org.springframework.stereotype.Repository;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.UserAccountMapper;
-import org.springframework.stereotype.Repository;
 
-import java.util.Optional;
-
+/** 身份与权限持久化仓储，封装基础 CRUD 能力。 */
 @Repository
 public class UserAccountPersistenceRepository extends AbstractMpRepository<UserAccountDO> {
 
     private final UserAccountMapper mapper;
 
-    public UserAccountPersistenceRepository(UserAccountMapper mapper) {
-        this.mapper = mapper;
+    /** 身份与权限持久化仓储，封装基础 CRUD 能力。 */
+    public UserAccountPersistenceRepository(UserAccountMapper mapperValue) {
+        this.mapper = mapperValue;
     }
 
     @Override
@@ -22,6 +25,7 @@ public class UserAccountPersistenceRepository extends AbstractMpRepository<UserA
         return mapper;
     }
 
+    /** 查询By手机号。 */
     public Optional<UserAccountDO> findByPhone(String phone) {
         return mapper.selectList(new LambdaQueryWrapper<UserAccountDO>()
                 .eq(UserAccountDO::getPhone, phone)

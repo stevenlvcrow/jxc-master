@@ -1,11 +1,11 @@
 package com.boboboom.jxc.identity.domain.repository;
 
+import java.util.List;
+import java.util.Optional;
+
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictFieldBindingDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictItemDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictTypeDO;
-
-import java.util.List;
-import java.util.Optional;
 
 /**
  * 字典仓储接口。

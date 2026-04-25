@@ -1,8 +1,8 @@
 package com.boboboom.jxc.inventory.interfaces.rest.request;
 
-import jakarta.validation.constraints.NotEmpty;
-
 import java.util.List;
+
+import jakarta.validation.constraints.NotEmpty;
 
 /**
  * 盘点单批量请求。

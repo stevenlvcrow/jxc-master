@@ -1,18 +1,19 @@
 package com.boboboom.jxc.identity.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.domain.repository.DictionaryRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictFieldBindingDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictItemDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictTypeDO;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.domain.repository.DictionaryRepository;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictFieldBindingDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictItemDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.DictTypeDO;
 
 /**
  * 字典管理应用服务。
@@ -31,13 +32,13 @@ public class DictionaryApplicationService {
     /**
      * 构造字典管理服务。
      *
-     * @param dictionaryRepository 字典仓储
-     * @param dictionaryLookupService 字典查询服务
+     * @param dictionaryRepositoryValue 字典仓储
+     * @param dictionaryLookupServiceValue 字典查询服务
      */
-    public DictionaryApplicationService(DictionaryRepository dictionaryRepository,
-                                        DictionaryLookupService dictionaryLookupService) {
-        this.dictionaryRepository = dictionaryRepository;
-        this.dictionaryLookupService = dictionaryLookupService;
+    public DictionaryApplicationService(DictionaryRepository dictionaryRepositoryValue,
+                                        DictionaryLookupService dictionaryLookupServiceValue) {
+        this.dictionaryRepository = dictionaryRepositoryValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
     /**

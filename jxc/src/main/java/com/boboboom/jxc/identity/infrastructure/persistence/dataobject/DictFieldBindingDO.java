@@ -13,35 +13,43 @@ public class DictFieldBindingDO extends BaseCreateDO {
     private String columnName;
     private String remark;
 
+    /** 获取DictCode。 */
     public String getDictCode() {
         return dictCode;
     }
 
-    public void setDictCode(String dictCode) {
-        this.dictCode = dictCode;
+    /** 设置DictCode。 */
+    public void setDictCode(String dictCodeValue) {
+        this.dictCode = dictCodeValue;
     }
 
+    /** 获取TableName。 */
     public String getTableName() {
         return tableName;
     }
 
-    public void setTableName(String tableName) {
-        this.tableName = tableName;
+    /** 设置TableName。 */
+    public void setTableName(String tableNameValue) {
+        this.tableName = tableNameValue;
     }
 
+    /** 获取ColumnName。 */
     public String getColumnName() {
         return columnName;
     }
 
-    public void setColumnName(String columnName) {
-        this.columnName = columnName;
+    /** 设置ColumnName。 */
+    public void setColumnName(String columnNameValue) {
+        this.columnName = columnNameValue;
     }
 
+    /** 获取Remark。 */
     public String getRemark() {
         return remark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    /** 设置Remark。 */
+    public void setRemark(String remarkValue) {
+        this.remark = remarkValue;
     }
 }

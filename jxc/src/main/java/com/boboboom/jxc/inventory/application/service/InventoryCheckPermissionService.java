@@ -1,11 +1,10 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.domain.repository.RoleRepository;
-import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
 import org.springframework.stereotype.Service;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.application.service.DataScopeAccessService;
+import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
 
 /**
  * 盘点单权限判断服务。
@@ -14,15 +13,13 @@ import org.springframework.stereotype.Service;
 public class InventoryCheckPermissionService {
 
     private final WorkflowActionService workflowActionService;
-    private final UserRoleRelRepository userRoleRelRepository;
-    private final RoleRepository roleRepository;
+    private final DataScopeAccessService dataScopeAccessService;
 
-    public InventoryCheckPermissionService(WorkflowActionService workflowActionService,
-                                           UserRoleRelRepository userRoleRelRepository,
-                                           RoleRepository roleRepository) {
-        this.workflowActionService = workflowActionService;
-        this.userRoleRelRepository = userRoleRelRepository;
-        this.roleRepository = roleRepository;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public InventoryCheckPermissionService(WorkflowActionService workflowActionServiceValue,
+                                           DataScopeAccessService dataScopeAccessServiceValue) {
+        this.workflowActionService = workflowActionServiceValue;
+        this.dataScopeAccessService = dataScopeAccessServiceValue;
     }
 
     /**
@@ -60,18 +57,7 @@ public class InventoryCheckPermissionService {
      * @return 是否可查看全部
      */
     public boolean canViewAll(String scopeType, Long scopeId, Long groupId, Long operatorId) {
-        if (operatorId == null) {
-            return false;
-        }
-        if (hasRoleInScope(operatorId, "PLATFORM_SUPER_ADMIN", "PLATFORM", 0L)) {
-            return true;
-        }
-        if (hasRoleInScope(operatorId, "STORE_ADMIN", "STORE", scopeId)) {
-            return true;
-        }
-        return "STORE".equals(scopeType)
-                && groupId != null
-                && hasRoleInScope(operatorId, "GROUP_ADMIN", "GROUP", groupId);
+        return dataScopeAccessService.canViewScopeData(scopeType, scopeId, groupId, operatorId);
     }
 
     /**
@@ -111,6 +97,7 @@ public class InventoryCheckPermissionService {
         }
     }
 
+    /** 判断当前操作人是否可以审核。 */
     public boolean canReview(InventoryCheckKind kind,
                              String scopeType,
                              Long scopeId,
@@ -141,17 +128,7 @@ public class InventoryCheckPermissionService {
         );
     }
 
-    private boolean hasRoleInScope(Long operatorId, String roleCode, String scopeType, Long scopeId) {
-        if (operatorId == null || scopeId == null) {
-            return false;
-        }
-        RoleDO role = roleRepository.findByRoleCode(roleCode).orElse(null);
-        if (role == null) {
-            return false;
-        }
-        return userRoleRelRepository.findByUserIdRoleAndScope(operatorId, role.getId(), scopeType, scopeId).isPresent();
-    }
-
+    /** 库存快照模型，承载权限快照查询结果。 */
     public record PermissionSnapshot(boolean canCreate,
                                      boolean canUpdate,
                                      boolean canDelete,

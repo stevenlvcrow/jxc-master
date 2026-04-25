@@ -1,23 +1,5 @@
 package com.boboboom.jxc.identity.application.service;
 
-import com.boboboom.jxc.identity.domain.repository.AccountImportRecordRepository;
-import com.boboboom.jxc.identity.domain.repository.AuditLogRepository;
-import com.boboboom.jxc.identity.domain.repository.LoginLogRepository;
-import com.boboboom.jxc.identity.domain.repository.StoreAdminRelRepository;
-import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
-import com.boboboom.jxc.identity.domain.repository.UserPasswordLogRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-import com.boboboom.jxc.identity.domain.repository.StoreRepository;
-import com.boboboom.jxc.identity.domain.repository.RoleRepository;
-import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView;
-import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
-import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest;
-import com.boboboom.jxc.identity.application.auth.PasswordCodec;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -27,12 +9,36 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.boboboom.jxc.identity.application.auth.PasswordCodec;
+import com.boboboom.jxc.identity.domain.repository.AccountImportRecordRepository;
+import com.boboboom.jxc.identity.domain.repository.AuditLogRepository;
+import com.boboboom.jxc.identity.domain.repository.LoginLogRepository;
+import com.boboboom.jxc.identity.domain.repository.RoleRepository;
+import com.boboboom.jxc.identity.domain.repository.StoreAdminRelRepository;
+import com.boboboom.jxc.identity.domain.repository.StoreRepository;
+import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
+import com.boboboom.jxc.identity.domain.repository.UserPasswordLogRepository;
+import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView;
+import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.UserUpsertRequest;
+
+/** 用户管理业务服务，负责账号创建、编辑、状态和角色关联维护。 */
 @Service
 public class UserAdministrationService {
 
     private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
+    private static final String PLATFORM_ADMIN_ROLE_CODE = "PLATFORM_ADMIN";
     private static final String ADMIN_USERNAME = "admin";
+    private static final String SALESMAN_ROLE_CODE = "SALESMAN";
     private static final String SCOPE_GROUP = "GROUP";
+    private static final String SCOPE_PLATFORM = "PLATFORM";
     private static final String SCOPE_STORE = "STORE";
 
     private final UserAccountRepository userAccountRepository;
@@ -48,37 +54,40 @@ public class UserAdministrationService {
     private final IdentityAdminLookupService identityAdminLookupService;
     private final UserCodeGenerator userCodeGenerator;
 
-    public UserAdministrationService(UserAccountRepository userAccountRepository,
-                                     UserRoleRelRepository userRoleRelRepository,
-                                     StoreRepository storeRepository,
-                                     RoleRepository roleRepository,
-                                     StoreAdminRelRepository storeAdminRelRepository,
-                                     UserPasswordLogRepository userPasswordLogRepository,
-                                     AccountImportRecordRepository accountImportRecordRepository,
-                                     LoginLogRepository loginLogRepository,
-                                     AuditLogRepository auditLogRepository,
-                                     IdentityAccessControlService identityAccessControlService,
-                                     IdentityAdminLookupService identityAdminLookupService,
-                                     UserCodeGenerator userCodeGenerator) {
-        this.userAccountRepository = userAccountRepository;
-        this.userRoleRelRepository = userRoleRelRepository;
-        this.storeRepository = storeRepository;
-        this.roleRepository = roleRepository;
-        this.storeAdminRelRepository = storeAdminRelRepository;
-        this.userPasswordLogRepository = userPasswordLogRepository;
-        this.accountImportRecordRepository = accountImportRecordRepository;
-        this.loginLogRepository = loginLogRepository;
-        this.auditLogRepository = auditLogRepository;
-        this.identityAccessControlService = identityAccessControlService;
-        this.identityAdminLookupService = identityAdminLookupService;
-        this.userCodeGenerator = userCodeGenerator;
+    /** 用户管理业务服务，负责账号创建、编辑、状态和角色关联维护。 */
+    public UserAdministrationService(UserAccountRepository userAccountRepositoryValue,
+                                     UserRoleRelRepository userRoleRelRepositoryValue,
+                                     StoreRepository storeRepositoryValue,
+                                     RoleRepository roleRepositoryValue,
+                                     StoreAdminRelRepository storeAdminRelRepositoryValue,
+                                     UserPasswordLogRepository userPasswordLogRepositoryValue,
+                                     AccountImportRecordRepository accountImportRecordRepositoryValue,
+                                     LoginLogRepository loginLogRepositoryValue,
+                                     AuditLogRepository auditLogRepositoryValue,
+                                     IdentityAccessControlService identityAccessControlServiceValue,
+                                     IdentityAdminLookupService identityAdminLookupServiceValue,
+                                     UserCodeGenerator userCodeGeneratorValue) {
+        this.userAccountRepository = userAccountRepositoryValue;
+        this.userRoleRelRepository = userRoleRelRepositoryValue;
+        this.storeRepository = storeRepositoryValue;
+        this.roleRepository = roleRepositoryValue;
+        this.storeAdminRelRepository = storeAdminRelRepositoryValue;
+        this.userPasswordLogRepository = userPasswordLogRepositoryValue;
+        this.accountImportRecordRepository = accountImportRecordRepositoryValue;
+        this.loginLogRepository = loginLogRepositoryValue;
+        this.auditLogRepository = auditLogRepositoryValue;
+        this.identityAccessControlService = identityAccessControlServiceValue;
+        this.identityAdminLookupService = identityAdminLookupServiceValue;
+        this.userCodeGenerator = userCodeGeneratorValue;
     }
 
+    /** 创建用户。 */
     @Transactional
     public UserAccountDO createUser(UserUpsertRequest request,
                                     String phone,
                                     String createdScopeType,
-                                    Long createdScopeId) {
+                                    Long createdScopeId,
+                                    Long operatorId) {
         if (userAccountRepository.findByPhone(phone).isPresent()) {
             throw new com.boboboom.jxc.common.BusinessException("手机号已存在");
         }
@@ -96,9 +105,11 @@ public class UserAdministrationService {
         user.setCreatedScopeId(createdScopeId);
         user.setFirstLoginChangedPwd(Boolean.FALSE);
         userAccountRepository.save(user);
+        assignDefaultRole(user.getId(), createdScopeType, createdScopeId, operatorId);
         return user;
     }
 
+    /** 更新用户状态。 */
     @Transactional
     public UserAccountDO updateUserStatus(Long id, StatusUpdateRequest request) {
         UserAccountDO user = identityAdminLookupService.requireUser(id);
@@ -108,6 +119,7 @@ public class UserAdministrationService {
         return user;
     }
 
+    /** 更新用户。 */
     @Transactional
     public UserAccountDO updateUser(Long id, UserUpsertRequest request) {
         UserAccountDO user = identityAdminLookupService.requireUser(id);
@@ -129,6 +141,7 @@ public class UserAdministrationService {
         return user;
     }
 
+    /** 删除用户。 */
     @Transactional
     public void deleteUsers(Long operatorId, boolean platformAdmin, List<Long> userIds) {
         if (userIds == null || userIds.isEmpty()) {
@@ -149,12 +162,13 @@ public class UserAdministrationService {
         }
     }
 
+    /** 查询用户列表。 */
     public List<UserAdminSnapshot> listUsers(Long operatorId, boolean platformAdmin) {
         List<UserAccountDO> users;
         if (platformAdmin) {
             users = userAccountRepository.findAllOrdered();
         } else {
-            List<Long> managedGroupIds = userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, "GROUP", identityAdminLookupService.enabledStatus())
+            List<Long> managedGroupIds = userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, SCOPE_GROUP, identityAdminLookupService.enabledStatus())
                     .stream()
                     .map(UserRoleRelDO::getScopeId)
                     .filter(Objects::nonNull)
@@ -163,7 +177,18 @@ public class UserAdministrationService {
             if (managedGroupIds.isEmpty()) {
                 return Collections.emptyList();
             }
-            users = userAccountRepository.findByCreatedGroupScopes(managedGroupIds);
+            LinkedHashSet<Long> managedStoreIds = new LinkedHashSet<>(identityAccessControlService.listManagedStoreIds(new LinkedHashSet<>(managedGroupIds)));
+            List<Long> userIds = userRoleRelRepository.findByStatusAndGroupOrStoreScopes(
+                            identityAdminLookupService.enabledStatus(),
+                            new LinkedHashSet<>(managedGroupIds),
+                            managedStoreIds
+                    )
+                    .stream()
+                    .map(UserRoleRelDO::getUserId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .toList();
+            users = userAccountRepository.findByIdsOrdered(userIds);
         }
 
         if (users.isEmpty()) {
@@ -200,6 +225,29 @@ public class UserAdministrationService {
                 .toList();
     }
 
+    /** 查询集团用户Options列表。 */
+    public List<UserOptionSnapshot> listGroupUserOptions(Long groupId) {
+        List<UserAccountDO> users = userAccountRepository.findByGroupScope(groupId);
+        if (users.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<Long> userIds = users.stream().map(UserAccountDO::getId).toList();
+        Map<Long, List<UserRoleView>> userRolesMap = userAccountRepository.findUserRolesByUserIds(userIds).stream()
+                .collect(Collectors.groupingBy(UserRoleView::getUserId));
+        return users.stream()
+                .filter(user -> !ADMIN_USERNAME.equalsIgnoreCase(user.getUsername()))
+                .filter(user -> !hasPlatformSuperAdminRole(userRolesMap.getOrDefault(user.getId(), Collections.emptyList())))
+                .map(user -> new UserOptionSnapshot(
+                        user.getId(),
+                        user.getUsername(),
+                        user.getRealName(),
+                        user.getPhone(),
+                        user.getStatus()
+                ))
+                .toList();
+    }
+
+    /** 查询门店Salesmen列表。 */
     public List<SalesmanCandidateSnapshot> listStoreSalesmen(Long storeId) {
         if (storeId == null || storeId <= 0) {
             return Collections.emptyList();
@@ -220,6 +268,7 @@ public class UserAdministrationService {
                 .toList();
     }
 
+    /** 校验并保证CanManage用户满足业务规则。 */
     public void ensureCanManageUser(Long targetUserId, Long operatorId) {
         LinkedHashSet<Long> managedGroupIds = new LinkedHashSet<>(identityAccessControlService.listManagedGroupIds(operatorId));
         LinkedHashSet<Long> managedStoreIds = new LinkedHashSet<>(identityAccessControlService.listManagedStoreIds(managedGroupIds));
@@ -228,10 +277,6 @@ public class UserAdministrationService {
         }
 
         if (!hasEnabledRoleAssignments(targetUserId)) {
-            UserAccountDO user = identityAdminLookupService.requireUser(targetUserId);
-            if (matchesCreatedScope(user, managedGroupIds, managedStoreIds)) {
-                return;
-            }
             throw new com.boboboom.jxc.common.BusinessException("当前账号无该用户操作权限");
         }
 
@@ -243,6 +288,7 @@ public class UserAdministrationService {
         }
     }
 
+    /** 判断是否具备Enabled角色分配关系。 */
     public boolean hasEnabledRoleAssignments(Long userId) {
         if (userId == null) {
             return false;
@@ -251,6 +297,7 @@ public class UserAdministrationService {
         return count != null && count > 0;
     }
 
+    /** 身份与权限快照模型，承载用户管理快照查询结果。 */
     public record UserAdminSnapshot(Long id,
                                     String username,
                                     String realName,
@@ -260,6 +307,7 @@ public class UserAdministrationService {
                                     List<RoleAssignmentSnapshot> roles) {
     }
 
+    /** 身份与权限快照模型，承载角色分配快照查询结果。 */
     public record RoleAssignmentSnapshot(Long roleId,
                                          String roleCode,
                                          String roleName,
@@ -270,9 +318,18 @@ public class UserAdministrationService {
                                          boolean builtin) {
     }
 
+    /** 身份与权限快照模型，承载Salesman候选项快照查询结果。 */
     public record SalesmanCandidateSnapshot(Long userId,
                                             String realName,
                                             String phone) {
+    }
+
+    /** 身份与权限快照模型，承载用户选项快照查询结果。 */
+    public record UserOptionSnapshot(Long userId,
+                                     String username,
+                                     String realName,
+                                     String phone,
+                                     String status) {
     }
 
     private List<UserRoleView> normalizeRoleSnapshots(List<UserRoleView> roleSnapshots) {
@@ -339,25 +396,6 @@ public class UserAdministrationService {
                 && PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode()));
     }
 
-    private boolean matchesCreatedScope(UserAccountDO user,
-                                        LinkedHashSet<Long> managedGroupIds,
-                                        LinkedHashSet<Long> managedStoreIds) {
-        if (user == null) {
-            return false;
-        }
-        Long scopeId = user.getCreatedScopeId();
-        if (scopeId == null) {
-            return false;
-        }
-        if (SCOPE_GROUP.equals(user.getCreatedScopeType())) {
-            return managedGroupIds.contains(scopeId);
-        }
-        if (SCOPE_STORE.equals(user.getCreatedScopeType())) {
-            return managedStoreIds.contains(scopeId);
-        }
-        return false;
-    }
-
     private void deleteUserRelations(Long userId) {
         userRoleRelRepository.deleteByUserId(userId);
         storeAdminRelRepository.deleteByUserId(userId);
@@ -365,5 +403,44 @@ public class UserAdministrationService {
         accountImportRecordRepository.deleteByUserId(userId);
         loginLogRepository.deleteByUserId(userId);
         auditLogRepository.deleteByOperatorUserId(userId);
+    }
+
+    private void assignDefaultRole(Long userId, String createdScopeType, Long createdScopeId, Long operatorId) {
+        if (SCOPE_PLATFORM.equals(createdScopeType)) {
+            RoleDO platformAdminRole = roleRepository.findByTenantGroupIdAndRoleCode(0L, PLATFORM_ADMIN_ROLE_CODE)
+                    .orElseThrow(() -> new com.boboboom.jxc.common.BusinessException("平台管理员角色未初始化"));
+            saveRoleRel(userId, platformAdminRole.getId(), SCOPE_PLATFORM, null, operatorId);
+            return;
+        }
+        if (SCOPE_GROUP.equals(createdScopeType)) {
+            Long groupId = createdScopeId;
+            if (groupId == null || groupId <= 0) {
+                throw new com.boboboom.jxc.common.BusinessException("集团机构非法");
+            }
+            identityAdminLookupService.ensureGroupBuiltinRoles(groupId, operatorId);
+            RoleDO salesmanRole = roleRepository.findByTenantGroupIdAndRoleCode(groupId, SALESMAN_ROLE_CODE)
+                    .orElseThrow(() -> new com.boboboom.jxc.common.BusinessException("门店业务员角色未初始化"));
+            List<com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO> groupStores = storeRepository.findByGroupId(groupId);
+            if (groupStores.isEmpty()) {
+                throw new com.boboboom.jxc.common.BusinessException("集团下没有门店，无法默认分配门店业务员角色");
+            }
+            for (com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO store : groupStores) {
+                saveRoleRel(userId, salesmanRole.getId(), SCOPE_STORE, store.getId(), operatorId);
+            }
+            return;
+        }
+        throw new com.boboboom.jxc.common.BusinessException("用户创建机构非法");
+    }
+
+    private void saveRoleRel(Long userId, Long roleId, String scopeType, Long scopeId, Long operatorId) {
+        UserRoleRelDO rel = new UserRoleRelDO();
+        rel.setUserId(userId);
+        rel.setRoleId(roleId);
+        rel.setScopeType(scopeType);
+        rel.setScopeId(scopeId);
+        rel.setAssignedBy(operatorId);
+        rel.setAssignedAt(LocalDateTime.now());
+        rel.setStatus(identityAdminLookupService.enabledStatus());
+        userRoleRelRepository.save(rel);
     }
 }

@@ -1,5 +1,15 @@
 package com.boboboom.jxc.identity.application.service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.domain.repository.MenuRepository;
@@ -8,16 +18,8 @@ import com.boboboom.jxc.identity.domain.repository.RoleRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.MenuDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleMenuRelDO;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
-
+/** 身份与权限服务，负责相关业务规则和流程协作。 */
 @Service
 public class RoleMenuAdministrationService {
 
@@ -28,6 +30,16 @@ public class RoleMenuAdministrationService {
     private static final String STORE_ROLE_TYPE = "STORE";
     private static final String GROUP_MENU_PREFIX = "GROUP_";
     private static final String STORE_MENU_PREFIX = "STORE_BIZ_";
+    private static final int GROUP_USER_ROLE_MENU_SORT = 46;
+    private static final int GROUP_ROLE_MENU_SORT = 47;
+    private static final int GROUP_MENU_PERMISSION_SORT = 48;
+    private static final int ARCHIVE_ROOT_MENU_SORT = 108;
+    private static final int ARCHIVE_ITEM_GROUP_SORT = 1801;
+    private static final int ARCHIVE_ITEM_MENU_SORT = 108011;
+    private static final int ARCHIVE_CATEGORY_MENU_SORT = 108012;
+    private static final int ARCHIVE_UNIT_MENU_SORT = 108013;
+    private static final int ARCHIVE_STATISTICS_MENU_SORT = 108014;
+    private static final int ARCHIVE_TAG_MENU_SORT = 108015;
     // Platform roles can see platform admin menus plus the template archive pages,
     // but not the item management page itself.
     private static final LinkedHashSet<String> PLATFORM_ROLE_MENU_CODES = new LinkedHashSet<>(List.of(
@@ -35,12 +47,13 @@ public class RoleMenuAdministrationService {
             "GROUP_MGMT_ADMIN",
             "ROLE_MGMT",
             "USER_MGMT",
-            "STORE_BIZ_MOD_08",
-            "STORE_BIZ_GRP_08_01",
-            "STORE_BIZ_MENU_08_01_02",
-            "STORE_BIZ_MENU_08_01_03",
-            "STORE_BIZ_MENU_08_01_04",
-            "STORE_BIZ_MENU_08_01_05"
+            "MENU_MAINTENANCE",
+            "STORE_BIZ_MOD_ARCHIVE",
+            "STORE_BIZ_GRP_ARCHIVE_ITEM",
+            "STORE_BIZ_MENU_ITEM_CATEGORY",
+            "STORE_BIZ_MENU_UNIT",
+            "STORE_BIZ_MENU_STATISTICS_TYPE",
+            "STORE_BIZ_MENU_ITEM_TAG"
     ));
 
     private final MenuRepository menuRepository;
@@ -49,18 +62,20 @@ public class RoleMenuAdministrationService {
     private final OrgScopeService orgScopeService;
     private final IdentityAdminLookupService identityAdminLookupService;
 
-    public RoleMenuAdministrationService(MenuRepository menuRepository,
-                                         RoleMenuRelRepository roleMenuRelRepository,
-                                         RoleRepository roleRepository,
-                                         OrgScopeService orgScopeService,
-                                         IdentityAdminLookupService identityAdminLookupService) {
-        this.menuRepository = menuRepository;
-        this.roleMenuRelRepository = roleMenuRelRepository;
-        this.roleRepository = roleRepository;
-        this.orgScopeService = orgScopeService;
-        this.identityAdminLookupService = identityAdminLookupService;
+    /** 身份与权限服务，负责相关业务规则和流程协作。 */
+    public RoleMenuAdministrationService(MenuRepository menuRepositoryValue,
+                                         RoleMenuRelRepository roleMenuRelRepositoryValue,
+                                         RoleRepository roleRepositoryValue,
+                                         OrgScopeService orgScopeServiceValue,
+                                         IdentityAdminLookupService identityAdminLookupServiceValue) {
+        this.menuRepository = menuRepositoryValue;
+        this.roleMenuRelRepository = roleMenuRelRepositoryValue;
+        this.roleRepository = roleRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.identityAdminLookupService = identityAdminLookupServiceValue;
     }
 
+    /** 校验并保证集团Mgmt菜单For集团管理满足业务规则。 */
     @Transactional
     public void ensureGroupMgmtMenusForGroupAdmin() {
         MenuDO groupMgmt = menuRepository.findByMenuCode("GROUP_MGMT").orElse(null);
@@ -76,7 +91,7 @@ public class RoleMenuAdministrationService {
                 "system.user-management.index",
                 "group:user-role:manage",
                 "user",
-                46
+                GROUP_USER_ROLE_MENU_SORT
         );
         MenuDO roleMgmt = ensureMenu(
                 "GROUP_ROLE_MGMT",
@@ -86,7 +101,7 @@ public class RoleMenuAdministrationService {
                 "system.role-management.index",
                 "group:role:manage",
                 "team",
-                47
+                GROUP_ROLE_MENU_SORT
         );
         MenuDO menuPermMgmt = ensureMenu(
                 "GROUP_MENU_PERMISSION_MGMT",
@@ -96,77 +111,77 @@ public class RoleMenuAdministrationService {
                 "system.menu-permission-management.index",
                 "group:menu-permission:manage",
                 "setting",
-                48
+                GROUP_MENU_PERMISSION_SORT
         );
         MenuDO archiveRoot = ensureMenu(
-                "STORE_BIZ_MOD_08",
+                "STORE_BIZ_MOD_ARCHIVE",
                 "档案管理",
                 null,
                 null,
                 null,
                 null,
                 "document",
-                108
+                ARCHIVE_ROOT_MENU_SORT
         );
         MenuDO archiveGroup = ensureMenu(
-                "STORE_BIZ_GRP_08_01",
+                "STORE_BIZ_GRP_ARCHIVE_ITEM",
                 "物品",
                 archiveRoot.getId(),
                 null,
                 null,
                 null,
                 null,
-                1801
+                ARCHIVE_ITEM_GROUP_SORT
         );
         MenuDO archiveItem = ensureMenu(
-                "STORE_BIZ_MENU_08_01_01",
+                "STORE_BIZ_MENU_ITEM",
                 "物品管理",
                 archiveGroup.getId(),
                 "/archive/items",
                 "items.management.index",
                 "store:archive:items:view",
                 null,
-                108011
+                ARCHIVE_ITEM_MENU_SORT
         );
         MenuDO archiveCategory = ensureMenu(
-                "STORE_BIZ_MENU_08_01_02",
+                "STORE_BIZ_MENU_ITEM_CATEGORY",
                 "物品类别管理",
                 archiveGroup.getId(),
                 "/archive/item-categories",
                 "items.category-management.index",
                 "store:archive:item-categories:view",
                 null,
-                108012
+                ARCHIVE_CATEGORY_MENU_SORT
         );
         MenuDO archiveUnit = ensureMenu(
-                "STORE_BIZ_MENU_08_01_03",
+                "STORE_BIZ_MENU_UNIT",
                 "单位管理",
                 archiveGroup.getId(),
                 "/archive/units",
                 "system.unit-management.index",
                 "store:archive:units:view",
                 null,
-                108013
+                ARCHIVE_UNIT_MENU_SORT
         );
         MenuDO archiveStatistics = ensureMenu(
-                "STORE_BIZ_MENU_08_01_04",
+                "STORE_BIZ_MENU_STATISTICS_TYPE",
                 "统计类型管理",
                 archiveGroup.getId(),
                 "/archive/statistics-types",
                 "items.statistics-type-management.index",
                 "store:archive:statistics-types:view",
                 null,
-                108014
+                ARCHIVE_STATISTICS_MENU_SORT
         );
         MenuDO archiveTag = ensureMenu(
-                "STORE_BIZ_MENU_08_01_05",
+                "STORE_BIZ_MENU_ITEM_TAG",
                 "物品标签管理",
                 archiveGroup.getId(),
                 "/archive/item-tags",
                 "items.tag-management.index",
                 "store:archive:item-tags:view",
                 null,
-                108015
+                ARCHIVE_TAG_MENU_SORT
         );
 
         RoleDO groupAdminRole = roleRepository.findByRoleCode(GROUP_ADMIN_ROLE_CODE).orElse(null);
@@ -185,6 +200,7 @@ public class RoleMenuAdministrationService {
         cleanupPlatformItemManagementMenu(archiveItem.getId());
     }
 
+    /** 查询Assignable菜单列表。 */
     public List<MenuAssignmentOption> listAssignableMenus(Long operatorId,
                                                           boolean platformAdmin,
                                                           String orgId) {
@@ -199,6 +215,7 @@ public class RoleMenuAdministrationService {
                 .toList();
     }
 
+    /** 查询角色菜单标识列表。 */
     public List<Long> listRoleMenuIds(Long roleId) {
         return roleMenuRelRepository.findByRoleId(roleId).stream()
                 .map(RoleMenuRelDO::getMenuId)
@@ -206,6 +223,7 @@ public class RoleMenuAdministrationService {
                 .toList();
     }
 
+    /** 处理save角色菜单。 */
     @Transactional
     public void saveRoleMenus(RoleDO role, List<Long> menuIds) {
         if (role == null || role.getId() == null) {
@@ -287,10 +305,6 @@ public class RoleMenuAdministrationService {
         }
         if (!Objects.equals(menu.getIcon(), icon)) {
             menu.setIcon(icon);
-            changed = true;
-        }
-        if (!Objects.equals(menu.getSortNo(), sortNo)) {
-            menu.setSortNo(sortNo);
             changed = true;
         }
         if (changed) {
@@ -429,6 +443,7 @@ public class RoleMenuAdministrationService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    /** 身份与权限数据模型，承载菜单分配选项数据。 */
     public record MenuAssignmentOption(Long id,
                                        String menuCode,
                                        String menuName,

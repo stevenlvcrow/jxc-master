@@ -1,16 +1,17 @@
 package com.boboboom.jxc.inventory.application.service;
 
+import java.math.BigDecimal;
+
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.inventory.domain.repository.InventoryBalanceRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryTransactionRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryTransactionDO;
-import org.springframework.stereotype.Service;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
 
 /**
  * 库存余额与流水变更服务。
@@ -21,10 +22,11 @@ public class InventoryStockMutationService {
     private final InventoryBalanceRepository inventoryBalanceRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
 
-    public InventoryStockMutationService(InventoryBalanceRepository inventoryBalanceRepository,
-                                         InventoryTransactionRepository inventoryTransactionRepository) {
-        this.inventoryBalanceRepository = inventoryBalanceRepository;
-        this.inventoryTransactionRepository = inventoryTransactionRepository;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public InventoryStockMutationService(InventoryBalanceRepository inventoryBalanceRepositoryValue,
+                                         InventoryTransactionRepository inventoryTransactionRepositoryValue) {
+        this.inventoryBalanceRepository = inventoryBalanceRepositoryValue;
+        this.inventoryTransactionRepository = inventoryTransactionRepositoryValue;
     }
 
     /**

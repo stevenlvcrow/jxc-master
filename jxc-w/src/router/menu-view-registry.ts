@@ -10,6 +10,7 @@ const menuViewRegistry: Record<string, LazyView> = {
   'system.user-management.index': () => import('@/views/system/user-management.vue'),
   'system.role-management.index': () => import('@/views/system/role-management.vue'),
   'system.menu-permission-management.index': () => import('@/views/system/menu-permission-management.vue'),
+  'system.menu-maintenance.index': () => import('@/views/system/menu-maintenance.vue'),
   'system.dictionary-management.index': () => import('@/views/system/dictionary-management.vue'),
   'system.unit-management.index': () => import('@/views/system/unit-management.vue'),
   'system.org-management.index': () => import('@/views/system/org-management.vue'),

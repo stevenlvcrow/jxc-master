@@ -1,61 +1,69 @@
 package com.boboboom.jxc.common;
 
-import com.boboboom.jxc.identity.application.auth.UnauthorizedException;
-import jakarta.validation.ConstraintViolationException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.BadSqlGrammarException;
-import org.springframework.validation.BindingResult;
-import org.springframework.validation.FieldError;
-import org.springframework.validation.BindException;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.BadSqlGrammarException;
+import org.springframework.validation.BindException;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import com.boboboom.jxc.identity.application.auth.UnauthorizedException;
+
+import jakarta.validation.ConstraintViolationException;
+
+/** 全局异常处理器，统一转换业务异常、认证异常和系统异常响应。 */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final String INIT_DATA_MESSAGE = "数据初始化未完成，请联系管理员";
 
+    /** 处理业务异常。 */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
         return ResponseEntity.badRequest().body(ApiResponse.fail(ex.getMessage()));
     }
 
+    /** 处理未认证或认证失效异常。 */
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnauthorizedException(UnauthorizedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.fail(ex.getMessage()));
     }
 
+    /** 处理参数校验异常。 */
     @ExceptionHandler({
-            MethodArgumentNotValidException.class,
-            BindException.class,
-            ConstraintViolationException.class
+        MethodArgumentNotValidException.class,
+        BindException.class,
+        ConstraintViolationException.class
     })
     public ResponseEntity<ApiResponse<Void>> handleValidationException(Exception ex) {
         String message = buildValidationMessage(ex);
         return ResponseEntity.badRequest().body(ApiResponse.fail(message));
     }
 
+    /** 处理未预期系统异常。 */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception ex) {
-        log.error("系统内部异常", ex);
+        LOG.error("系统内部异常", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail("系统繁忙，请稍后重试"));
     }
 
+    /** 处理数据库结构未初始化导致的 SQL 异常。 */
     @ExceptionHandler(BadSqlGrammarException.class)
     public ResponseEntity<ApiResponse<Void>> handleBadSqlGrammar(BadSqlGrammarException ex) {
         Throwable root = ex.getRootCause();
         String rootMessage = root == null ? ex.getMessage() : root.getMessage();
-        log.error("数据库SQL语法异常", ex);
+        LOG.error("数据库SQL语法异常", ex);
         if (isPostgresSqlException(root) && rootMessage != null && rootMessage.contains("does not exist")) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.fail(INIT_DATA_MESSAGE));
@@ -120,4 +128,3 @@ public class GlobalExceptionHandler {
         return segments[segments.length - 1];
     }
 }
-

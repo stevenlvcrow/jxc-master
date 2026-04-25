@@ -1,25 +1,29 @@
 package com.boboboom.jxc.identity.application.service;
 
-import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
+import java.util.List;
+
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 
+/** 身份与权限启动任务，负责应用启动后的初始化处理。 */
 @Component
 public class UserCodeBackfillRunner implements ApplicationRunner {
 
     private final UserAccountRepository userAccountRepository;
     private final UserCodeGenerator userCodeGenerator;
 
-    public UserCodeBackfillRunner(UserAccountRepository userAccountRepository,
-                                  UserCodeGenerator userCodeGenerator) {
-        this.userAccountRepository = userAccountRepository;
-        this.userCodeGenerator = userCodeGenerator;
+    /** 身份与权限启动任务，负责应用启动后的初始化处理。 */
+    public UserCodeBackfillRunner(UserAccountRepository userAccountRepositoryValue,
+                                  UserCodeGenerator userCodeGeneratorValue) {
+        this.userAccountRepository = userAccountRepositoryValue;
+        this.userCodeGenerator = userCodeGeneratorValue;
     }
 
+    /** 应用启动后执行初始化任务。 */
     @Override
     public void run(ApplicationArguments args) {
         List<UserAccountDO> users = userAccountRepository.findAllOrdered();

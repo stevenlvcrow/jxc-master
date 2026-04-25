@@ -1,14 +1,8 @@
 package com.boboboom.jxc.identity.interfaces.rest;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.application.service.UnitAdministrationService;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
-import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
-import com.boboboom.jxc.identity.interfaces.rest.request.UnitUpsertRequest;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import jakarta.validation.Valid;
+import java.time.LocalDateTime;
+import java.util.List;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,16 +15,27 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.UnitAdministrationService;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
+import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.UnitUpsertRequest;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 
-@Validated
-@RestController
-@RequestMapping("/api/identity/admin/units")
+import jakarta.validation.Valid;
+
 /**
  * 单位管理接口，负责单位的查询、创建、修改、状态变更和删除。
  */
+@Validated
+@RestController
+@RequestMapping("/api/identity/admin/units")
 public class UnitController {
+
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
 
     private final UnitAdministrationService unitAdministrationService;
     private final OrgScopeService orgScopeService;
@@ -38,16 +43,15 @@ public class UnitController {
     /**
      * 构造单位管理接口。
      *
-     * @param unitAdministrationService 单位管理服务
-     * @param orgScopeService 组织范围解析服务
+     * @param unitAdministrationServiceValue 单位管理服务
+     * @param orgScopeServiceValue 组织范围解析服务
      */
-    public UnitController(UnitAdministrationService unitAdministrationService,
-                          OrgScopeService orgScopeService) {
-        this.unitAdministrationService = unitAdministrationService;
-        this.orgScopeService = orgScopeService;
+    public UnitController(UnitAdministrationService unitAdministrationServiceValue,
+                          OrgScopeService orgScopeServiceValue) {
+        this.unitAdministrationService = unitAdministrationServiceValue;
+        this.orgScopeService = orgScopeServiceValue;
     }
 
-    @GetMapping
     /**
      * 查询单位列表。
      *
@@ -59,6 +63,7 @@ public class UnitController {
      * @param orgId 机构标识
      * @return 单位列表响应
      */
+    @GetMapping
     public CodeDataResponse<PageData<UnitView>> listUnits(@RequestParam(defaultValue = "1") Integer pageNum,
                                                           @RequestParam(defaultValue = "10") Integer pageSize,
                                                           @RequestParam(required = false) String keyword,
@@ -79,8 +84,6 @@ public class UnitController {
         return CodeDataResponse.ok(paginate(data, pageNum, pageSize));
     }
 
-    @PostMapping
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 新建单位。
      *
@@ -88,6 +91,8 @@ public class UnitController {
      * @param request 单位新增请求
      * @return 新建结果
      */
+    @PostMapping
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<IdPayload> createUnit(@RequestParam(required = false) String orgId,
                                                   @Valid @RequestBody UnitUpsertRequest request) {
         UnitScope scope = resolveUnitScope(orgId);
@@ -105,8 +110,6 @@ public class UnitController {
         return CodeDataResponse.ok(new IdPayload(entity.getId()));
     }
 
-    @PutMapping("/{id}")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 更新单位信息。
      *
@@ -115,6 +118,8 @@ public class UnitController {
      * @param request 单位更新请求
      * @return 空响应
      */
+    @PutMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> updateUnit(@PathVariable Long id,
                                              @RequestParam(required = false) String orgId,
                                              @Valid @RequestBody UnitUpsertRequest request) {
@@ -134,8 +139,6 @@ public class UnitController {
         return CodeDataResponse.ok();
     }
 
-    @PutMapping("/{id}/status")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 更新单位状态。
      *
@@ -144,6 +147,8 @@ public class UnitController {
      * @param request 状态更新请求
      * @return 空响应
      */
+    @PutMapping("/{id}/status")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> updateUnitStatus(@PathVariable Long id,
                                                    @RequestParam(required = false) String orgId,
                                                    @Valid @RequestBody StatusUpdateRequest request) {
@@ -152,8 +157,6 @@ public class UnitController {
         return CodeDataResponse.ok();
     }
 
-    @DeleteMapping("/{id}")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 删除单位。
      *
@@ -161,6 +164,8 @@ public class UnitController {
      * @param orgId 机构标识
      * @return 空响应
      */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> deleteUnit(@PathVariable Long id,
                                              @RequestParam(required = false) String orgId) {
         UnitScope scope = resolveUnitScope(orgId);
@@ -227,7 +232,7 @@ public class UnitController {
 
     private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
         int toIndex = Math.min(fromIndex + safePageSize, rows.size());
         return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);

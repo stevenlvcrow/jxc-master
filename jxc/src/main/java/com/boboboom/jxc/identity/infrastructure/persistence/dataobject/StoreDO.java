@@ -2,7 +2,8 @@ package com.boboboom.jxc.identity.infrastructure.persistence.dataobject;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 
-@TableName("dev.sys_store")
+/** 身份与权限数据对象，映射数据库表记录。 */
+@TableName("sys_store")
 public class StoreDO extends BaseAuditDO {
 
     private Long groupId;
@@ -14,68 +15,84 @@ public class StoreDO extends BaseAuditDO {
     private String address;
     private String remark;
 
+    /** 获取GroupId。 */
     public Long getGroupId() {
         return groupId;
     }
 
-    public void setGroupId(Long groupId) {
-        this.groupId = groupId;
+    /** 设置GroupId。 */
+    public void setGroupId(Long groupIdValue) {
+        this.groupId = groupIdValue;
     }
 
+    /** 获取StoreCode。 */
     public String getStoreCode() {
         return storeCode;
     }
 
-    public void setStoreCode(String storeCode) {
-        this.storeCode = storeCode;
+    /** 设置StoreCode。 */
+    public void setStoreCode(String storeCodeValue) {
+        this.storeCode = storeCodeValue;
     }
 
+    /** 获取StoreName。 */
     public String getStoreName() {
         return storeName;
     }
 
-    public void setStoreName(String storeName) {
-        this.storeName = storeName;
+    /** 设置StoreName。 */
+    public void setStoreName(String storeNameValue) {
+        this.storeName = storeNameValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 
+    /** 获取ContactName。 */
     public String getContactName() {
         return contactName;
     }
 
-    public void setContactName(String contactName) {
-        this.contactName = contactName;
+    /** 设置ContactName。 */
+    public void setContactName(String contactNameValue) {
+        this.contactName = contactNameValue;
     }
 
+    /** 获取ContactPhone。 */
     public String getContactPhone() {
         return contactPhone;
     }
 
-    public void setContactPhone(String contactPhone) {
-        this.contactPhone = contactPhone;
+    /** 设置ContactPhone。 */
+    public void setContactPhone(String contactPhoneValue) {
+        this.contactPhone = contactPhoneValue;
     }
 
+    /** 获取Address。 */
     public String getAddress() {
         return address;
     }
 
-    public void setAddress(String address) {
-        this.address = address;
+    /** 设置Address。 */
+    public void setAddress(String addressValue) {
+        this.address = addressValue;
     }
 
+    /** 获取Remark。 */
     public String getRemark() {
         return remark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    /** 设置Remark。 */
+    public void setRemark(String remarkValue) {
+        this.remark = remarkValue;
     }
 }
 

@@ -42,12 +42,24 @@ record UserAdminView(Long id,
                      String phone,
                      String status,
                      LocalDateTime createdAt,
+                     List<UserGroupScopeView> groups,
                      List<RoleAssignmentView> roles) {
+}
+
+record UserGroupScopeView(Long groupId,
+                          String groupName) {
 }
 
 record SalesmanCandidateView(Long userId,
                              String realName,
                              String phone) {
+}
+
+record UserOptionView(Long userId,
+                      String username,
+                      String realName,
+                      String phone,
+                      String status) {
 }
 
 record RoleAdminView(Long id,
@@ -74,6 +86,20 @@ record MenuAdminView(Long id,
                      String permissionCode,
                      String status,
                      Integer sortNo) {
+}
+
+record MenuMaintenanceView(Long id,
+                           String menuCode,
+                           String menuName,
+                           Long parentId,
+                           String menuType,
+                           String routePath,
+                           String componentKey,
+                           String permissionCode,
+                           String icon,
+                           Integer sortNo,
+                           Boolean visible,
+                           String status) {
 }
 
 record WarehouseAdminView(Long id,

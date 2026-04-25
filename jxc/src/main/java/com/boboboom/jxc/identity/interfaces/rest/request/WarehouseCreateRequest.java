@@ -2,6 +2,7 @@ package com.boboboom.jxc.identity.interfaces.rest.request;
 
 import jakarta.validation.constraints.NotBlank;
 
+/** 身份与权限请求参数，承载接口入参。 */
 public class WarehouseCreateRequest {
 
     private String warehouseCode;
@@ -19,36 +20,102 @@ public class WarehouseCreateRequest {
     private String targetGrossMargin;
     private String idealPurchaseSaleRatio;
 
-    public String getWarehouseCode() { return warehouseCode; }
-    public void setWarehouseCode(String warehouseCode) { this.warehouseCode = warehouseCode; }
+    /** 获取WarehouseCode。 */
+    public String getWarehouseCode() {
+        return warehouseCode;
+    }
+    /** 设置WarehouseCode。 */
+    public void setWarehouseCode(String warehouseCodeValue) {
+        this.warehouseCode = warehouseCodeValue;
+    }
 
-    public String getWarehouseName() { return warehouseName; }
-    public void setWarehouseName(String warehouseName) { this.warehouseName = warehouseName; }
+    /** 获取WarehouseName。 */
+    public String getWarehouseName() {
+        return warehouseName;
+    }
+    /** 设置WarehouseName。 */
+    public void setWarehouseName(String warehouseNameValue) {
+        this.warehouseName = warehouseNameValue;
+    }
 
-    public String getDepartment() { return department; }
-    public void setDepartment(String department) { this.department = department; }
+    /** 获取Department。 */
+    public String getDepartment() {
+        return department;
+    }
+    /** 设置Department。 */
+    public void setDepartment(String departmentValue) {
+        this.department = departmentValue;
+    }
 
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
+    /** 获取Status。 */
+    public String getStatus() {
+        return status;
+    }
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
+    }
 
-    public String getWarehouseType() { return warehouseType; }
-    public void setWarehouseType(String warehouseType) { this.warehouseType = warehouseType; }
+    /** 获取WarehouseType。 */
+    public String getWarehouseType() {
+        return warehouseType;
+    }
+    /** 设置WarehouseType。 */
+    public void setWarehouseType(String warehouseTypeValue) {
+        this.warehouseType = warehouseTypeValue;
+    }
 
-    public String getContactName() { return contactName; }
-    public void setContactName(String contactName) { this.contactName = contactName; }
+    /** 获取ContactName。 */
+    public String getContactName() {
+        return contactName;
+    }
+    /** 设置ContactName。 */
+    public void setContactName(String contactNameValue) {
+        this.contactName = contactNameValue;
+    }
 
-    public String getContactPhone() { return contactPhone; }
-    public void setContactPhone(String contactPhone) { this.contactPhone = contactPhone; }
+    /** 获取ContactPhone。 */
+    public String getContactPhone() {
+        return contactPhone;
+    }
+    /** 设置ContactPhone。 */
+    public void setContactPhone(String contactPhoneValue) {
+        this.contactPhone = contactPhoneValue;
+    }
 
-    public String getRegionPath() { return regionPath; }
-    public void setRegionPath(String regionPath) { this.regionPath = regionPath; }
+    /** 获取RegionPath。 */
+    public String getRegionPath() {
+        return regionPath;
+    }
+    /** 设置RegionPath。 */
+    public void setRegionPath(String regionPathValue) {
+        this.regionPath = regionPathValue;
+    }
 
-    public String getAddress() { return address; }
-    public void setAddress(String address) { this.address = address; }
+    /** 获取Address。 */
+    public String getAddress() {
+        return address;
+    }
+    /** 设置Address。 */
+    public void setAddress(String addressValue) {
+        this.address = addressValue;
+    }
 
-    public String getTargetGrossMargin() { return targetGrossMargin; }
-    public void setTargetGrossMargin(String targetGrossMargin) { this.targetGrossMargin = targetGrossMargin; }
+    /** 获取TargetGrossMargin。 */
+    public String getTargetGrossMargin() {
+        return targetGrossMargin;
+    }
+    /** 设置TargetGrossMargin。 */
+    public void setTargetGrossMargin(String targetGrossMarginValue) {
+        this.targetGrossMargin = targetGrossMarginValue;
+    }
 
-    public String getIdealPurchaseSaleRatio() { return idealPurchaseSaleRatio; }
-    public void setIdealPurchaseSaleRatio(String idealPurchaseSaleRatio) { this.idealPurchaseSaleRatio = idealPurchaseSaleRatio; }
+    /** 获取IdealPurchaseSaleRatio。 */
+    public String getIdealPurchaseSaleRatio() {
+        return idealPurchaseSaleRatio;
+    }
+    /** 设置IdealPurchaseSaleRatio。 */
+    public void setIdealPurchaseSaleRatio(String idealPurchaseSaleRatioValue) {
+        this.idealPurchaseSaleRatio = idealPurchaseSaleRatioValue;
+    }
 }

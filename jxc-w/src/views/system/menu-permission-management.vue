@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ElMessage, type ElTree } from 'element-plus';
@@ -40,12 +40,13 @@ const platformVisibleMenuCodes = new Set([
   'ROLE_MGMT',
   'USER_MGMT',
   'MENU_PERMISSION_MGMT',
-  'STORE_BIZ_MOD_08',
-  'STORE_BIZ_GRP_08_01',
-  'STORE_BIZ_MENU_08_01_02',
-  'STORE_BIZ_MENU_08_01_03',
-  'STORE_BIZ_MENU_08_01_04',
-  'STORE_BIZ_MENU_08_01_05',
+  'MENU_MAINTENANCE',
+  'STORE_BIZ_MOD_ARCHIVE',
+  'STORE_BIZ_GRP_ARCHIVE_ITEM',
+  'STORE_BIZ_MENU_ITEM_CATEGORY',
+  'STORE_BIZ_MENU_UNIT',
+  'STORE_BIZ_MENU_STATISTICS_TYPE',
+  'STORE_BIZ_MENU_ITEM_TAG',
 ]);
 const isPlatformRoleMenu = (menu: MenuAdminItem) => platformVisibleMenuCodes.has(menu.menuCode);
 const filteredRoles = computed(() => {

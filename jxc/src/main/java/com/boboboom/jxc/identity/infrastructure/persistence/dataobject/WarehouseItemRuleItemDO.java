@@ -1,10 +1,12 @@
 package com.boboboom.jxc.identity.infrastructure.persistence.dataobject;
 
+import java.time.LocalDateTime;
+
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import java.time.LocalDateTime;
 
+/** 身份与权限数据对象，映射数据库表记录。 */
 @TableName("warehouse_item_rule_item")
 public class WarehouseItemRuleItemDO {
 
@@ -25,67 +27,83 @@ public class WarehouseItemRuleItemDO {
 
     private LocalDateTime createdAt;
 
+    /** 获取Id。 */
     public Long getId() {
         return id;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    /** 设置Id。 */
+    public void setId(Long idValue) {
+        this.id = idValue;
     }
 
+    /** 获取RuleId。 */
     public Long getRuleId() {
         return ruleId;
     }
 
-    public void setRuleId(Long ruleId) {
-        this.ruleId = ruleId;
+    /** 设置RuleId。 */
+    public void setRuleId(Long ruleIdValue) {
+        this.ruleId = ruleIdValue;
     }
 
+    /** 获取ItemCode。 */
     public String getItemCode() {
         return itemCode;
     }
 
-    public void setItemCode(String itemCode) {
-        this.itemCode = itemCode;
+    /** 设置ItemCode。 */
+    public void setItemCode(String itemCodeValue) {
+        this.itemCode = itemCodeValue;
     }
 
+    /** 获取ItemName。 */
     public String getItemName() {
         return itemName;
     }
 
-    public void setItemName(String itemName) {
-        this.itemName = itemName;
+    /** 设置ItemName。 */
+    public void setItemName(String itemNameValue) {
+        this.itemName = itemNameValue;
     }
 
+    /** 获取SpecModel。 */
     public String getSpecModel() {
         return specModel;
     }
 
-    public void setSpecModel(String specModel) {
-        this.specModel = specModel;
+    /** 设置SpecModel。 */
+    public void setSpecModel(String specModelValue) {
+        this.specModel = specModelValue;
     }
 
+    /** 获取ItemCategory。 */
     public String getItemCategory() {
         return itemCategory;
     }
 
-    public void setItemCategory(String itemCategory) {
-        this.itemCategory = itemCategory;
+    /** 设置ItemCategory。 */
+    public void setItemCategory(String itemCategoryValue) {
+        this.itemCategory = itemCategoryValue;
     }
 
+    /** 获取SortOrder。 */
     public Integer getSortOrder() {
         return sortOrder;
     }
 
-    public void setSortOrder(Integer sortOrder) {
-        this.sortOrder = sortOrder;
+    /** 设置SortOrder。 */
+    public void setSortOrder(Integer sortOrderValue) {
+        this.sortOrder = sortOrderValue;
     }
 
+    /** 获取CreatedAt。 */
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    /** 设置CreatedAt。 */
+    public void setCreatedAt(LocalDateTime createdAtValue) {
+        this.createdAt = createdAtValue;
     }
 }

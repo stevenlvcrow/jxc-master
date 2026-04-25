@@ -215,7 +215,7 @@ CREATE TABLE IF NOT EXISTS sys_role
     updated_at        TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_sys_role_tenant_code UNIQUE (tenant_group_id, role_code),
     CONSTRAINT ck_sys_role_type CHECK (role_type IN ('PLATFORM', 'GROUP', 'STORE')),
-    CONSTRAINT ck_sys_role_scope CHECK (data_scope_type IN ('ALL', 'GROUP', 'STORE', 'SELF', 'CUSTOM')),
+    CONSTRAINT ck_sys_role_scope CHECK (data_scope_type IN ('ALL', 'GROUP', 'STORE', 'SELF')),
     CONSTRAINT ck_sys_role_status CHECK (status IN ('ENABLED', 'DISABLED'))
 );
 
@@ -224,7 +224,7 @@ COMMENT ON COLUMN sys_role.tenant_group_id IS '租户集团ID，0表示平台租
 COMMENT ON COLUMN sys_role.role_type IS '角色层级：平台/集团/门店';
 COMMENT ON COLUMN sys_role.role_code IS '角色编码';
 COMMENT ON COLUMN sys_role.role_name IS '角色名称';
-COMMENT ON COLUMN sys_role.data_scope_type IS '数据权限范围：ALL/GROUP/STORE/SELF/CUSTOM';
+COMMENT ON COLUMN sys_role.data_scope_type IS '数据权限范围：ALL/GROUP/STORE/SELF';
 COMMENT ON COLUMN sys_role.description IS '角色说明';
 COMMENT ON COLUMN sys_role.status IS '状态：ENABLED/DISABLED';
 COMMENT ON COLUMN sys_role.created_by IS '创建人';
@@ -1315,7 +1315,7 @@ CREATE TABLE IF NOT EXISTS purchase_document
     source_document_code       VARCHAR(64),
     downstream_document_code   VARCHAR(64),
     document_status            VARCHAR(32)    NOT NULL DEFAULT '草稿',
-    review_status              VARCHAR(32)    NOT NULL DEFAULT '待审核',
+    review_status              VARCHAR(32)    NOT NULL DEFAULT '未审核',
     ship_status                VARCHAR(32),
     receive_status             VARCHAR(32),
     reconciliation_status      VARCHAR(32),
@@ -1349,7 +1349,8 @@ CREATE TABLE IF NOT EXISTS purchase_document
     updated_at                 TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_purchase_document_scope_code UNIQUE (scope_type, scope_id, document_type, document_code),
     CONSTRAINT ck_purchase_document_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE')),
-    CONSTRAINT ck_purchase_document_type CHECK (document_type IN ('APPLICATION', 'ORDER', 'RECEIPT', 'RETURN'))
+    CONSTRAINT ck_purchase_document_type CHECK (document_type IN ('APPLICATION', 'ORDER', 'RECEIPT', 'RETURN')),
+    CONSTRAINT ck_purchase_document_review_status CHECK (review_status IN ('已审核', '未审核'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_purchase_document_scope_type ON purchase_document (scope_type, scope_id, document_type);
@@ -1378,9 +1379,10 @@ CREATE TABLE IF NOT EXISTS purchase_document_line
     is_gift                    BOOLEAN        NOT NULL DEFAULT FALSE,
     warehouse_name             VARCHAR(128),
     expected_arrival_date      DATE,
-    review_status              VARCHAR(32)    NOT NULL DEFAULT '待审核',
+    review_status              VARCHAR(32)    NOT NULL DEFAULT '未审核',
     remark                     VARCHAR(500),
     created_at                 TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_purchase_document_line_review_status CHECK (review_status IN ('已审核', '未审核')),
     CONSTRAINT fk_purchase_document_line_header FOREIGN KEY (document_id) REFERENCES purchase_document (id) ON DELETE CASCADE
 );
 
@@ -1450,6 +1452,7 @@ CREATE TABLE IF NOT EXISTS workflow_approval_notification
     business_name VARCHAR(128)  NOT NULL,
     business_id   BIGINT        NOT NULL,
     approval_no   VARCHAR(64)   NOT NULL,
+    approver_user_id BIGINT,
     approver_name VARCHAR(64)   NOT NULL,
     approver_role VARCHAR(128)  NOT NULL,
     target_approver_user_id BIGINT,
@@ -1466,6 +1469,8 @@ CREATE TABLE IF NOT EXISTS workflow_approval_notification
 CREATE INDEX IF NOT EXISTS idx_workflow_approval_notification_scope ON workflow_approval_notification (scope_type, scope_id, audited_at DESC);
 
 ALTER TABLE workflow_approval_notification
+    ADD COLUMN IF NOT EXISTS approver_user_id BIGINT;
+ALTER TABLE workflow_approval_notification
     ADD COLUMN IF NOT EXISTS target_approver_user_id BIGINT;
 ALTER TABLE workflow_approval_notification
     ADD COLUMN IF NOT EXISTS target_approver_role_code VARCHAR(64);
@@ -1475,6 +1480,7 @@ ALTER TABLE workflow_approval_notification
 COMMENT ON TABLE workflow_approval_notification IS '流程审批通知';
 COMMENT ON COLUMN workflow_approval_notification.approval_no IS '审批编号';
 COMMENT ON COLUMN workflow_approval_notification.business_name IS '流程名称';
+COMMENT ON COLUMN workflow_approval_notification.approver_user_id IS '审批操作人ID';
 COMMENT ON COLUMN workflow_approval_notification.approver_name IS '审批人';
 COMMENT ON COLUMN workflow_approval_notification.approver_role IS '审批角色';
 COMMENT ON COLUMN workflow_approval_notification.target_approver_user_id IS '待审批目标人员ID';
@@ -2886,7 +2892,6 @@ ALTER TABLE sys_unit DROP CONSTRAINT IF EXISTS ck_sys_unit_type;
 ALTER TABLE sys_unit DROP CONSTRAINT IF EXISTS ck_sys_unit_status;
 ALTER TABLE sys_user DROP CONSTRAINT IF EXISTS ck_sys_user_status;
 ALTER TABLE sys_role DROP CONSTRAINT IF EXISTS ck_sys_role_type;
-ALTER TABLE sys_role DROP CONSTRAINT IF EXISTS ck_sys_role_scope;
 ALTER TABLE sys_role DROP CONSTRAINT IF EXISTS ck_sys_role_status;
 ALTER TABLE sys_menu DROP CONSTRAINT IF EXISTS ck_sys_menu_type;
 ALTER TABLE sys_menu DROP CONSTRAINT IF EXISTS ck_sys_menu_status;

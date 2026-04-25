@@ -275,8 +275,6 @@ const handlePageSizeChange = (size: number) => {
         批量删除
       </el-button>
       <el-button @click="handleToolbarAction('批量提交')">批量提交</el-button>
-      <el-button @click="handleToolbarAction('批量审核')">批量审核</el-button>
-      <el-button @click="handleToolbarAction('批量反审核')">批量反审核</el-button>
       <el-dropdown @command="handleTableSettingCommand">
         <el-button>
           表格设置
