@@ -29,6 +29,7 @@ import {
 import { useAppStore } from '@/stores/app';
 import { useMenuStore } from '@/stores/menu';
 import { useSessionStore, type OrgNode } from '@/stores/session';
+import { syncRuntimeMenuRoutes } from '@/router';
 
 const route = useRoute();
 const router = useRouter();
@@ -194,7 +195,11 @@ const handleSelect = (path: string) => {
   if (!normalizedPath.startsWith('/')) {
     return;
   }
-  const resolved = router.resolve(normalizedPath);
+  let resolved = router.resolve(normalizedPath);
+  if (!resolved.matched.length && menuStore.menuItems.length) {
+    syncRuntimeMenuRoutes(menuStore.menuItems);
+    resolved = router.resolve(normalizedPath);
+  }
   if (!resolved.matched.length) {
     ElMessage.info('该菜单页面尚未配置路由');
     return;
@@ -572,6 +577,7 @@ watch(
     }
     try {
       await menuStore.loadMenus(targetOrgId || undefined);
+      syncRuntimeMenuRoutes(menuStore.menuItems);
       const allowedPaths = new Set(flattenMenuPaths(menuStore.menuItems));
       if (route.path !== '/select-org' && route.path !== '/login' && route.path !== '/profile' && !allowedPaths.has(route.path)) {
         if (sessionStore.requiresOrgSelection && !sessionStore.hasSelectedOrg) {

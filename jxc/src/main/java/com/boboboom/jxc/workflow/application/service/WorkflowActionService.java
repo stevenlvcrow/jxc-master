@@ -204,6 +204,54 @@ public class WorkflowActionService {
         return userRoleCodes.contains(target.roleCode());
     }
 
+    public boolean isActionTriggerTask(String businessCode,
+                                       String scopeType,
+                                       Long scopeId,
+                                       Long groupId,
+                                       Long operatorId,
+                                       String taskName,
+                                       String action) {
+        if (operatorId == null
+                || !StringUtils.hasText(businessCode)
+                || !StringUtils.hasText(taskName)
+                || !StringUtils.hasText(action)) {
+            return false;
+        }
+        try {
+            JsonNode root = readNodeConfig(scopeType, scopeId, groupId, businessCode);
+            if (root == null) {
+                return false;
+            }
+            String normalizedTaskName = trimToNull(taskName);
+            String normalizedAction = normalizeAction(action);
+            Set<String> userRoleCodes = collectUserRoleCodes(operatorId, scopeType, scopeId, groupId);
+            for (JsonNode node : root) {
+                String nodeType = trimToNull(node.path("nodeType").asText(null));
+                if (!"NORMAL".equalsIgnoreCase(nodeType)) {
+                    continue;
+                }
+                String nodeName = trimToNull(node.path("nodeName").asText(null));
+                if (!StringUtils.hasText(nodeName) || !nodeName.equals(normalizedTaskName)) {
+                    continue;
+                }
+                if (!collectTriggerActions(node.path("triggerActions")).contains(normalizedAction)) {
+                    continue;
+                }
+                Long approverUserId = node.path("approverUserId").isNumber()
+                        ? node.path("approverUserId").asLong()
+                        : null;
+                if (approverUserId != null) {
+                    return approverUserId.equals(operatorId);
+                }
+                String roleCode = trimToNull(node.path("approverRoleCode").asText(null));
+                return StringUtils.hasText(roleCode) && userRoleCodes.contains(roleCode);
+            }
+            return false;
+        } catch (BusinessException ex) {
+            return false;
+        }
+    }
+
     private JsonNode readNodeConfig(String scopeType,
                                     Long scopeId,
                                     Long groupId,

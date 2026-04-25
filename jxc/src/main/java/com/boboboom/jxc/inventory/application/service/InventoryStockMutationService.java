@@ -62,7 +62,7 @@ public class InventoryStockMutationService {
         BigDecimal before = balance.getQuantity() == null ? BigDecimal.ZERO : balance.getQuantity();
         BigDecimal after = before.add(delta);
         if (after.compareTo(BigDecimal.ZERO) < 0) {
-            throw new BusinessException("库存不足，无法反审核");
+            throw new BusinessException("库存不足，无法完成库存扣减");
         }
         upsertBalance(balance, scopeType, scopeId, warehouseName, itemCode, itemName, after);
         inventoryTransactionRepository.save(buildTransaction(
@@ -143,7 +143,7 @@ public class InventoryStockMutationService {
                                       Long bizLineId,
                                       Long operatorId) {
         if (delta.compareTo(BigDecimal.ZERO) < 0) {
-            throw new BusinessException("库存不足，无法反审核");
+            throw new BusinessException("库存不足，无法完成库存扣减");
         }
         InventoryBalanceDO created = new InventoryBalanceDO();
         created.setScopeType(scopeType);

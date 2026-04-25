@@ -20,6 +20,10 @@ public class InventoryWorkflowBootstrapService {
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SOURCE_BUSINESS_CODE = "PURCHASE_INBOUND";
     private static final List<WorkflowProcessSeed> EXTRA_PROCESS_SEEDS = List.of(
+            new WorkflowProcessSeed("PURCHASE_APPLICATION", "采购单申请流程"),
+            new WorkflowProcessSeed("PURCHASE_ORDER", "采购订单流程"),
+            new WorkflowProcessSeed("PURCHASE_RECEIPT", "采购收货单流程"),
+            new WorkflowProcessSeed("PURCHASE_RETURN", "采购退货单流程"),
             new WorkflowProcessSeed("INVENTORY_CHECK", "盘点单流程"),
             new WorkflowProcessSeed("MULTI_INVENTORY_CHECK", "多人盘点单流程")
     );

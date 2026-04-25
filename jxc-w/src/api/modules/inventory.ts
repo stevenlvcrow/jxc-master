@@ -167,6 +167,7 @@ export type GenericInventoryDocumentType =
   | 'production-inbound'
   | 'customer-sales-outbound'
   | 'customer-return-inbound'
+  | 'dish-consumption-outbound'
   | 'warehouse-opening-balance'
   | 'store-transfer'
   | 'stock-transfer-outbound';
@@ -538,6 +539,402 @@ export const fetchInventoryInoutDetailReportApi = (
 ) => apiClient.get<InventoryInoutDetailReportPage>('/api/inventory/inout-detail/report', {
   params: withOrgParams(params, orgId),
 });
+
+export type InventoryReportPage<T> = {
+  list: T[];
+  total: number;
+  pageNo: number;
+  pageSize: number;
+};
+
+export type StockWarningReportParams = {
+  pageNo: number;
+  pageSize: number;
+  statisticDimension?: string;
+  warehouse?: string;
+  itemCategory?: string;
+  itemCode?: string;
+  itemStatus?: string;
+  warningStatus?: string;
+  unitType?: string;
+};
+
+export type StockWarningReportRow = {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  unit: string;
+  itemCategory: string;
+  warehouse?: string;
+  currentStock: number;
+  stockUpperLimit: number;
+  stockLowerLimit: number;
+  warningStatus: string;
+  itemStatus: string;
+};
+
+export const fetchStockWarningReportApi = (params: StockWarningReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<StockWarningReportRow>>('/api/inventory/stock-warning/report', {
+    params: withOrgParams(params, orgId),
+  });
+
+export type StagnantStockReportParams = {
+  pageNo: number;
+  pageSize: number;
+  warehouse?: string;
+  itemCode?: string;
+  itemCategory?: string;
+  itemStatus?: string;
+  stagnant?: string;
+  stagnantDaysGreaterThan?: string;
+  unitType?: string;
+};
+
+export type StagnantStockReportRow = {
+  id: string;
+  warehouse: string;
+  itemName: string;
+  itemCode: string;
+  specModel: string;
+  unit: string;
+  firstInboundTime: string;
+  latestInboundTime: string;
+  latestOutboundTime: string;
+  latestInboundQty: number;
+  latestOutboundQty: number;
+  stockQty: number;
+  retainedDays: number;
+  itemStagnantDays: number;
+  stagnant: string;
+  itemStatus: string;
+  itemCategory: string;
+};
+
+export const fetchStagnantStockReportApi = (params: StagnantStockReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<StagnantStockReportRow>>('/api/inventory/stagnant-stock/report', {
+    params: withOrgParams(params, orgId),
+  });
+
+export type InventoryProfitLossReportParams = {
+  pageNo: number;
+  pageSize: number;
+  warehouse?: string;
+  dateRangeStart?: string;
+  dateRangeEnd?: string;
+  itemCategory?: string;
+  statisticsType?: string;
+  itemKeyword?: string;
+  checkType?: string;
+  profitLossResult?: string;
+  unitType?: string;
+};
+
+export type InventoryProfitLossReportRow = {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  specModel: string;
+  itemCategory: string;
+  statisticsType: string;
+  unit: string;
+  checkDocumentNo: string;
+  checkType: string;
+  stockDocumentNo: string;
+  orgName: string;
+  orgCode: string;
+  warehouse: string;
+  checkTime: string;
+  auditTime: string;
+  auditor: string;
+  bookQty: number;
+  bookAmount: number;
+  actualQty: number;
+  actualAmount: number;
+  profitLossQty: number;
+  profitLossAmount: number;
+  profitLossQtyAbs: number;
+  profitLossAmountAbs: number;
+  adjustmentAmount: number;
+  profitLossResult: string;
+  profitInboundPrice: number;
+  lossOutboundPrice: number;
+  checkReason: string;
+  remark: string;
+};
+
+export const fetchInventoryProfitLossReportApi = (params: InventoryProfitLossReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<InventoryProfitLossReportRow>>('/api/inventory/inventory-profit-loss/report', {
+    params: withOrgParams(params, orgId),
+  });
+
+export type InventoryInoutSummaryReportParams = {
+  pageNo: number;
+  pageSize: number;
+  statisticDimension?: string;
+  warehouse?: string;
+  warehouseType?: string;
+  startDate?: string;
+  endDate?: string;
+  itemCode?: string;
+  itemCategory?: string;
+  statisticType?: string;
+  itemStatus?: string;
+  inoutType?: string;
+  unitType?: string;
+  hideNoInout?: boolean | string;
+  queryScheme?: string;
+};
+
+export type InventoryInoutSummaryReportRow = {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  specModel: string;
+  itemCategory: string;
+  statisticType: string;
+  unit: string;
+  orgName: string;
+  orgCode: string;
+  warehouse: string;
+  warehouseType: string;
+  openingQty: number;
+  openingCostAmountExTax: number;
+  openingAvgCostExTax: number;
+  inboundQty: number;
+  inboundCostAmountExTax: number;
+  inboundAvgCostExTax: number;
+  outboundQty: number;
+  outboundCostAmountExTax: number;
+  outboundAvgCostExTax: number;
+  closingQty: number;
+  closingCostAmountExTax: number;
+  closingAvgCostExTax: number;
+  inventoryProfitLossQty: number;
+  inventoryProfitLossCostAmountTaxIncluded: number;
+  inventoryProfitLossCostAmountExTax: number;
+  inventoryCheckQty: number;
+  inventoryCheckCostAmountTaxIncluded: number;
+  closingCheckDiffQty: number;
+  closingCheckDiffAmountExTax: number;
+  returnDifferenceQty: number;
+  returnDifferenceCostAmountExTax: number;
+  inoutType: string;
+};
+
+export const fetchInventoryInoutSummaryReportApi = (params: InventoryInoutSummaryReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<InventoryInoutSummaryReportRow>>('/api/inventory/inventory-inout-summary/report', {
+    params: withOrgParams(params, orgId),
+  });
+
+export type StockInoutSummaryReportParams = {
+  pageNo: number;
+  pageSize: number;
+  statisticMode?: string;
+  dateDimension?: string;
+  startDate?: string;
+  endDate?: string;
+  statisticDimension?: string;
+  warehouse?: string;
+  warehouseType?: string;
+  targetStore?: string;
+  itemKeyword?: string;
+  itemCategory?: string;
+  statisticType?: string;
+  itemStatus?: string;
+  inoutType?: string;
+  inoutDirection?: string;
+  oppositeOrg?: string;
+  unitType?: string;
+  queryScheme?: string;
+};
+
+export type StockInoutSummaryReportRow = {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  specModel: string;
+  itemCategory: string;
+  statisticType: string;
+  unit: string;
+  inoutType: string;
+  warehouse: string;
+  warehouseType: string;
+  oppositeOrg: string;
+  oppositeWarehouse: string;
+  inboundQty: number;
+  inboundCostAmountTaxIncluded: number;
+  inboundAvgCostTaxIncluded: number;
+  inboundSettlementAmountTaxIncluded: number;
+  inboundAvgSettlementTaxIncluded: number;
+  outboundQty: number;
+  outboundCostAmountTaxIncluded: number;
+  outboundAvgCostTaxIncluded: number;
+  outboundSettlementAmountTaxIncluded: number;
+  outboundAvgSettlementTaxIncluded: number;
+  statisticMode: string;
+};
+
+export const fetchStockInoutSummaryReportApi = (params: StockInoutSummaryReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<StockInoutSummaryReportRow>>('/api/inventory/stock-inout-summary/report', {
+    params: withOrgParams(params, orgId),
+  });
+
+export type OtherInoutSummaryReportParams = {
+  pageNo: number;
+  pageSize: number;
+  startDate?: string;
+  endDate?: string;
+  warehouse?: string;
+  itemCategory?: string;
+  itemCode?: string;
+  inoutType?: string;
+  reasonType?: string;
+  itemStatus?: string;
+};
+
+export type OtherInoutSummaryReportRow = {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  specModel: string;
+  itemCategory: string;
+  baseUnit: string;
+  warehouse: string;
+  inoutType: string;
+  reasonType: string;
+  quantity: number;
+  amountExTax: number;
+};
+
+export const fetchOtherInoutSummaryReportApi = (params: OtherInoutSummaryReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<OtherInoutSummaryReportRow>>('/api/inventory/other-inout-summary/report', {
+    params: withOrgParams(params, orgId),
+  });
+
+export type InterOrgTransferDetailReportParams = {
+  pageNo: number;
+  pageSize: number;
+  statisticMode?: string;
+  dateType?: string;
+  startDate?: string;
+  endDate?: string;
+  targetStore?: string;
+  sourceStore?: string;
+  itemName?: string;
+  itemCategory?: string;
+  sourceWarehouse?: string;
+  targetWarehouse?: string;
+  documentStatus?: string;
+};
+
+export type InterOrgTransferDetailReportRow = {
+  id: string;
+  transferNo: string;
+  itemCode: string;
+  itemName: string;
+  documentStatus: string;
+  transferDate: string;
+  outboundAuditTime: string;
+  sourceStore: string;
+  sourceWarehouse: string;
+  inboundDate: string;
+  inboundAuditTime: string;
+  targetStore: string;
+  targetWarehouse: string;
+  specModel: string;
+  itemCategory: string;
+  baseUnit: string;
+  transferBaseQty: number;
+  businessUnit: string;
+  transferQty: number;
+  inboundAmountTaxIncluded: number;
+  outboundCostAmountExTax: number;
+  outboundSettlementAmountTaxIncluded: number;
+  inboundPriceTaxIncluded: number;
+  outboundCostPriceExTax: number;
+  outboundSettlementPriceTaxIncluded: number;
+  remark: string;
+  statisticMode: string;
+};
+
+export const fetchInterOrgTransferDetailReportApi = (params: InterOrgTransferDetailReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<InterOrgTransferDetailReportRow>>('/api/inventory/inter-org-transfer-detail/report', {
+    params: withOrgParams(params, orgId),
+  });
+
+export type InterOrgTransferSummaryReportParams = {
+  pageNo: number;
+  pageSize: number;
+  statisticMode?: string;
+  dateType?: string;
+  startDate?: string;
+  endDate?: string;
+  statisticDimension?: string;
+  targetStore?: string;
+  itemKeyword?: string;
+  itemCategory?: string;
+  unitType?: string;
+  queryScheme?: string;
+};
+
+export type InterOrgTransferSummaryReportRow = {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  sourceStore: string;
+  targetStore: string;
+  specModel: string;
+  itemCategory: string;
+  unit: string;
+  transferQty: number;
+  inboundAmountTaxIncluded: number;
+  outboundCostAmountExTax: number;
+  outboundSettlementAmountTaxIncluded: number;
+  inboundAvgPriceTaxIncluded: number;
+  outboundCostAvgPriceExTax: number;
+  outboundSettlementAvgPriceTaxIncluded: number;
+};
+
+export const fetchInterOrgTransferSummaryReportApi = (params: InterOrgTransferSummaryReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<InterOrgTransferSummaryReportRow>>('/api/inventory/inter-org-transfer-summary/report', {
+    params: withOrgParams(params, orgId),
+  });
+
+export type StockTurnoverRateReportParams = {
+  pageNo: number;
+  pageSize: number;
+  statisticDimension?: string;
+  statisticMethod?: string;
+  startDate?: string;
+  endDate?: string;
+  warehouse?: string;
+  itemCategory?: string;
+  itemCode?: string;
+  itemStatus?: string;
+  unitType?: string;
+};
+
+export type StockTurnoverRateReportRow = {
+  id: string;
+  orgName: string;
+  warehouse: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  itemCategory: string;
+  itemStatus: string;
+  openingAmount: number;
+  closingAmount: number;
+  avgStockAmount: number;
+  outboundAmount: number;
+  turnoverRate: number;
+  turnoverDays: number;
+};
+
+export const fetchStockTurnoverRateReportApi = (params: StockTurnoverRateReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<StockTurnoverRateReportRow>>('/api/inventory/stock-turnover-rate/report', {
+    params: withOrgParams(params, orgId),
+  });
 
 export type InventoryCheckRow = {
   id: number;

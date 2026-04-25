@@ -12,8 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -126,7 +124,7 @@ public class RoleMenuAdministrationService {
                 archiveGroup.getId(),
                 "/archive/items",
                 "items.management.index",
-                "store:biz:08:01:01:view",
+                "store:archive:items:view",
                 null,
                 108011
         );
@@ -136,7 +134,7 @@ public class RoleMenuAdministrationService {
                 archiveGroup.getId(),
                 "/archive/item-categories",
                 "items.category-management.index",
-                "store:biz:08:01:02:view",
+                "store:archive:item-categories:view",
                 null,
                 108012
         );
@@ -146,7 +144,7 @@ public class RoleMenuAdministrationService {
                 archiveGroup.getId(),
                 "/archive/units",
                 "system.unit-management.index",
-                "store:biz:08:01:03:view",
+                "store:archive:units:view",
                 null,
                 108013
         );
@@ -156,7 +154,7 @@ public class RoleMenuAdministrationService {
                 archiveGroup.getId(),
                 "/archive/statistics-types",
                 "items.statistics-type-management.index",
-                "store:biz:08:01:04:view",
+                "store:archive:statistics-types:view",
                 null,
                 108014
         );
@@ -166,7 +164,7 @@ public class RoleMenuAdministrationService {
                 archiveGroup.getId(),
                 "/archive/item-tags",
                 "items.tag-management.index",
-                "store:biz:08:01:05:view",
+                "store:archive:item-tags:view",
                 null,
                 108015
         );

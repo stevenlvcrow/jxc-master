@@ -6,6 +6,7 @@ import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSessionStore } from '@/stores/session';
+import { fetchStockInoutSummaryReportApi } from '@/api/modules/inventory';
 import {
   fetchItemCategoryTreeApi,
   fetchItemsApi,
@@ -29,7 +30,6 @@ type StockInoutSummaryRow = {
   specModel: string;
   itemCategory: string;
   statisticType: string;
-  storageMode: string;
   unit: string;
   inoutType: string;
   warehouse: string;
@@ -46,6 +46,7 @@ type StockInoutSummaryRow = {
   outboundAvgCostTaxIncluded: number;
   outboundSettlementAmountTaxIncluded: number;
   outboundAvgSettlementTaxIncluded: number;
+  statisticMode: string;
 };
 
 type ReportColumn = {
@@ -152,7 +153,7 @@ const columns: ReportColumn[] = [
   { key: 'specModel', label: '规格型号', minWidth: 120 },
   { key: 'itemCategory', label: '物品类别', minWidth: 120 },
   { key: 'statisticType', label: '统计类型', minWidth: 120 },
-  { key: 'storageMode', label: '储存方式', minWidth: 110 },
+  { key: 'statisticMode', label: '统计方式', minWidth: 110 },
   { key: 'unit', label: '单位', minWidth: 90 },
   { key: 'inoutType', label: '出入库类型', minWidth: 130 },
   { key: 'warehouse', label: '仓库', minWidth: 130 },
@@ -232,59 +233,32 @@ const loadOptions = async () => {
 const fetchReport = async () => {
   loading.value = true;
   try {
-    tableRows.value = [
-      {
-        id: '1',
-        itemCode: 'ITEM-001',
-        itemName: '鸡胸肉',
-        specModel: '10kg/箱',
-        itemCategory: '生鲜原料',
-        statisticType: '原料',
-        storageMode: '常温',
-        unit: query.unitType,
-        inoutType: '采购入库',
-        warehouse: '中心仓',
-        warehouseType: '普通仓库',
-        oppositeOrg: '鲜达食品',
-        oppositeWarehouse: '供应商仓',
-        inboundQty: 120,
-        inboundCostAmountTaxIncluded: 22200,
-        inboundAvgCostTaxIncluded: 185,
-        inboundSettlementAmountTaxIncluded: 22440,
-        inboundAvgSettlementTaxIncluded: 187,
-        outboundQty: 18,
-        outboundCostAmountTaxIncluded: 3330,
-        outboundAvgCostTaxIncluded: 185,
-        outboundSettlementAmountTaxIncluded: 3366,
-        outboundAvgSettlementTaxIncluded: 187,
-      },
-      {
-        id: '2',
-        itemCode: 'ITEM-002',
-        itemName: '牛腩',
-        specModel: '5kg/包',
-        itemCategory: '生鲜原料',
-        statisticType: '原料',
-        storageMode: '冷冻',
-        unit: query.unitType,
-        inoutType: '其他出库',
-        warehouse: '冷冻仓',
-        warehouseType: '普通仓库',
-        oppositeOrg: '华北门店',
-        oppositeWarehouse: '门店后仓',
-        inboundQty: 60,
-        inboundCostAmountTaxIncluded: 15600,
-        inboundAvgCostTaxIncluded: 260,
-        inboundSettlementAmountTaxIncluded: 15720,
-        inboundAvgSettlementTaxIncluded: 262,
-        outboundQty: 42,
-        outboundCostAmountTaxIncluded: 10920,
-        outboundAvgCostTaxIncluded: 260,
-        outboundSettlementAmountTaxIncluded: 11004,
-        outboundAvgSettlementTaxIncluded: 262,
-      },
-    ];
-    total.value = tableRows.value.length;
+    const orgId = archiveOrgId.value;
+    if (!orgId) {
+      tableRows.value = [];
+      total.value = 0;
+      return;
+    }
+    const page = await fetchStockInoutSummaryReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      dateDimension: query.statisticPeriod,
+      startDate: query.dateRange[0],
+      endDate: query.dateRange[1],
+      warehouse: query.warehouse || undefined,
+      warehouseType: query.warehouseType || undefined,
+      itemCategory: query.itemCategory || undefined,
+      itemKeyword: query.itemCode || undefined,
+      statisticType: query.statisticType || undefined,
+      itemStatus: query.itemStatus === '全部' ? undefined : query.itemStatus,
+      inoutType: query.inoutType || undefined,
+      inoutDirection: query.inoutDirection || undefined,
+      oppositeOrg: query.oppositeOrg || undefined,
+      unitType: query.unitType,
+      queryScheme: query.queryScheme,
+    }, orgId);
+    tableRows.value = page.list ?? [];
+    total.value = Number(page.total ?? 0);
   } finally {
     loading.value = false;
   }

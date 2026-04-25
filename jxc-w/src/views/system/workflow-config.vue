@@ -1243,7 +1243,7 @@ const loadBusinesses = async () => {
       }))
       .sort((left, right) => (optionOrderMap.get(left.process_code) ?? 999) - (optionOrderMap.get(right.process_code) ?? 999));
     if (!workflowBusinesses.value.length) {
-      ElMessage.warning('请先在业务管理中新增库存审核业务流程');
+      ElMessage.warning('请先在流程发布历史管理中新增业务审核流程');
       copySourceWorkflowCode.value = '';
       copySourceBusinessCode.value = '';
       viewWorkflowCode.value = '';

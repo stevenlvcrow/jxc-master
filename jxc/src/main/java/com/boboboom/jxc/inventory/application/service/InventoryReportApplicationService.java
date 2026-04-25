@@ -13,7 +13,6 @@ import com.boboboom.jxc.inventory.domain.repository.InventoryCheckRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryDocumentRepository;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundLineRepository;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
-import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryTransactionDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
 import org.springframework.stereotype.Service;
@@ -27,12 +26,10 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -94,7 +91,7 @@ public class InventoryReportApplicationService {
         String unitTypeValue = trimNullable(unitType);
 
         List<DishConsumptionOutboundReportRow> rows = new ArrayList<>();
-        rows.addAll(loadDishRows(scope, InventoryDocumentType.CUSTOMER_SALES_OUTBOUND, "销售扣减"));
+        rows.addAll(loadDishRows(scope, InventoryDocumentType.DISH_CONSUMPTION_OUTBOUND, "销售扣减"));
         rows.addAll(loadDishRows(scope, InventoryDocumentType.DAMAGE_OUTBOUND, "报损扣减"));
         rows = rows.stream()
                 .filter(row -> matchDate(row.businessDate(), start, end))
@@ -182,7 +179,7 @@ public class InventoryReportApplicationService {
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.OTHER_INBOUND, "其他入库", "入库", "", "否"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.OTHER_OUTBOUND, "其他出库", "出库", "", "否"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.PRODUCTION_INBOUND, "生产入库", "入库", "", "否"));
-        rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.CUSTOMER_SALES_OUTBOUND, "菜品消耗出库", "出库", "销售订单", "是"));
+        rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.DISH_CONSUMPTION_OUTBOUND, "菜品消耗出库", "出库", "销售订单", "是"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.CUSTOMER_RETURN_INBOUND, "客户退货入库", "入库", "销售订单", "否"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.STORE_TRANSFER, "调拨单", "出库", "调拨单", "是"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.STOCK_TRANSFER_OUTBOUND, "移库出库", "出库", "调拨单", "是"));
@@ -517,7 +514,7 @@ public class InventoryReportApplicationService {
         if (type == InventoryDocumentType.PURCHASE_INBOUND) {
             return defaultIfBlank(header.getPrimaryName(), "");
         }
-        if (type == InventoryDocumentType.CUSTOMER_SALES_OUTBOUND) {
+        if (type == InventoryDocumentType.CUSTOMER_SALES_OUTBOUND || type == InventoryDocumentType.DISH_CONSUMPTION_OUTBOUND) {
             return defaultIfBlank(header.getPrimaryName(), defaultIfBlank(header.getCounterpartyName(), ""));
         }
         return defaultIfBlank(header.getPrimaryName(), defaultIfBlank(header.getSecondaryName(), defaultIfBlank(header.getCounterpartyName(), "")));

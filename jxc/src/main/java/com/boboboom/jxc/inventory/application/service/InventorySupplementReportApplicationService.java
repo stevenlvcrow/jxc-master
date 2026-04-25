@@ -12,9 +12,6 @@ import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryTransactionDO;
-import com.boboboom.jxc.inventory.application.service.InventoryDocumentHeader;
-import com.boboboom.jxc.inventory.application.service.InventoryDocumentLine;
-import com.boboboom.jxc.inventory.application.service.InventoryDocumentType;
 import com.boboboom.jxc.item.domain.repository.ItemProfileRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemProfileDO;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCreateRequest;
@@ -378,9 +375,16 @@ public class InventorySupplementReportApplicationService {
                                                                        String startDate,
                                                                        String endDate,
                                                                        String statisticDimension,
+                                                                       String warehouse,
+                                                                       String warehouseType,
                                                                        String targetStore,
                                                                        String itemKeyword,
                                                                        String itemCategory,
+                                                                       String statisticType,
+                                                                       String itemStatus,
+                                                                       String inoutType,
+                                                                       String inoutDirection,
+                                                                       String oppositeOrg,
                                                                        String unitType,
                                                                        String queryScheme,
                                                                        String orgId) {
@@ -391,8 +395,15 @@ public class InventorySupplementReportApplicationService {
         LocalDate end = parseDateNullable(endDate);
         String statisticModeValue = trimNullable(statisticMode);
         String targetStoreValue = trimNullable(targetStore);
+        String warehouseValue = trimNullable(warehouse);
+        String warehouseTypeValue = trimNullable(warehouseType);
         String itemKeywordValue = trimNullable(itemKeyword);
         String itemCategoryValue = trimNullable(itemCategory);
+        String statisticTypeValue = trimNullable(statisticType);
+        String itemStatusValue = trimNullable(itemStatus);
+        String inoutTypeValue = trimNullable(inoutType);
+        String inoutDirectionValue = trimNullable(inoutDirection);
+        String oppositeOrgValue = trimNullable(oppositeOrg);
         String unitTypeValue = trimNullable(unitType);
 
         Map<String, ItemProfileSnapshot> itemProfiles = loadItemProfiles(scope);
@@ -411,6 +422,7 @@ public class InventorySupplementReportApplicationService {
                 InventoryDocumentType.PRODUCTION_INBOUND,
                 InventoryDocumentType.CUSTOMER_SALES_OUTBOUND,
                 InventoryDocumentType.CUSTOMER_RETURN_INBOUND,
+                InventoryDocumentType.DISH_CONSUMPTION_OUTBOUND,
                 InventoryDocumentType.STORE_TRANSFER,
                 InventoryDocumentType.STOCK_TRANSFER_OUTBOUND)) {
             List<InventoryDocumentHeader> headers = inventoryDocumentRepository.findHeadersByScopeOrdered(type, scope.scopeType(), scope.scopeId());
@@ -440,11 +452,34 @@ public class InventorySupplementReportApplicationService {
                     if (StringUtils.hasText(itemCategoryValue) && !Objects.equals(item.category(), itemCategoryValue)) {
                         continue;
                     }
+                    if (StringUtils.hasText(statisticTypeValue) && !Objects.equals(item.statisticsType(), statisticTypeValue)) {
+                        continue;
+                    }
+                    if (StringUtils.hasText(itemStatusValue) && !Objects.equals(item.status(), itemStatusValue)) {
+                        continue;
+                    }
                     if (StringUtils.hasText(unitTypeValue) && !Objects.equals(item.stockUnit(), unitTypeValue)) {
                         continue;
                     }
                     StockInoutSummaryReportRow row = buildStockInoutSummaryRow(scope, type, header, line, item);
                     if (StringUtils.hasText(statisticModeValue) && !Objects.equals(row.statisticMode(), statisticModeValue)) {
+                        continue;
+                    }
+                    if (StringUtils.hasText(warehouseValue) && !Objects.equals(row.warehouse(), warehouseValue)) {
+                        continue;
+                    }
+                    if (StringUtils.hasText(warehouseTypeValue) && !Objects.equals(row.warehouseType(), warehouseTypeValue)) {
+                        continue;
+                    }
+                    if (StringUtils.hasText(inoutTypeValue) && !Objects.equals(row.inoutType(), inoutTypeValue)) {
+                        continue;
+                    }
+                    if (StringUtils.hasText(inoutDirectionValue) && !Objects.equals(resolveStockDirection(type), inoutDirectionValue)) {
+                        continue;
+                    }
+                    if (StringUtils.hasText(oppositeOrgValue)
+                            && !(containsIgnoreCase(row.oppositeOrg(), oppositeOrgValue)
+                            || containsIgnoreCase(row.oppositeWarehouse(), oppositeOrgValue))) {
                         continue;
                     }
                     rows.add(row);
@@ -836,8 +871,9 @@ public class InventorySupplementReportApplicationService {
                 actualAmount,
                 diffQty,
                 diffAmount,
-                profitQty.abs(),
-                profitAmount.abs(),
+                diffQty.abs(),
+                diffAmount.abs(),
+                diffAmount,
                 profitQty.compareTo(BigDecimal.ZERO) > 0 ? "盘盈" : (lossQty.compareTo(BigDecimal.ZERO) > 0 ? "盘亏" : "无差异"),
                 profitQty.compareTo(BigDecimal.ZERO) > 0 ? defaultMoney(line.getProfitInboundPrice()) : defaultMoney(line.getLossOutboundPrice()),
                 lossQty.compareTo(BigDecimal.ZERO) > 0 ? defaultMoney(line.getLossOutboundPrice()) : defaultMoney(line.getProfitInboundPrice()),
@@ -1202,6 +1238,7 @@ public class InventorySupplementReportApplicationService {
             case PRODUCTION_INBOUND -> "生产入库";
             case CUSTOMER_SALES_OUTBOUND -> "客户销售出库";
             case CUSTOMER_RETURN_INBOUND -> "客户退货入库";
+            case DISH_CONSUMPTION_OUTBOUND -> "菜品消耗出库";
             case STORE_TRANSFER -> "店间调拨";
             case STOCK_TRANSFER_OUTBOUND -> "移库出库";
             default -> type.getBusinessName();
@@ -1586,6 +1623,7 @@ public class InventorySupplementReportApplicationService {
                                                BigDecimal profitLossAmount,
                                                BigDecimal profitLossQtyAbs,
                                                BigDecimal profitLossAmountAbs,
+                                               BigDecimal adjustmentAmount,
                                                String profitLossResult,
                                                BigDecimal profitInboundPrice,
                                                BigDecimal lossOutboundPrice,

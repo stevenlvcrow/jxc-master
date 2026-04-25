@@ -6,7 +6,6 @@ import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierProfi
 import com.boboboom.jxc.item.infrastructure.persistence.mapper.SupplierProfileMapper;
 import org.springframework.stereotype.Repository;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 

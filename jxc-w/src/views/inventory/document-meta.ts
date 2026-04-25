@@ -255,6 +255,21 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     counterpartyField: { key: 'counterpartyName', label: '客户名称', kind: 'text' },
     reasonField: { key: 'reason', label: '退货原因', kind: 'select', options: ['质量问题', '配送异常', '错发退货', '其他退货'] },
   },
+  dishConsumptionOutbound: {
+    type: 'dish-consumption-outbound',
+    title: '菜品消耗出库',
+    listRouteName: 'DishConsumptionOutbound',
+    createRouteName: 'DishConsumptionOutboundCreate',
+    viewRouteName: 'DishConsumptionOutboundView',
+    editRouteName: 'DishConsumptionOutboundEdit',
+    dateLabel: '消耗日期',
+    primaryField: { key: 'primaryName', label: '扣减仓库', kind: 'warehouse' },
+    counterpartyField: { key: 'counterpartyName', label: '来源单据', kind: 'text' },
+    reasonField: { key: 'reason', label: '触发来源', kind: 'text' },
+    showAvailableQty: true,
+    showUpstreamCode: true,
+    itemTableStyle: 'purchase-return-outbound',
+  },
   warehouseOpeningBalance: {
     type: 'warehouse-opening-balance',
     title: '仓库期初',
@@ -331,6 +346,10 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
 };
 
 export const workflowBusinessOptions = [
+  { processCode: 'PURCHASE_APPLICATION', businessName: '采购单申请流程' },
+  { processCode: 'PURCHASE_ORDER', businessName: '采购订单流程' },
+  { processCode: 'PURCHASE_RECEIPT', businessName: '采购收货单流程' },
+  { processCode: 'PURCHASE_RETURN', businessName: '采购退货单流程' },
   { processCode: 'PURCHASE_INBOUND', businessName: '采购入库流程' },
   { processCode: 'PURCHASE_RETURN_OUTBOUND', businessName: '采购退货出库流程' },
   { processCode: 'DEPARTMENT_PICKING', businessName: '部门领料流程' },
@@ -344,6 +363,7 @@ export const workflowBusinessOptions = [
   { processCode: 'PRODUCTION_INBOUND', businessName: '生产入库流程' },
   { processCode: 'CUSTOMER_SALES_OUTBOUND', businessName: '客户销售出库流程' },
   { processCode: 'CUSTOMER_RETURN_INBOUND', businessName: '客户退货入库流程' },
+  { processCode: 'DISH_CONSUMPTION_OUTBOUND', businessName: '菜品消耗出库流程' },
   { processCode: 'INVENTORY_CHECK', businessName: '盘点单流程' },
   { processCode: 'MULTI_INVENTORY_CHECK', businessName: '多人盘点单流程' },
 ];

@@ -1,7 +1,6 @@
 package com.boboboom.jxc.identity.interfaces.rest.request;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 
 import java.util.List;
 

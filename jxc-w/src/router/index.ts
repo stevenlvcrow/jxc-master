@@ -212,6 +212,162 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'purchase/applications/create',
+        name: 'PurchaseApplicationCreate',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '新增采购单申请',
+          activeMenu: '/purchase/applications',
+          breadcrumbs: ['采购管理', '单据', '采购单申请', '新增采购单申请'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'applications',
+          purchaseDocumentMode: 'create',
+        },
+      },
+      {
+        path: 'purchase/applications/view/:id',
+        name: 'PurchaseApplicationView',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '查看采购单申请',
+          activeMenu: '/purchase/applications',
+          breadcrumbs: ['采购管理', '单据', '采购单申请', '查看采购单申请'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'applications',
+          purchaseDocumentMode: 'view',
+        },
+      },
+      {
+        path: 'purchase/applications/edit/:id',
+        name: 'PurchaseApplicationEdit',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '编辑采购单申请',
+          activeMenu: '/purchase/applications',
+          breadcrumbs: ['采购管理', '单据', '采购单申请', '编辑采购单申请'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'applications',
+          purchaseDocumentMode: 'edit',
+        },
+      },
+      {
+        path: 'purchase/orders/create',
+        name: 'PurchaseOrderCreate',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '新增采购订单',
+          activeMenu: '/purchase/orders',
+          breadcrumbs: ['采购管理', '单据', '采购订单', '新增采购订单'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'orders',
+          purchaseDocumentMode: 'create',
+        },
+      },
+      {
+        path: 'purchase/orders/view/:id',
+        name: 'PurchaseOrderView',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '查看采购订单',
+          activeMenu: '/purchase/orders',
+          breadcrumbs: ['采购管理', '单据', '采购订单', '查看采购订单'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'orders',
+          purchaseDocumentMode: 'view',
+        },
+      },
+      {
+        path: 'purchase/orders/edit/:id',
+        name: 'PurchaseOrderEdit',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '编辑采购订单',
+          activeMenu: '/purchase/orders',
+          breadcrumbs: ['采购管理', '单据', '采购订单', '编辑采购订单'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'orders',
+          purchaseDocumentMode: 'edit',
+        },
+      },
+      {
+        path: 'purchase/receipts/create',
+        name: 'PurchaseReceiptCreate',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '新增采购收货',
+          activeMenu: '/purchase/receipts',
+          breadcrumbs: ['采购管理', '单据', '采购收货', '新增采购收货'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'receipts',
+          purchaseDocumentMode: 'create',
+        },
+      },
+      {
+        path: 'purchase/receipts/view/:id',
+        name: 'PurchaseReceiptView',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '查看采购收货',
+          activeMenu: '/purchase/receipts',
+          breadcrumbs: ['采购管理', '单据', '采购收货', '查看采购收货'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'receipts',
+          purchaseDocumentMode: 'view',
+        },
+      },
+      {
+        path: 'purchase/receipts/edit/:id',
+        name: 'PurchaseReceiptEdit',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '编辑采购收货',
+          activeMenu: '/purchase/receipts',
+          breadcrumbs: ['采购管理', '单据', '采购收货', '编辑采购收货'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'receipts',
+          purchaseDocumentMode: 'edit',
+        },
+      },
+      {
+        path: 'purchase/returns/create',
+        name: 'PurchaseReturnCreate',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '新增采购退货',
+          activeMenu: '/purchase/returns',
+          breadcrumbs: ['采购管理', '单据', '采购退货', '新增采购退货'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'returns',
+          purchaseDocumentMode: 'create',
+        },
+      },
+      {
+        path: 'purchase/returns/view/:id',
+        name: 'PurchaseReturnView',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '查看采购退货',
+          activeMenu: '/purchase/returns',
+          breadcrumbs: ['采购管理', '单据', '采购退货', '查看采购退货'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'returns',
+          purchaseDocumentMode: 'view',
+        },
+      },
+      {
+        path: 'purchase/returns/edit/:id',
+        name: 'PurchaseReturnEdit',
+        component: () => import('@/views/purchase/purchase-document-create.vue'),
+        meta: {
+          title: '编辑采购退货',
+          activeMenu: '/purchase/returns',
+          breadcrumbs: ['采购管理', '单据', '采购退货', '编辑采购退货'],
+          openKeys: ['m2', 'm2-m2'],
+          purchaseDocumentType: 'returns',
+          purchaseDocumentMode: 'edit',
+        },
+      },
+      {
         path: 'inventory/warehouse-opening-balances/create',
         name: 'WarehouseOpeningBalanceCreate',
         component: () => import('@/views/inventory/warehouse-opening-balance-create.vue'),
@@ -674,6 +830,39 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        path: 'inventory/dish-consumption-outbounds/create',
+        name: 'DishConsumptionOutboundCreate',
+        component: () => import('@/views/inventory/dish-consumption-outbound-create.vue'),
+        meta: {
+          title: '新增菜品消耗出库',
+          activeMenu: '/inventory/dish-consumption-outbounds',
+          breadcrumbs: ['库存管理', '库存单据', '菜品消耗出库', '新增菜品消耗出库'],
+          openKeys: ['m4', 'm4-m1'],
+        },
+      },
+      {
+        path: 'inventory/dish-consumption-outbounds/view/:id',
+        name: 'DishConsumptionOutboundView',
+        component: () => import('@/views/inventory/dish-consumption-outbound-create.vue'),
+        meta: {
+          title: '查看菜品消耗出库',
+          activeMenu: '/inventory/dish-consumption-outbounds',
+          breadcrumbs: ['库存管理', '库存单据', '菜品消耗出库', '查看菜品消耗出库'],
+          openKeys: ['m4', 'm4-m1'],
+        },
+      },
+      {
+        path: 'inventory/dish-consumption-outbounds/edit/:id',
+        name: 'DishConsumptionOutboundEdit',
+        component: () => import('@/views/inventory/dish-consumption-outbound-create.vue'),
+        meta: {
+          title: '编辑菜品消耗出库',
+          activeMenu: '/inventory/dish-consumption-outbounds',
+          breadcrumbs: ['库存管理', '库存单据', '菜品消耗出库', '编辑菜品消耗出库'],
+          openKeys: ['m4', 'm4-m1'],
+        },
+      },
+      {
         path: 'inventory/customer-return-inbounds/create',
         name: 'CustomerReturnInboundCreate',
         component: () => import('@/views/inventory/customer-return-inbound-create.vue'),
@@ -867,7 +1056,7 @@ const buildRuntimeMenuRoutes = (
   return [route, ...children];
 });
 
-const syncRuntimeMenuRoutes = (items: AppMenuItem[]) => {
+export const syncRuntimeMenuRoutes = (items: AppMenuItem[]) => {
   removeRuntimeMenuRoutes();
   buildRuntimeMenuRoutes(items).forEach((route) => {
     router.addRoute('AdminRoot', route);

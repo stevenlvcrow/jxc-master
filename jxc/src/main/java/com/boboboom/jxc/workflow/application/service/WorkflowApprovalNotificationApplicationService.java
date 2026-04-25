@@ -73,15 +73,9 @@ public class WorkflowApprovalNotificationApplicationService {
         notification.setApprovalNo(approvalNo);
         notification.setApproverName(StringUtils.hasText(approverName) ? approverName : "system");
         notification.setApproverRole(StringUtils.hasText(approverRole) ? approverRole : "普通审核");
-        if (targetApproverUserId != null) {
-            notification.setTargetApproverUserId(targetApproverUserId);
-        }
-        if (StringUtils.hasText(targetApproverRoleCode)) {
-            notification.setTargetApproverRoleCode(targetApproverRoleCode);
-        }
-        if (StringUtils.hasText(targetApproverRoleName)) {
-            notification.setTargetApproverRoleName(targetApproverRoleName);
-        }
+        notification.setTargetApproverUserId(targetApproverUserId);
+        notification.setTargetApproverRoleCode(StringUtils.hasText(targetApproverRoleCode) ? targetApproverRoleCode : null);
+        notification.setTargetApproverRoleName(StringUtils.hasText(targetApproverRoleName) ? targetApproverRoleName : null);
         notification.setAuditedAt(auditedAt == null ? LocalDateTime.now() : auditedAt);
         notification.setResult(StringUtils.hasText(result) ? result : "通过");
         notification.setRemark(StringUtils.hasText(remark) ? remark : "");
@@ -113,13 +107,13 @@ public class WorkflowApprovalNotificationApplicationService {
     }
 
     public PageData<WorkflowApprovalNotificationView> page(String orgId, Integer pageNum, Integer pageSize) {
-        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(
-                AuthContextHolder.requireUserId("登录已失效，请重新登录"),
-                orgId
-        );
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, orgId);
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
         int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
-        List<WorkflowApprovalNotificationDO> rows = loadAccessibleNotifications(scope);
+        List<WorkflowApprovalNotificationDO> rows = loadAccessibleNotifications(scope).stream()
+                .filter(row -> isVisibleToOperator(row, operatorId, scope))
+                .toList();
         if (rows.isEmpty()) {
             return new PageData<>(List.of(), 0, safePageNum, safePageSize);
         }
@@ -160,6 +154,21 @@ public class WorkflowApprovalNotificationApplicationService {
 
     private boolean isPendingNotification(WorkflowApprovalNotificationDO row) {
         return row != null && "待审核".equals(row.getResult());
+    }
+
+    private boolean isVisibleToOperator(WorkflowApprovalNotificationDO row,
+                                        Long operatorId,
+                                        OrgScopeService.AccessibleScope scope) {
+        if (!isPendingNotification(row)) {
+            return true;
+        }
+        return workflowActionService.matchesApprovalTarget(
+                operatorId,
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                toApprovalTarget(row)
+        );
     }
 
     private List<WorkflowApprovalNotificationDO> loadAccessibleNotifications(OrgScopeService.AccessibleScope scope) {

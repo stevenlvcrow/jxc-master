@@ -6,6 +6,7 @@ import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSessionStore } from '@/stores/session';
+import { fetchInventoryInoutSummaryReportApi } from '@/api/modules/inventory';
 import {
   fetchItemCategoryTreeApi,
   fetchItemsApi,
@@ -283,8 +284,31 @@ const loadOptions = async () => {
 const fetchReport = async () => {
   loading.value = true;
   try {
-    tableRows.value = [];
-    total.value = 0;
+    const orgId = archiveOrgId.value;
+    if (!orgId) {
+      tableRows.value = [];
+      total.value = 0;
+      return;
+    }
+    const page = await fetchInventoryInoutSummaryReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      statisticDimension: query.statisticDimension,
+      warehouse: query.warehouse || undefined,
+      warehouseType: query.warehouseType || undefined,
+      startDate: query.dateRange[0],
+      endDate: query.dateRange[1],
+      itemCode: query.itemCode || undefined,
+      itemCategory: query.itemCategory || undefined,
+      statisticType: query.statisticType || undefined,
+      itemStatus: query.itemStatus === '全部' ? undefined : query.itemStatus,
+      inoutType: query.inoutType || undefined,
+      unitType: query.unitType,
+      hideNoInout: query.hideNoInout,
+      queryScheme: query.queryScheme,
+    }, orgId);
+    tableRows.value = page.list ?? [];
+    total.value = Number(page.total ?? 0);
   } finally {
     loading.value = false;
   }

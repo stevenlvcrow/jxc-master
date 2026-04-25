@@ -217,6 +217,7 @@ WITH field_binding_seed(dict_code, table_name, column_name, remark) AS (
         ('inventory.document_status', 'inventory_production_inbound', 'status', '生产入库状态'),
         ('inventory.document_status', 'inventory_customer_sales_outbound', 'status', '客户销售出库状态'),
         ('inventory.document_status', 'inventory_customer_return_inbound', 'status', '客户退货入库状态'),
+        ('inventory.document_status', 'inventory_dish_consumption_outbound', 'status', '菜品消耗出库状态'),
         ('inventory.document_status', 'inventory_warehouse_opening_balance', 'status', '期初库存状态'),
         ('inventory.document_status', 'inventory_store_transfer', 'status', '门店调拨状态'),
         ('inventory.document_status', 'inventory_stock_transfer_outbound', 'status', '移库出库状态'),
@@ -233,6 +234,7 @@ WITH field_binding_seed(dict_code, table_name, column_name, remark) AS (
         ('inventory.workflow_status', 'inventory_production_inbound', 'workflow_status', '生产入库流程状态'),
         ('inventory.workflow_status', 'inventory_customer_sales_outbound', 'workflow_status', '客户销售出库流程状态'),
         ('inventory.workflow_status', 'inventory_customer_return_inbound', 'workflow_status', '客户退货入库流程状态'),
+        ('inventory.workflow_status', 'inventory_dish_consumption_outbound', 'workflow_status', '菜品消耗出库流程状态'),
         ('inventory.workflow_status', 'inventory_warehouse_opening_balance', 'workflow_status', '期初库存流程状态'),
         ('inventory.workflow_status', 'inventory_store_transfer', 'workflow_status', '门店调拨流程状态'),
         ('inventory.workflow_status', 'inventory_stock_transfer_outbound', 'workflow_status', '移库出库流程状态')
@@ -268,6 +270,10 @@ WHERE store_code = 'DEFAULT_STORE'
 
 WITH workflow_process_seed(process_code, business_name) AS (
     VALUES
+        ('PURCHASE_APPLICATION', '采购单申请流程'),
+        ('PURCHASE_ORDER', '采购订单流程'),
+        ('PURCHASE_RECEIPT', '采购收货单流程'),
+        ('PURCHASE_RETURN', '采购退货单流程'),
         ('PURCHASE_INBOUND', '采购入库流程'),
         ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
         ('DEPARTMENT_PICKING', '部门领料流程'),
@@ -281,6 +287,7 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('PRODUCTION_INBOUND', '生产入库流程'),
         ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
         ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
+        ('DISH_CONSUMPTION_OUTBOUND', '菜品消耗出库流程'),
         ('INVENTORY_CHECK', '盘点单流程'),
         ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
 )

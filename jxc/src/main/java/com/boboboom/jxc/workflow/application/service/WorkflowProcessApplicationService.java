@@ -44,6 +44,10 @@ public class WorkflowProcessApplicationService {
             .map(InventoryDocumentType::getBusinessCode)
             .collect(Collectors.toCollection(LinkedHashSet::new));
     private static final Set<String> BUILT_IN_EXTRA_PROCESS_CODES = Stream.of(
+            "PURCHASE_APPLICATION",
+            "PURCHASE_ORDER",
+            "PURCHASE_RECEIPT",
+            "PURCHASE_RETURN",
             "INVENTORY_CHECK",
             "MULTI_INVENTORY_CHECK"
     ).collect(Collectors.toUnmodifiableSet());
@@ -60,23 +64,27 @@ public class WorkflowProcessApplicationService {
     private final StoreRepository storeRepository;
     private final OrgScopeService orgScopeService;
     private final DictionaryLookupService dictionaryLookupService;
+    private final InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService;
 
     public WorkflowProcessApplicationService(WorkflowProcessRegistryRepository processRegistryRepository,
                                              WorkflowProcessStoreBindingRepository processStoreBindingRepository,
                                              WorkflowDefinitionConfigRepository configRepository,
                                              StoreRepository storeRepository,
                                              OrgScopeService orgScopeService,
-                                             DictionaryLookupService dictionaryLookupService) {
+                                             DictionaryLookupService dictionaryLookupService,
+                                             InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService) {
         this.processRegistryRepository = processRegistryRepository;
         this.processStoreBindingRepository = processStoreBindingRepository;
         this.configRepository = configRepository;
         this.storeRepository = storeRepository;
         this.orgScopeService = orgScopeService;
         this.dictionaryLookupService = dictionaryLookupService;
+        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapService;
     }
 
     public List<WorkflowProcessView> list(String orgId) {
         Long groupId = resolveGroupScope(orgId);
+        inventoryWorkflowBootstrapService.ensureDefaults(groupId, AuthContextHolder.requireUserId("登录已失效，请重新登录"));
         List<WorkflowProcessRegistryDO> processes = processRegistryRepository.findByScopeOrdered(SCOPE_GROUP, groupId);
         if (processes.isEmpty()) {
             return List.of();

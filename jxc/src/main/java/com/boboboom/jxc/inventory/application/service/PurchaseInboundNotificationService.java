@@ -1,6 +1,5 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
 import org.springframework.stereotype.Service;
 

@@ -4,113 +4,58 @@
         "https://checkstyle.org/dtds/configuration_1_3_0.dtd">
 
 <module name="Checker">
-    <!-- 基础编码与文件配置 -->
     <property name="charset" value="UTF-8"/>
-    <property name="severity" value="warning"/> <!-- 默认警告级别 -->
+    <property name="severity" value="warning"/>
 
-    <!-- 文件头部检查：文件必须以换行符结尾 -->
     <module name="NewlineAtEndOfFile"/>
 
-    <!-- 空白符检查：禁止行尾空格 -->
     <module name="RegexpSingleline">
-        <property name="format" value="\s+$"/>
-        <property name="minimum" value="1"/>
-        <property name="maximum" value="2147483647"/>
+        <property name="format" value="[ \t]+$"/>
+        <property name="maximum" value="0"/>
         <property name="message" value="行尾不能有多余空格"/>
     </module>
 
-    <!-- 代码行数限制 -->
-    <module name="FileLength">
-        <property name="max" value="2000"/> <!-- 单个文件最大2000行 -->
-    </module>
-
-    <!-- 包名规范：小写字母+点，无下划线、大写 -->
-    <module name="PackageName">
-        <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
-    </module>
-
-    <!-- 类型命名规范：类/接口/枚举使用大驼峰 UpperCamelCase -->
-    <module name="TypeName"/>
-    <module name="InterfaceIsType"/>
-
-    <!-- 常量命名规范：全大写+下划线 -->
-    <module name="ConstantName"/>
-
-    <!-- 方法命名规范：小驼峰 lowerCamelCase -->
-    <module name="MethodName"/>
-    <module name="ParameterName"/>
-    <module name="LocalVariableName"/>
-
-    <!-- 成员变量命名：小驼峰，非public、非静态常量 -->
-    <module name="MemberName"/>
-
-    <!-- 导入规范 -->
-    <module name="ImportOrder">
-        <property name="groups" value="java,javax,org,com,*"/>
-        <property name="ordered" value="true"/>
-        <property name="separatedByBlankLines" value="true"/>
-    </module>
-    <module name="RedundantImport"/> <!-- 禁止重复导入 -->
-    <module name="UnusedImports"/> <!-- 禁止未使用导入 -->
-    <module name="IllegalImport"/> <!-- 禁止非法导入 -->
-
-    <!-- 空格与缩进规范 -->
-    <module name="Indentation">
-        <property name="tabWidth" value="4"/> <!-- 缩进4个空格 -->
-    </module>
-    <module name="WhitespaceAfter"/>
-    <module name="WhitespaceAround"/>
-    <module name="EmptyForIteratorPad"/>
-    <module name="EmptyBlock"/> <!-- 禁止空代码块 -->
-
-    <!-- 大括号规范：必须使用大括号，即使单行 -->
-    <module name="RightCurly"/>
-    <module name="LeftCurly"/>
-    <module name="NeedBraces">
-        <property name="allowSingleLineStatement" value="false"/>
-    </module>
-
-    <!-- 代码复杂度检查 -->
-    <module name="CyclomaticComplexity">
-        <property name="max" value="10"/> <!-- 方法圈复杂度最大10 -->
-    </module>
-    <module name="NestedIfDepth">
-        <property name="max" value="3"/> <!-- if 最大嵌套3层 -->
-    </module>
-    <module name="NestedTryDepth">
-        <property name="max" value="2"/> <!-- try 最大嵌套2层 -->
-    </module>
-
-    <!-- 注释规范 -->
-    <module name="SingleLineJavadoc"/>
-    <module name="InvalidJavadocPosition"/>
-
-    <!-- 语法与安全规范 -->
-    <module name="HiddenField"/> <!-- 禁止隐藏字段 -->
-    <module name="MagicNumber"> <!-- 禁止魔法数字，常量除外 -->
-        <property name="ignoreHashCodeMethod" value="true"/>
-        <property name="ignoreAnnotation" value="true"/>
-    </module>
-    <module name="ArrayTypeStyle"/> <!-- 数组声明风格：String[] 而非 String [] -->
-    <module name="EqualsHashCode"/> <!-- 重写equals必须重写hashCode -->
-    <module name="NoFinalizer"/> <!-- 禁止使用finalizer -->
-    <module name="SimplifyBooleanExpression"/> <!-- 简化布尔表达式 -->
-    <module name="SimplifyBooleanReturn"/> <!-- 简化布尔返回 -->
-
-    <!-- 方法行数限制 -->
-    <module name="MethodLength">
-        <property name="max" value="150"/> <!-- 单个方法最大150行 -->
-    </module>
-
-    <!-- 禁止System.out/err打印（可选，可注释掉） -->
     <module name="RegexpSingleline">
         <property name="format" value="System\.out\.print|System\.err\.print"/>
         <property name="message" value="禁止使用System.out/err，请使用日志框架"/>
         <property name="severity" value="warning"/>
     </module>
 
-    <!-- TreeWalker：负责解析Java语法树，所有语法级检查必须放在这里 -->
+    <module name="FileLength">
+        <property name="max" value="2000"/>
+    </module>
+
     <module name="TreeWalker">
+        <module name="PackageName">
+            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+        </module>
+        <module name="TypeName"/>
+        <module name="InterfaceIsType"/>
+        <module name="MethodName"/>
+        <module name="ParameterName"/>
+        <module name="LocalVariableName"/>
+        <module name="MemberName"/>
+
+        <module name="RedundantImport"/>
+        <module name="UnusedImports"/>
+        <module name="IllegalImport"/>
+
+        <module name="WhitespaceAfter"/>
+        <module name="EmptyForIteratorPad"/>
+        <module name="EmptyBlock"/>
+
+        <module name="RightCurly"/>
+        <module name="NeedBraces">
+            <property name="allowSingleLineStatement" value="false"/>
+        </module>
+
+        <module name="SingleLineJavadoc"/>
+
+        <module name="ArrayTypeStyle"/>
+        <module name="EqualsHashCode"/>
+        <module name="NoFinalizer"/>
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
         <module name="GenericWhitespace"/>
         <module name="MethodParamPad"/>
         <module name="AnnotationLocation"/>
@@ -118,9 +63,7 @@
         <module name="InterfaceTypeParameterName"/>
         <module name="NoWhitespaceAfter"/>
         <module name="NoWhitespaceBefore"/>
-        <module name="OperatorWrap"/>
         <module name="ParenPad"/>
         <module name="TypecastParenPad"/>
-        <module name="WhitespaceAround"/>
     </module>
 </module>

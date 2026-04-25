@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
 import { useSessionStore, type OrgNode } from '@/stores/session';
+import { fetchInterOrgTransferSummaryReportApi } from '@/api/modules/inventory';
 import {
   fetchItemCategoryTreeApi,
   type ItemCategoryTreeNode,
@@ -163,8 +164,28 @@ const loadOptions = async () => {
 const fetchReport = async () => {
   loading.value = true;
   try {
-    tableRows.value = [];
-    total.value = 0;
+    const orgId = resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
+    if (!orgId) {
+      tableRows.value = [];
+      total.value = 0;
+      return;
+    }
+    const page = await fetchInterOrgTransferSummaryReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      statisticMode: query.statisticMode,
+      dateType: query.dateDimension,
+      startDate: query.dateRange[0],
+      endDate: query.dateRange[1],
+      statisticDimension: query.statisticDimension,
+      targetStore: query.targetStore || undefined,
+      itemKeyword: query.itemKeyword || undefined,
+      itemCategory: query.itemCategory || undefined,
+      unitType: query.unitType,
+      queryScheme: query.queryScheme,
+    }, orgId);
+    tableRows.value = page.list ?? [];
+    total.value = Number(page.total ?? 0);
   } finally {
     loading.value = false;
   }

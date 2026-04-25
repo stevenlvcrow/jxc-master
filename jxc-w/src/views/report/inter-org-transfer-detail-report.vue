@@ -6,6 +6,7 @@ import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSessionStore, type OrgNode } from '@/stores/session';
+import { fetchInterOrgTransferDetailReportApi } from '@/api/modules/inventory';
 import {
   fetchItemCategoryTreeApi,
   type ItemCategoryTreeNode,
@@ -191,8 +192,29 @@ const loadOptions = async () => {
 const fetchReport = async () => {
   loading.value = true;
   try {
-    tableRows.value = [];
-    total.value = 0;
+    const orgId = resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
+    if (!orgId) {
+      tableRows.value = [];
+      total.value = 0;
+      return;
+    }
+    const page = await fetchInterOrgTransferDetailReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      statisticMode: query.statisticMode,
+      dateType: query.dateType,
+      startDate: query.dateRange[0],
+      endDate: query.dateRange[1],
+      targetStore: query.targetStore || undefined,
+      sourceStore: query.sourceStore || undefined,
+      itemName: query.itemName || undefined,
+      itemCategory: query.itemCategory || undefined,
+      sourceWarehouse: query.sourceWarehouse || undefined,
+      targetWarehouse: query.targetWarehouse || undefined,
+      documentStatus: query.documentStatus || undefined,
+    }, orgId);
+    tableRows.value = page.list ?? [];
+    total.value = Number(page.total ?? 0);
   } finally {
     loading.value = false;
   }

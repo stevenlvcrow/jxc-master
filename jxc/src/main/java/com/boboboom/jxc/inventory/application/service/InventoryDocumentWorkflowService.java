@@ -104,6 +104,50 @@ public class InventoryDocumentWorkflowService {
         );
     }
 
+    public boolean shouldTriggerAction(String businessCode,
+                                       String scopeType,
+                                       Long scopeId,
+                                       Long groupId,
+                                       String action) {
+        return workflowActionService.shouldTriggerAction(
+                businessCode,
+                scopeType,
+                scopeId,
+                groupId,
+                action
+        );
+    }
+
+    public boolean hasBusinessOperationPermission(String businessCode,
+                                                  String scopeType,
+                                                  Long scopeId,
+                                                  Long groupId,
+                                                  Long operatorId,
+                                                  String action) {
+        return workflowActionService.hasActionPermission(
+                businessCode,
+                scopeType,
+                scopeId,
+                groupId,
+                operatorId,
+                action
+        );
+    }
+
+    public boolean hasBusinessReviewPermission(String businessCode,
+                                               String scopeType,
+                                               Long scopeId,
+                                               Long groupId,
+                                               Long operatorId) {
+        return workflowActionService.hasConditionNodePermission(
+                businessCode,
+                scopeType,
+                scopeId,
+                groupId,
+                operatorId
+        );
+    }
+
     public String resolveBusinessName(InventoryDocumentType type,
                                       String scopeType,
                                       Long scopeId,
@@ -111,6 +155,19 @@ public class InventoryDocumentWorkflowService {
         Optional<WorkflowBindingResolverService.ResolvedWorkflowBinding> binding = resolveBinding(type, scopeType, scopeId, groupId, false);
         if (binding.isEmpty() || !StringUtils.hasText(binding.get().businessName())) {
             return type.getBusinessName();
+        }
+        return binding.get().businessName();
+    }
+
+    public String resolveBusinessName(String businessCode,
+                                      String defaultBusinessName,
+                                      String scopeType,
+                                      Long scopeId,
+                                      Long groupId) {
+        Optional<WorkflowBindingResolverService.ResolvedWorkflowBinding> binding =
+                resolveBinding(businessCode, defaultBusinessName + "流程", scopeType, scopeId, groupId, false);
+        if (binding.isEmpty() || !StringUtils.hasText(binding.get().businessName())) {
+            return defaultBusinessName;
         }
         return binding.get().businessName();
     }
@@ -159,6 +216,34 @@ public class InventoryDocumentWorkflowService {
         return applied;
     }
 
+    public boolean syncBusinessOnAction(String businessCode,
+                                        String workflowLabel,
+                                        String scopeType,
+                                        Long scopeId,
+                                        Long groupId,
+                                        InventoryDocumentHeader header,
+                                        Long operatorId,
+                                        String action,
+                                        Runnable persistAction,
+                                        String deleteReason,
+                                        boolean requireWorkflow) {
+        if (requireWorkflow && !workflowActionService.shouldTriggerAction(businessCode, scopeType, scopeId, groupId, action)) {
+            throw new BusinessException(workflowLabel + "未配置" + actionLabel(action) + "审批节点，请先在流程模板中配置触发动作");
+        }
+        return syncInternal(
+                businessCode,
+                workflowLabel,
+                scopeType,
+                scopeId,
+                groupId,
+                header,
+                operatorId,
+                action,
+                persistAction,
+                deleteReason
+        );
+    }
+
     public ApprovalResult completeCurrentTask(InventoryDocumentType type,
                                               InventoryDocumentHeader header,
                                               Long operatorId) {
@@ -167,6 +252,7 @@ public class InventoryDocumentWorkflowService {
                 type.getBusinessName() + "流程",
                 header,
                 operatorId,
+                resolveGroupId(header),
                 () -> inventoryDocumentRepository.updateHeader(type, header)
         );
     }
@@ -178,10 +264,27 @@ public class InventoryDocumentWorkflowService {
                 "采购入库流程",
                 workflowHeader,
                 operatorId,
+                resolveGroupId(workflowHeader),
                 () -> persistPurchaseInboundHeader(header, workflowHeader)
         );
         PurchaseInboundWorkflowBridge.applyHeader(header, workflowHeader);
         return result;
+    }
+
+    public ApprovalResult completeBusinessCurrentTask(String businessCode,
+                                                      String workflowLabel,
+                                                      InventoryDocumentHeader header,
+                                                      Long operatorId,
+                                                      Long groupId,
+                                                      Runnable persistAction) {
+        return completeCurrentTaskInternal(
+                businessCode,
+                workflowLabel,
+                header,
+                operatorId,
+                groupId,
+                persistAction
+        );
     }
 
     public void resetWorkflowState(InventoryDocumentType type, InventoryDocumentHeader header) {
@@ -200,6 +303,12 @@ public class InventoryDocumentWorkflowService {
                 "采购入库单删除"
         );
         PurchaseInboundWorkflowBridge.applyHeader(header, workflowHeader);
+    }
+
+    public void resetBusinessWorkflowState(InventoryDocumentHeader header,
+                                           Runnable persistAction,
+                                           String deleteReason) {
+        resetWorkflowStateInternal(header, persistAction, deleteReason);
     }
 
     public void cancelWorkflowInstanceIfRunning(InventoryDocumentHeader header) {
@@ -226,6 +335,22 @@ public class InventoryDocumentWorkflowService {
         );
     }
 
+    public String resolveApprovalRoleLabel(String businessCode,
+                                           String scopeType,
+                                           Long scopeId,
+                                           Long groupId,
+                                           Long operatorId,
+                                           String taskName) {
+        return workflowActionService.resolveApprovalRoleLabel(
+                businessCode,
+                scopeType,
+                scopeId,
+                groupId,
+                operatorId,
+                taskName
+        );
+    }
+
     public Optional<WorkflowActionService.ApprovalTarget> resolveApprovalTarget(InventoryDocumentType type,
                                                                                 String scopeType,
                                                                                 Long scopeId,
@@ -233,6 +358,20 @@ public class InventoryDocumentWorkflowService {
                                                                                 String taskName) {
         return workflowActionService.resolveApprovalTarget(
                 type.getBusinessCode(),
+                scopeType,
+                scopeId,
+                groupId,
+                taskName
+        );
+    }
+
+    public Optional<WorkflowActionService.ApprovalTarget> resolveApprovalTarget(String businessCode,
+                                                                                String scopeType,
+                                                                                Long scopeId,
+                                                                                Long groupId,
+                                                                                String taskName) {
+        return workflowActionService.resolveApprovalTarget(
+                businessCode,
                 scopeType,
                 scopeId,
                 groupId,
@@ -264,7 +403,7 @@ public class InventoryDocumentWorkflowService {
         String businessKey = businessKey(businessCode, header.getId());
         ProcessInstance activeInstance = findActiveInstance(businessKey);
         if (activeInstance == null) {
-            startInstance(businessCode, workflowLabel, header, binding.get(), businessKey, operatorId, action, persistAction);
+            startInstance(businessCode, workflowLabel, header, binding.get(), businessKey, operatorId, action, groupId, persistAction);
             return true;
         }
         header.setWorkflowProcessCode(binding.get().processCode());
@@ -274,6 +413,7 @@ public class InventoryDocumentWorkflowService {
         header.setWorkflowStatus(workflowRunningStatus());
         header.setPendingOperation(StringUtils.hasText(action) ? action : PENDING_OPERATION_NONE);
         refreshCurrentTask(header, activeInstance.getId());
+        autoCompleteActionTriggerTasks(businessCode, header, activeInstance.getId(), operatorId, action, groupId);
         persistAction.run();
         return true;
     }
@@ -282,6 +422,7 @@ public class InventoryDocumentWorkflowService {
                                                        String workflowLabel,
                                                        InventoryDocumentHeader header,
                                                        Long operatorId,
+                                                       Long groupId,
                                                        Runnable persistAction) {
         String businessKey = businessKey(businessCode, header.getId());
         ProcessInstance activeInstance = findActiveInstance(businessKey);
@@ -319,7 +460,7 @@ public class InventoryDocumentWorkflowService {
             return ApprovalResult.workflowCompleted();
         }
         Optional<WorkflowBindingResolverService.ResolvedWorkflowBinding> binding =
-                resolveBinding(businessCode, workflowLabel, header.getScopeType(), header.getScopeId(), resolveGroupId(header), true);
+                resolveBinding(businessCode, workflowLabel, header.getScopeType(), header.getScopeId(), groupId, true);
         header.setWorkflowProcessCode(binding.map(WorkflowBindingResolverService.ResolvedWorkflowBinding::processCode).orElse(businessCode));
         header.setWorkflowStatus(workflowRunningStatus());
         header.setWorkflowInstanceId(nextInstance.getId());
@@ -349,6 +490,7 @@ public class InventoryDocumentWorkflowService {
                                String businessKey,
                                Long operatorId,
                                String action,
+                               Long groupId,
                                Runnable persistAction) {
         ProcessDefinition processDefinition = repositoryService.createProcessDefinitionQuery()
                 .processDefinitionKey(binding.processDefinitionKey())
@@ -374,6 +516,7 @@ public class InventoryDocumentWorkflowService {
         );
         header.setWorkflowInstanceId(instance.getId());
         refreshCurrentTask(header, instance.getId());
+        autoCompleteActionTriggerTasks(businessCode, header, instance.getId(), operatorId, action, groupId);
         if (!StringUtils.hasText(header.getWorkflowTaskId())) {
             runtimeService.deleteProcessInstance(instance.getId(), workflowLabel + "未配置审批节点");
             throw new BusinessException(workflowLabel + "未配置审批节点");
@@ -411,6 +554,47 @@ public class InventoryDocumentWorkflowService {
         header.setWorkflowTaskName(task.getName());
     }
 
+    private void autoCompleteActionTriggerTasks(String businessCode,
+                                                InventoryDocumentHeader header,
+                                                String processInstanceId,
+                                                Long operatorId,
+                                                String action,
+                                                Long groupId) {
+        if (!StringUtils.hasText(processInstanceId) || !StringUtils.hasText(action)) {
+            return;
+        }
+        for (int i = 0; i < 5; i++) {
+            if (!StringUtils.hasText(header.getWorkflowTaskId())
+                    || !workflowActionService.isActionTriggerTask(
+                            businessCode,
+                            header.getScopeType(),
+                            header.getScopeId(),
+                            groupId,
+                            operatorId,
+                            header.getWorkflowTaskName(),
+                            action
+            )) {
+                return;
+            }
+            taskService.complete(header.getWorkflowTaskId(), Map.of(
+                    "operatorId", operatorId,
+                    "businessId", header.getId(),
+                    "businessCode", businessCode,
+                    "documentCode", header.getDocumentCode()
+            ));
+            if (runtimeService.createProcessInstanceQuery()
+                    .processInstanceId(processInstanceId)
+                    .singleResult() == null) {
+                header.setWorkflowStatus(workflowCompletedStatus());
+                header.setWorkflowTaskId(null);
+                header.setWorkflowTaskName(null);
+                return;
+            }
+            refreshCurrentTask(header, processInstanceId);
+        }
+        throw new BusinessException("流程动作节点自动推进次数过多，请检查流程配置");
+    }
+
     private ProcessInstance findActiveInstance(String businessKey) {
         return runtimeService.createProcessInstanceQuery()
                 .processInstanceBusinessKey(businessKey)
@@ -443,6 +627,19 @@ public class InventoryDocumentWorkflowService {
 
     private Long resolveGroupId(InventoryDocumentHeader header) {
         return SCOPE_GROUP.equalsIgnoreCase(header.getScopeType()) ? header.getScopeId() : null;
+    }
+
+    private String actionLabel(String action) {
+        if ("CREATE".equalsIgnoreCase(action)) {
+            return "新增";
+        }
+        if ("UPDATE".equalsIgnoreCase(action)) {
+            return "修改";
+        }
+        if ("DELETE".equalsIgnoreCase(action)) {
+            return "删除";
+        }
+        return StringUtils.hasText(action) ? action : "业务";
     }
 
     private String businessKey(String businessCode, Long businessId) {
