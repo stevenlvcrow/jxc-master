@@ -13,11 +13,6 @@ const password = ref('123654');
 const useRealAuthApi = import.meta.env.VITE_USE_REAL_AUTH_API === '1';
 const PROFILE_HOME_PATH = '/profile';
 
-const isMockPlatformAccount = (value: string) => {
-  const normalized = value.trim().toLowerCase();
-  return normalized === 'admin' || normalized === '13800000000';
-};
-
 const submitLogin = async () => {
   if (!account.value.trim() || !password.value.trim()) {
     ElMessage.warning('请输入账号和密码');
@@ -27,7 +22,8 @@ const submitLogin = async () => {
   if (!useRealAuthApi) {
     const loginAccount = account.value.trim();
     sessionStore.login('李智杰', loginAccount, {
-      platformAdminMode: isMockPlatformAccount(loginAccount),
+      platformAdminMode: false,
+      phone: /^1\d{10}$/.test(loginAccount) ? loginAccount : '',
     });
     router.replace(sessionStore.requiresOrgSelection ? '/select-org' : PROFILE_HOME_PATH);
     return;
@@ -43,8 +39,9 @@ const submitLogin = async () => {
       refreshToken: result.refreshToken,
     });
     const loginAccount = account.value.trim();
-    sessionStore.login(result.userName || loginAccount, loginAccount, {
+    sessionStore.login(result.userName || loginAccount, result.account || loginAccount, {
       platformAdminMode: Boolean(result.platformAdmin),
+      phone: result.phone || '',
     });
     router.replace(sessionStore.requiresOrgSelection ? '/select-org' : PROFILE_HOME_PATH);
   } catch {
@@ -64,11 +61,11 @@ const submitLogin = async () => {
       <div class="login-form">
         <label class="field-row">
           <span class="field-label">账号</span>
-          <input v-model="account" class="field-input" type="text" />
+          <input v-model="account" class="field-input" type="text">
         </label>
         <label class="field-row">
           <span class="field-label">密码</span>
-          <input v-model="password" class="field-input" type="password" />
+          <input v-model="password" class="field-input" type="password">
         </label>
       </div>
 

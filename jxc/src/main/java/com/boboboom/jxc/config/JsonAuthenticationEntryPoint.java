@@ -1,26 +1,31 @@
 package com.boboboom.jxc.config;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+/** 认证失败响应入口，负责返回统一 JSON 错误。 */
 @Component
 public class JsonAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
     private final ObjectMapper objectMapper;
 
-    public JsonAuthenticationEntryPoint(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+    /** 认证失败响应入口，负责返回统一 JSON 错误。 */
+    public JsonAuthenticationEntryPoint(ObjectMapper objectMapperValue) {
+        this.objectMapper = objectMapperValue;
     }
 
+    /** 输出未认证请求的 JSON 错误响应。 */
     @Override
     public void commence(HttpServletRequest request,
                          HttpServletResponse response,

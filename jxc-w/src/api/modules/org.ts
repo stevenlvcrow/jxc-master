@@ -9,6 +9,7 @@ export type OrgNodeDto = {
   code: string;
   city: string;
   type: OrgNodeType;
+  selectable?: boolean;
   children?: OrgNodeDto[];
 };
 

@@ -1,13 +1,7 @@
 package com.boboboom.jxc.identity.interfaces.rest;
 
-import com.boboboom.jxc.identity.application.service.WarehouseItemRuleAdministrationService;
-import com.boboboom.jxc.identity.application.service.IdentityAccessControlService;
-import com.boboboom.jxc.identity.application.service.IdentityAdminLookupService;
-import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleCreateRequest;
-import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleUpdateRequest;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
-import jakarta.validation.Valid;
+import java.util.List;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,15 +14,26 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import com.boboboom.jxc.identity.application.service.IdentityAccessControlService;
+import com.boboboom.jxc.identity.application.service.IdentityAdminLookupService;
+import com.boboboom.jxc.identity.application.service.WarehouseItemRuleAdministrationService;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleCreateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseItemRuleUpdateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 
-@Validated
-@RestController
-@RequestMapping("/api/identity/admin")
+import jakarta.validation.Valid;
+
 /**
  * 仓库物料规则管理接口，负责规则列表、详情、新建、更新和删除。
  */
+@Validated
+@RestController
+@RequestMapping("/api/identity/admin")
 public class IdentityWarehouseRuleAdminController {
+
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
 
     private final IdentityAccessControlService identityAccessControlService;
     private final WarehouseItemRuleAdministrationService warehouseItemRuleAdministrationService;
@@ -38,22 +43,21 @@ public class IdentityWarehouseRuleAdminController {
     /**
      * 构造仓库物料规则管理接口。
      *
-     * @param identityAccessControlService 组织权限控制服务
-     * @param warehouseItemRuleAdministrationService 规则管理服务
-     * @param identityAdminLookupService 查询辅助服务
-     * @param identityAdminSupport 当前登录管理员辅助服务
+     * @param identityAccessControlServiceValue 组织权限控制服务
+     * @param warehouseItemRuleAdministrationServiceValue 规则管理服务
+     * @param identityAdminLookupServiceValue 查询辅助服务
+     * @param identityAdminSupportValue 当前登录管理员辅助服务
      */
-    public IdentityWarehouseRuleAdminController(IdentityAccessControlService identityAccessControlService,
-                                                WarehouseItemRuleAdministrationService warehouseItemRuleAdministrationService,
-                                                IdentityAdminLookupService identityAdminLookupService,
-                                                IdentityAdminSupport identityAdminSupport) {
-        this.identityAccessControlService = identityAccessControlService;
-        this.warehouseItemRuleAdministrationService = warehouseItemRuleAdministrationService;
-        this.identityAdminLookupService = identityAdminLookupService;
-        this.identityAdminSupport = identityAdminSupport;
+    public IdentityWarehouseRuleAdminController(IdentityAccessControlService identityAccessControlServiceValue,
+                                                WarehouseItemRuleAdministrationService warehouseItemRuleAdministrationServiceValue,
+                                                IdentityAdminLookupService identityAdminLookupServiceValue,
+                                                IdentityAdminSupport identityAdminSupportValue) {
+        this.identityAccessControlService = identityAccessControlServiceValue;
+        this.warehouseItemRuleAdministrationService = warehouseItemRuleAdministrationServiceValue;
+        this.identityAdminLookupService = identityAdminLookupServiceValue;
+        this.identityAdminSupport = identityAdminSupportValue;
     }
 
-    @GetMapping("/groups/{groupId}/item-rules")
     /**
      * 查询分组下的仓库物料规则列表。
      *
@@ -62,6 +66,7 @@ public class IdentityWarehouseRuleAdminController {
      * @param pageSize 每页条数
      * @return 规则列表响应
      */
+    @GetMapping("/groups/{groupId}/item-rules")
     public CodeDataResponse<PageData<RuleListView>> listItemRules(@PathVariable Long groupId,
                                                                   @RequestParam(defaultValue = "1") Integer pageNum,
                                                                   @RequestParam(defaultValue = "10") Integer pageSize) {
@@ -82,13 +87,13 @@ public class IdentityWarehouseRuleAdminController {
         return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
-    @GetMapping("/item-rules/{id}")
     /**
      * 查询规则详情。
      *
      * @param id 规则主键
      * @return 规则详情响应
      */
+    @GetMapping("/item-rules/{id}")
     public CodeDataResponse<RuleDetailView> getRuleDetail(@PathVariable Long id) {
         WarehouseItemRuleAdministrationService.RuleDetailData detail = warehouseItemRuleAdministrationService.getRuleDetail(id);
         WarehouseItemRuleAdministrationService.RuleRecordData rule = detail.rule();
@@ -123,8 +128,6 @@ public class IdentityWarehouseRuleAdminController {
         ));
     }
 
-    @PostMapping("/groups/{groupId}/item-rules")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 新建仓库物料规则。
      *
@@ -132,6 +135,8 @@ public class IdentityWarehouseRuleAdminController {
      * @param request 规则新增请求
      * @return 新建结果
      */
+    @PostMapping("/groups/{groupId}/item-rules")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<IdPayload> createItemRule(@PathVariable Long groupId,
                                                       @Valid @RequestBody WarehouseItemRuleCreateRequest request) {
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), groupId);
@@ -152,8 +157,6 @@ public class IdentityWarehouseRuleAdminController {
         return CodeDataResponse.ok(new IdPayload(ruleId));
     }
 
-    @PutMapping("/item-rules/{id}")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 更新仓库物料规则。
      *
@@ -161,6 +164,8 @@ public class IdentityWarehouseRuleAdminController {
      * @param request 规则更新请求
      * @return 空响应
      */
+    @PutMapping("/item-rules/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> updateItemRule(@PathVariable Long id,
                                                  @Valid @RequestBody WarehouseItemRuleUpdateRequest request) {
         WarehouseItemRuleAdministrationService.RuleRecordData rule = warehouseItemRuleAdministrationService.requireRule(id);
@@ -182,14 +187,14 @@ public class IdentityWarehouseRuleAdminController {
         return CodeDataResponse.ok(null);
     }
 
-    @DeleteMapping("/item-rules/{id}")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 删除仓库物料规则。
      *
      * @param id 规则主键
      * @return 空响应
      */
+    @DeleteMapping("/item-rules/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> deleteItemRule(@PathVariable Long id) {
         WarehouseItemRuleAdministrationService.RuleRecordData rule = warehouseItemRuleAdministrationService.requireRule(id);
         identityAccessControlService.ensureCanManageGroup(identityAdminSupport.currentOperatorId(), rule.groupId());
@@ -273,7 +278,7 @@ public class IdentityWarehouseRuleAdminController {
 
     private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
         int toIndex = Math.min(fromIndex + safePageSize, rows.size());
         return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);

@@ -1,11 +1,12 @@
 package com.boboboom.jxc.item.interfaces.rest.request;
 
+import java.util.List;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-import java.util.List;
-
+/** 物品与供应商请求参数，承载接口入参。 */
 public record ItemCreateRequest(
         @NotBlank(message = "物品名称不能为空")
         String name,
@@ -41,7 +42,7 @@ public record ItemCreateRequest(
         String consumeOnInbound,
         String disableStocktake,
         String defaultNoStocktake,
-        List<String> stocktakeTypes,
+        String stocktakeFrequency,
         String purchaseReceiptRule,
         String purchaseRuleMaxRatio,
         String purchaseRuleMinRatio,
@@ -80,6 +81,7 @@ public record ItemCreateRequest(
         List<@Valid ExtensionInfoRow> extensionInfoRows
 ) {
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record UnitSettingRow(
             String unit,
             String convertFrom,
@@ -92,6 +94,7 @@ public record ItemCreateRequest(
     ) {
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record SupplierRelationRow(
             Long key,
             String supplier,
@@ -100,6 +103,7 @@ public record ItemCreateRequest(
     ) {
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record IntroImageRow(
             Long id,
             String name,
@@ -107,6 +111,7 @@ public record ItemCreateRequest(
     ) {
     }
 
+    /** 物品与供应商数据模型，承载Nutrition单头数据。 */
     public record NutritionHeader(
             String item,
             String per100g,
@@ -114,6 +119,7 @@ public record ItemCreateRequest(
     ) {
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record NutritionRow(
             Long id,
             String item,
@@ -122,6 +128,7 @@ public record ItemCreateRequest(
     ) {
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record ExtensionInfoRow(
             Long id,
             String name,

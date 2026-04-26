@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
   ArrowDown,
   Back,
@@ -12,10 +12,11 @@ import {
   Search,
   Upload,
 } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
 import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import PageTabsLayout, { type PageTabItem } from '@/components/PageTabsLayout.vue';
+import { useSessionStore } from '@/stores/session';
+import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 
 type PricingEnabledStatus = '启用' | '停用';
 type PricingRuleStatus = '草稿' | '已提交' | '已审核';
@@ -45,6 +46,7 @@ type TreeNode = {
 };
 
 const router = useRouter();
+const sessionStore = useSessionStore();
 const tabs: PageTabItem[] = [
   { key: 'item', label: '物品维度' },
   { key: 'rule', label: '规则维度' },
@@ -62,27 +64,12 @@ const effectiveStatusOptions: PricingEffectiveStatus[] = ['未生效', '生效�
 const orderStatusOptions: PricingRuleStatus[] = ['草稿', '已提交', '已审核'];
 const writeResultOptions: PricingWriteResult[] = ['成功', '失败', '处理中'];
 const createModeOptions: CreateMode[] = ['手工创建', '批量导入', '规则生成'];
-const warehouseOptions = ['中央成品仓', '北区原料仓', '南区包材仓'];
-const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
-
-const supplierTree: TreeNode[] = [
-  {
-    value: 'supplier-group-a',
-    label: '华东供应商组',
-    children: [
-      { value: 'supplier-1', label: '鲜达食品' },
-      { value: 'supplier-2', label: '优选农场' },
-    ],
-  },
-  {
-    value: 'supplier-group-b',
-    label: '直营供应商组',
-    children: [
-      { value: 'supplier-3', label: '沪上冷链' },
-      { value: 'supplier-4', label: '盒马包材' },
-    ],
-  },
-];
+const warehouseOptions: string[] = [];
+const itemOptions: string[] = [];
+const {
+  supplierOptions,
+  loadSupplierOptions,
+} = useSupplierArchiveOptions();
 
 const creatorTree: TreeNode[] = [
   {
@@ -103,6 +90,17 @@ const creatorTree: TreeNode[] = [
   },
 ];
 
+onMounted(() => {
+  void loadSupplierOptions();
+});
+
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    void loadSupplierOptions();
+  },
+);
+
 const query = reactive({
   pricingCode: '',
   pricingName: '',
@@ -118,53 +116,7 @@ const query = reactive({
   createMode: '',
 });
 
-const tableData: PricingRow[] = [
-  {
-    id: 1,
-    pricingCode: 'PJ-202604-001',
-    pricingName: '鲜达食品四月统配定价',
-    pricingType: '供应商定价',
-    supplier: '鲜达食品',
-    effectiveDate: '2026-04-01',
-    expireDate: '2026-04-30',
-    enabledStatus: '启用',
-    warehouse: '中央成品仓',
-    orderStatus: '已审核',
-    writeResult: '成功',
-    updatedBy: '张敏',
-    updatedAt: '2026-04-13 10:22:00',
-  },
-  {
-    id: 2,
-    pricingCode: 'PJ-202604-002',
-    pricingName: '优选农场蔬菜定价',
-    pricingType: '供应商定价',
-    supplier: '优选农场',
-    effectiveDate: '2026-04-08',
-    expireDate: '2026-05-08',
-    enabledStatus: '启用',
-    warehouse: '北区原料仓',
-    orderStatus: '已提交',
-    writeResult: '处理中',
-    updatedBy: '李娜',
-    updatedAt: '2026-04-12 16:48:00',
-  },
-  {
-    id: 3,
-    pricingCode: 'PJ-202604-003',
-    pricingName: '盒马包材季度定价',
-    pricingType: '活动定价',
-    supplier: '盒马包材',
-    effectiveDate: '2026-04-10',
-    expireDate: '2026-06-30',
-    enabledStatus: '停用',
-    warehouse: '南区包材仓',
-    orderStatus: '草稿',
-    writeResult: '失败',
-    updatedBy: '王磊',
-    updatedAt: '2026-04-11 09:30:00',
-  },
-];
+const tableData: PricingRow[] = [];
 
 const treeLabelMap = (nodes: TreeNode[]) => {
   const map = new Map<string, string>();
@@ -180,19 +132,17 @@ const treeLabelMap = (nodes: TreeNode[]) => {
   return map;
 };
 
-const supplierLabelMap = treeLabelMap(supplierTree);
 const creatorLabelMap = treeLabelMap(creatorTree);
 
 const filteredRows = computed(() => {
   const pricingCodeKeyword = query.pricingCode.trim().toLowerCase();
   const pricingNameKeyword = query.pricingName.trim().toLowerCase();
-  const supplierLabel = query.supplier ? supplierLabelMap.get(query.supplier) ?? query.supplier : '';
 
   return tableData.filter((row) => {
     const matchedCode = !pricingCodeKeyword || row.pricingCode.toLowerCase().includes(pricingCodeKeyword);
     const matchedName = !pricingNameKeyword || row.pricingName.toLowerCase().includes(pricingNameKeyword);
     const matchedType = !query.pricingType || row.pricingType === query.pricingType;
-    const matchedSupplier = !supplierLabel || row.supplier === supplierLabel;
+    const matchedSupplier = !query.supplier || row.supplier === query.supplier;
     const matchedWarehouse = !query.warehouse || row.warehouse === query.warehouse;
     const matchedEnabledStatus = !query.enabledStatus || row.enabledStatus === query.enabledStatus;
     const matchedOrderStatus = !query.orderStatus || row.orderStatus === query.orderStatus;
@@ -244,10 +194,9 @@ const handleReset = () => {
 
 const handleToolbarAction = (action: string) => {
   if (action === '新增') {
-    router.push('/purchase/1/1/create');
+    router.push('/purchase/pricing/create');
     return;
   }
-  ElMessage.info(`${action}功能待接入`);
 };
 
 const handleSelectionChange = (rows: PricingRow[]) => {
@@ -255,11 +204,11 @@ const handleSelectionChange = (rows: PricingRow[]) => {
 };
 
 const handleView = (row: PricingRow) => {
-  ElMessage.info(`查看：${row.pricingName}`);
+  router.push(`/purchase/pricing/view/${row.id}`);
 };
 
 const handleEdit = (row: PricingRow) => {
-  ElMessage.info(`编辑：${row.pricingName}`);
+  router.push(`/purchase/pricing/edit/${row.id}`);
 };
 
 const handlePageChange = (page: number) => {
@@ -318,16 +267,19 @@ const handlePageSizeChange = (size: number) => {
             </el-select>
           </el-form-item>
           <el-form-item label="供应商">
-            <el-tree-select
+            <el-select
               v-model="query.supplier"
-              :data="supplierTree"
-              :props="{ label: 'label', value: 'value', children: 'children' }"
-              check-strictly
-              default-expand-all
               clearable
               placeholder="请选择供应商"
               style="width: 180px"
-            />
+            >
+              <el-option
+                v-for="option in supplierOptions"
+                :key="option.id"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
           </el-form-item>
           <el-form-item label="仓库">
             <el-select
@@ -467,31 +419,31 @@ const handlePageSizeChange = (size: number) => {
             <el-icon><Plus /></el-icon>
             新增
           </el-button>
-          <el-button @click="handleToolbarAction('批量导入')">
+          <el-button disabled>
             <el-icon><Upload /></el-icon>
             批量导入
           </el-button>
-          <el-button @click="handleToolbarAction('批量提交')">
+          <el-button disabled>
             <el-icon><Check /></el-icon>
             批量提交
           </el-button>
-          <el-button @click="handleToolbarAction('批量删除')">
+          <el-button disabled>
             <el-icon><Delete /></el-icon>
             批量删除
           </el-button>
-          <el-button @click="handleToolbarAction('批量撤回')">
+          <el-button disabled>
             <el-icon><Back /></el-icon>
             批量撤回
           </el-button>
-          <el-button @click="handleToolbarAction('批量启用')">
+          <el-button disabled>
             <el-icon><Check /></el-icon>
             批量启用
           </el-button>
-          <el-button @click="handleToolbarAction('批量停用')">
+          <el-button disabled>
             <el-icon><CloseBold /></el-icon>
             批量停用
           </el-button>
-          <el-button @click="handleToolbarAction('批量反审核')">
+          <el-button disabled>
             <el-icon><RefreshLeft /></el-icon>
             批量反审核
           </el-button>
@@ -509,7 +461,14 @@ const handlePageSizeChange = (size: number) => {
         >
           <el-table-column type="selection" width="44" fixed="left" />
           <el-table-column type="index" label="序号" width="56" fixed="left" />
-          <el-table-column prop="pricingCode" label="定价单编号" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="pricingCode" label="定价单编号" min-width="150" show-overflow-tooltip>
+            <template #default="{ row }">
+              <el-button v-if="row.pricingCode" text type="primary" @click="handleView(row)">
+                {{ row.pricingCode }}
+              </el-button>
+              <template v-else>-</template>
+            </template>
+          </el-table-column>
           <el-table-column prop="pricingName" label="定价单名称" min-width="200" show-overflow-tooltip />
           <el-table-column prop="pricingType" label="定价单类型" min-width="120" show-overflow-tooltip />
           <el-table-column prop="supplier" label="供应商" min-width="140" show-overflow-tooltip />
@@ -523,7 +482,6 @@ const handlePageSizeChange = (size: number) => {
           <el-table-column prop="updatedAt" label="最后修改时间" min-width="170" show-overflow-tooltip />
           <el-table-column label="操作" width="120" fixed="right">
             <template #default="{ row }">
-              <el-button text type="primary" @click="handleView(row)">查看</el-button>
               <el-button text @click="handleEdit(row)">编辑</el-button>
             </template>
           </el-table-column>

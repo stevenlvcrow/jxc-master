@@ -2,7 +2,8 @@ package com.boboboom.jxc.identity.infrastructure.persistence.dataobject;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 
-@TableName("dev.sys_unit")
+/** 身份与权限数据对象，映射数据库表记录。 */
+@TableName("sys_unit")
 public class UnitDO extends BaseAuditDO {
 
     private String scopeType;
@@ -13,59 +14,73 @@ public class UnitDO extends BaseAuditDO {
     private String status;
     private String remark;
 
+    /** 获取ScopeType。 */
     public String getScopeType() {
         return scopeType;
     }
 
-    public void setScopeType(String scopeType) {
-        this.scopeType = scopeType;
+    /** 设置ScopeType。 */
+    public void setScopeType(String scopeTypeValue) {
+        this.scopeType = scopeTypeValue;
     }
 
+    /** 获取ScopeId。 */
     public Long getScopeId() {
         return scopeId;
     }
 
-    public void setScopeId(Long scopeId) {
-        this.scopeId = scopeId;
+    /** 设置ScopeId。 */
+    public void setScopeId(Long scopeIdValue) {
+        this.scopeId = scopeIdValue;
     }
 
+    /** 获取UnitCode。 */
     public String getUnitCode() {
         return unitCode;
     }
 
-    public void setUnitCode(String unitCode) {
-        this.unitCode = unitCode;
+    /** 设置UnitCode。 */
+    public void setUnitCode(String unitCodeValue) {
+        this.unitCode = unitCodeValue;
     }
 
+    /** 获取UnitName。 */
     public String getUnitName() {
         return unitName;
     }
 
-    public void setUnitName(String unitName) {
-        this.unitName = unitName;
+    /** 设置UnitName。 */
+    public void setUnitName(String unitNameValue) {
+        this.unitName = unitNameValue;
     }
 
+    /** 获取UnitType。 */
     public String getUnitType() {
         return unitType;
     }
 
-    public void setUnitType(String unitType) {
-        this.unitType = unitType;
+    /** 设置UnitType。 */
+    public void setUnitType(String unitTypeValue) {
+        this.unitType = unitTypeValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 
+    /** 获取Remark。 */
     public String getRemark() {
         return remark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    /** 设置Remark。 */
+    public void setRemark(String remarkValue) {
+        this.remark = remarkValue;
     }
 }

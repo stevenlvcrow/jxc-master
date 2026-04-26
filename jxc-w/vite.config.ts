@@ -2,6 +2,8 @@ import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import path from 'node:path';
 
+const proxyTarget = process.env.VITE_PROXY_TARGET ?? 'http://localhost:8080';
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -15,16 +17,11 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           const moduleId = id.replace(/\\/g, '/');
-          if (!moduleId.includes('node_modules')) {
-            return undefined;
+          if (moduleId.includes('/src/utils/mnemonic.ts') || moduleId.includes('/pinyin-pro/')) {
+            return 'mnemonic';
           }
-          if (
-            moduleId.includes('/vue/') ||
-            moduleId.includes('/@vue/') ||
-            moduleId.includes('/vue-router/') ||
-            moduleId.includes('/pinia/')
-          ) {
-            return 'vue-core';
+          if (!moduleId.includes('/node_modules/')) {
+            return undefined;
           }
           if (moduleId.includes('/axios/')) {
             return 'http-client';
@@ -39,7 +36,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: proxyTarget,
         changeOrigin: true,
       },
     },

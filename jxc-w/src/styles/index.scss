@@ -276,6 +276,7 @@ a {
 }
 
 .content {
+  --content-sticky-offset: 28px;
   padding: 0;
   overflow-y: auto;
 }
@@ -568,7 +569,7 @@ a {
 
 .item-create-fixed-head {
   position: sticky;
-  top: 34px;
+  top: var(--content-sticky-offset, 0);
   z-index: 46;
   padding: 6px 8px 4px;
   border: 1px solid #d8deea;
@@ -661,6 +662,18 @@ a {
 
 .unit-setting-table {
   width: 100%;
+}
+
+.unit-setting-tip {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d8e4f8;
+  border-radius: 4px;
+  background: #f5f9ff;
+  color: #526173;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
 }
 
 .supplier-relation-table {
@@ -1005,12 +1018,15 @@ a {
 }
 
 .unit-base-tip {
-  white-space: normal;
-  word-break: break-all;
-  overflow-wrap: anywhere;
-  line-height: 1.35;
-  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 2px;
+  background: #edf3ff;
   color: #526173;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .unit-convert-cell {
@@ -1086,14 +1102,14 @@ a {
 
 .item-create-form .el-input,
 .item-create-form .el-select,
-.item-create-form .el-input-number {
+.item-create-form .common-number-input {
   --el-input-height: 22px;
   font-size: 10px;
 }
 
 .item-create-form .el-input__wrapper,
 .item-create-form .el-select__wrapper,
-.item-create-form .el-input-number {
+.item-create-form .common-number-input {
   min-height: 22px !important;
   height: 22px !important;
 }
@@ -1292,7 +1308,7 @@ a {
   font-weight: 400;
 }
 
-.item-create-form .el-input-number {
+.item-create-form .common-number-input {
   width: 100%;
   --el-input-height: 22px;
   height: 22px !important;
@@ -1300,36 +1316,16 @@ a {
   position: relative;
 }
 
-.item-create-form .el-input-number .el-input__wrapper {
+.item-create-form .common-number-input .el-input__wrapper {
   height: 22px !important;
   min-height: 22px !important;
-  padding-right: 24px;
+  padding-right: 6px;
 }
 
-.item-create-form .el-input-number .el-input__inner {
+.item-create-form .common-number-input .el-input__inner {
   height: 20px;
   line-height: 20px;
   font-size: 10px;
-}
-
-.item-create-form .el-input-number.is-controls-right .el-input-number__increase,
-.item-create-form .el-input-number.is-controls-right .el-input-number__decrease {
-  width: 18px;
-  height: 10px;
-  line-height: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  right: 1px;
-  font-size: 9px;
-}
-
-.item-create-form .el-input-number.is-controls-right .el-input-number__increase {
-  top: 1px;
-}
-
-.item-create-form .el-input-number.is-controls-right .el-input-number__decrease {
-  bottom: 1px;
 }
 
 .remark-item .el-textarea__inner {
@@ -1395,7 +1391,8 @@ a {
 }
 
 .compact-filter-bar .el-input,
-.compact-filter-bar .el-select {
+.compact-filter-bar .el-select,
+.compact-filter-bar .el-date-editor {
   --el-input-height: 22px;
   font-size: 10px;
 }
@@ -1423,6 +1420,42 @@ a {
 
 .compact-filter-bar .el-select__caret,
 .compact-filter-bar .el-input__icon {
+  font-size: 10px;
+}
+
+.compact-filter-bar .el-radio-group {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  white-space: nowrap;
+}
+
+.compact-filter-bar .el-radio-button {
+  height: 22px;
+}
+
+.compact-filter-bar .el-radio-button__inner {
+  height: 22px;
+  min-height: 22px;
+  padding: 0 10px;
+  line-height: 20px;
+  font-size: 10px;
+}
+
+.compact-filter-bar .el-date-editor.el-input__wrapper,
+.compact-filter-bar .el-date-editor .el-input__wrapper {
+  min-height: 22px !important;
+  height: 22px !important;
+}
+
+.compact-filter-bar .el-range-editor.el-input__wrapper {
+  padding: 0 6px;
+}
+
+.compact-filter-bar .el-date-editor .el-range-input,
+.compact-filter-bar .el-date-editor .el-range-separator {
+  height: 20px;
+  line-height: 20px;
   font-size: 10px;
 }
 
@@ -1462,10 +1495,6 @@ a {
   max-width: 100%;
 }
 
-.erp-table .el-scrollbar__wrap {
-  overflow-x: auto !important;
-}
-
 .el-table th.el-table__cell,
 .el-table td.el-table__cell {
   padding: 0 !important;
@@ -1479,6 +1508,80 @@ a {
 }
 
 .el-table .cell {
+  padding: 0 4px !important;
+  min-width: 0;
+  height: 20px !important;
+  display: flex;
+  align-items: center;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 20px !important;
+}
+
+.el-table th.el-table__cell.is-center > .cell,
+.el-table td.el-table__cell.is-center > .cell {
+  justify-content: center;
+}
+
+.el-table th.el-table__cell.is-right > .cell,
+.el-table td.el-table__cell.is-right > .cell {
+  justify-content: flex-end;
+}
+
+.el-table .el-input,
+.el-table .el-select,
+.el-table .el-date-editor,
+.el-table .common-number-input {
+  --el-input-height: 20px;
+  height: 20px !important;
+  margin: 0 !important;
+}
+
+.el-table .el-input__wrapper,
+.el-table .el-select__wrapper {
+  min-height: 20px !important;
+  height: 20px !important;
+  padding: 0 6px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+.el-table .el-input__inner,
+.el-table .el-select__placeholder,
+.el-table .el-select__selected-item,
+.el-table .el-select__selection-text {
+  height: 20px !important;
+  line-height: 20px !important;
+}
+
+.el-table .el-select__selection {
+  min-height: 20px !important;
+  height: 20px !important;
+  margin: 0 !important;
+}
+
+.el-table .cell .el-input,
+.el-table .cell .el-select,
+.el-table .cell .el-date-editor,
+.el-table .cell .common-number-input {
+  align-self: stretch;
+}
+
+.el-table__footer-wrapper {
+  border-top: 1px solid #cfd6e4 !important;
+}
+
+.el-table__footer-wrapper td.el-table__cell {
+  height: 20px !important;
+  line-height: 20px !important;
+  padding: 0 !important;
+  background: #ffffff !important;
+  border-top: 1px solid #cfd6e4 !important;
+  border-right: 1px solid #cfd6e4 !important;
+  border-bottom: 0 !important;
+}
+
+.el-table__footer-wrapper .cell {
   padding: 0 4px !important;
   line-height: 20px !important;
 }
@@ -1519,8 +1622,11 @@ a {
 }
 
 .el-table .el-button {
-  min-height: 18px;
+  min-height: 20px;
+  height: 20px;
+  margin: 0;
   padding: 0 2px;
+  line-height: 20px;
   font-size: 10px;
 }
 
@@ -1579,14 +1685,14 @@ a {
 
 .standard-dialog-form .el-input,
 .standard-dialog-form .el-select,
-.standard-dialog-form .el-input-number {
+.standard-dialog-form .common-number-input {
   --el-input-height: 22px;
   font-size: 10px;
 }
 
 .standard-dialog-form .el-input__wrapper,
 .standard-dialog-form .el-select__wrapper,
-.standard-dialog-form .el-input-number {
+.standard-dialog-form .common-number-input {
   min-height: 22px !important;
   height: 22px !important;
 }

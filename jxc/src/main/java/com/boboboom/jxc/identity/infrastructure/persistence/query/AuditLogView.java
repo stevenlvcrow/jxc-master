@@ -2,6 +2,7 @@ package com.boboboom.jxc.identity.infrastructure.persistence.query;
 
 import java.time.LocalDateTime;
 
+/** 身份与权限视图模型，承载页面展示数据。 */
 public class AuditLogView {
 
     private Long id;
@@ -17,100 +18,124 @@ public class AuditLogView {
     private String clientIp;
     private LocalDateTime createdAt;
 
+    /** 获取Id。 */
     public Long getId() {
         return id;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    /** 设置Id。 */
+    public void setId(Long idValue) {
+        this.id = idValue;
     }
 
+    /** 获取OperatorUserId。 */
     public Long getOperatorUserId() {
         return operatorUserId;
     }
 
-    public void setOperatorUserId(Long operatorUserId) {
-        this.operatorUserId = operatorUserId;
+    /** 设置OperatorUserId。 */
+    public void setOperatorUserId(Long operatorUserIdValue) {
+        this.operatorUserId = operatorUserIdValue;
     }
 
+    /** 获取OperatorPhone。 */
     public String getOperatorPhone() {
         return operatorPhone;
     }
 
-    public void setOperatorPhone(String operatorPhone) {
-        this.operatorPhone = operatorPhone;
+    /** 设置OperatorPhone。 */
+    public void setOperatorPhone(String operatorPhoneValue) {
+        this.operatorPhone = operatorPhoneValue;
     }
 
+    /** 获取OperatorRealName。 */
     public String getOperatorRealName() {
         return operatorRealName;
     }
 
-    public void setOperatorRealName(String operatorRealName) {
-        this.operatorRealName = operatorRealName;
+    /** 设置OperatorRealName。 */
+    public void setOperatorRealName(String operatorRealNameValue) {
+        this.operatorRealName = operatorRealNameValue;
     }
 
+    /** 获取ActionType。 */
     public String getActionType() {
         return actionType;
     }
 
-    public void setActionType(String actionType) {
-        this.actionType = actionType;
+    /** 设置ActionType。 */
+    public void setActionType(String actionTypeValue) {
+        this.actionType = actionTypeValue;
     }
 
+    /** 获取TargetType。 */
     public String getTargetType() {
         return targetType;
     }
 
-    public void setTargetType(String targetType) {
-        this.targetType = targetType;
+    /** 设置TargetType。 */
+    public void setTargetType(String targetTypeValue) {
+        this.targetType = targetTypeValue;
     }
 
+    /** 获取TargetId。 */
     public String getTargetId() {
         return targetId;
     }
 
-    public void setTargetId(String targetId) {
-        this.targetId = targetId;
+    /** 设置TargetId。 */
+    public void setTargetId(String targetIdValue) {
+        this.targetId = targetIdValue;
     }
 
+    /** 获取ScopeType。 */
     public String getScopeType() {
         return scopeType;
     }
 
-    public void setScopeType(String scopeType) {
-        this.scopeType = scopeType;
+    /** 设置ScopeType。 */
+    public void setScopeType(String scopeTypeValue) {
+        this.scopeType = scopeTypeValue;
     }
 
+    /** 获取ScopeId。 */
     public Long getScopeId() {
         return scopeId;
     }
 
-    public void setScopeId(Long scopeId) {
-        this.scopeId = scopeId;
+    /** 设置ScopeId。 */
+    public void setScopeId(Long scopeIdValue) {
+        this.scopeId = scopeIdValue;
     }
 
+    /** 获取OperationResult。 */
     public String getOperationResult() {
         return operationResult;
     }
 
-    public void setOperationResult(String operationResult) {
-        this.operationResult = operationResult;
+    /** 设置OperationResult。 */
+    public void setOperationResult(String operationResultValue) {
+        this.operationResult = operationResultValue;
     }
 
+    /** 获取ClientIp。 */
     public String getClientIp() {
         return clientIp;
     }
 
-    public void setClientIp(String clientIp) {
-        this.clientIp = clientIp;
+    /** 设置ClientIp。 */
+    public void setClientIp(String clientIpValue) {
+        this.clientIp = clientIpValue;
     }
 
+    /** 获取CreatedAt。 */
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    /** 设置CreatedAt。 */
+    public void setCreatedAt(LocalDateTime createdAtValue) {
+        this.createdAt = createdAtValue;
     }
 }
 

@@ -1,5 +1,15 @@
 package com.boboboom.jxc.item.application.service;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
@@ -7,16 +17,8 @@ import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.item.domain.repository.SupplierCategoryRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierCategoryDO;
 import com.boboboom.jxc.item.interfaces.rest.request.SupplierCategoryCreateRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-
+/** 供应商分类业务服务，负责供应商分类树和分类创建。 */
 @Service
 public class SupplierCategoryApplicationService {
 
@@ -27,14 +29,16 @@ public class SupplierCategoryApplicationService {
     private final OrgScopeService orgScopeService;
     private final BusinessCodeGenerator businessCodeGenerator;
 
-    public SupplierCategoryApplicationService(SupplierCategoryRepository supplierCategoryRepository,
-                                              OrgScopeService orgScopeService,
-                                              BusinessCodeGenerator businessCodeGenerator) {
-        this.supplierCategoryRepository = supplierCategoryRepository;
-        this.orgScopeService = orgScopeService;
-        this.businessCodeGenerator = businessCodeGenerator;
+    /** 供应商分类业务服务，负责供应商分类树和分类创建。 */
+    public SupplierCategoryApplicationService(SupplierCategoryRepository supplierCategoryRepositoryValue,
+                                              OrgScopeService orgScopeServiceValue,
+                                              BusinessCodeGenerator businessCodeGeneratorValue) {
+        this.supplierCategoryRepository = supplierCategoryRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
     }
 
+    /** 查询树形业务数据。 */
     public List<TreeNode> tree(String orgId) {
         CategoryScope scope = resolveScope(orgId);
         List<SupplierCategoryDO> list = supplierCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
@@ -58,6 +62,7 @@ public class SupplierCategoryApplicationService {
         return List.of(nodeMap.get(ROOT_CATEGORY));
     }
 
+    /** 创建业务记录。 */
     @Transactional
     public IdPayload create(String orgId,
                             SupplierCategoryCreateRequest request) {
@@ -147,9 +152,11 @@ public class SupplierCategoryApplicationService {
         return trimmed;
     }
 
+    /** 物品与供应商数据模型，承载Tree节点数据。 */
     public record TreeNode(String id, String label, List<TreeNode> children) {
     }
 
+    /** 物品与供应商载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id) {
     }
 

@@ -1,14 +1,6 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.item.application.service.ItemApplicationService;
-import com.boboboom.jxc.item.application.service.ItemApplicationService.IdPayload;
-import com.boboboom.jxc.item.application.service.ItemApplicationService.ItemListRow;
-import com.boboboom.jxc.item.application.service.ItemApplicationService.PageData;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemBatchDeleteRequest;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemBatchStatusUpdateRequest;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemCreateRequest;
-import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,14 +10,24 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.security.access.prepost.PreAuthorize;
 
-@Validated
-@RestController
-@RequestMapping("/api/items")
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.item.application.service.ItemApplicationService;
+import com.boboboom.jxc.item.application.service.ItemApplicationService.IdPayload;
+import com.boboboom.jxc.item.application.service.ItemApplicationService.ItemListRow;
+import com.boboboom.jxc.item.application.service.ItemApplicationService.PageData;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemBatchDeleteRequest;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemBatchStatusUpdateRequest;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemCreateRequest;
+
+import jakarta.validation.Valid;
+
 /**
  * 商品接口，负责商品创建、草稿保存、详情、分页、批量状态和批量删除。
  */
+@Validated
+@RestController
+@RequestMapping("/api/items")
 public class ItemController {
 
     private final ItemApplicationService itemApplicationService;
@@ -33,10 +35,10 @@ public class ItemController {
     /**
      * 构造商品接口。
      *
-     * @param itemApplicationService 商品服务
+     * @param itemApplicationServiceValue 商品服务
      */
-    public ItemController(ItemApplicationService itemApplicationService) {
-        this.itemApplicationService = itemApplicationService;
+    public ItemController(ItemApplicationService itemApplicationServiceValue) {
+        this.itemApplicationService = itemApplicationServiceValue;
     }
 
     /**
@@ -97,7 +99,6 @@ public class ItemController {
         return CodeDataResponse.ok();
     }
 
-    @GetMapping
     /**
      * 分页查询商品。
      *
@@ -110,9 +111,11 @@ public class ItemController {
      * @param statType 统计类型
      * @param storageMode 存储方式
      * @param tag 标签
+     * @param stocktakeFrequency 盘点频次
      * @param orgId 机构标识
      * @return 分页结果
      */
+    @GetMapping
     public CodeDataResponse<PageData<ItemListRow>> list(@RequestParam(defaultValue = "1") Integer pageNo,
                                                         @RequestParam(defaultValue = "10") Integer pageSize,
                                                         @RequestParam(required = false) String keyword,
@@ -122,12 +125,12 @@ public class ItemController {
                                                         @RequestParam(required = false) String statType,
                                                         @RequestParam(required = false) String storageMode,
                                                         @RequestParam(required = false) String tag,
+                                                        @RequestParam(required = false) String stocktakeFrequency,
                                                         @RequestParam(required = false) String orgId) {
-        return CodeDataResponse.ok(itemApplicationService.list(pageNo, pageSize, keyword, category, status, itemType, statType, storageMode, tag, orgId));
+        return CodeDataResponse.ok(itemApplicationService.list(pageNo, pageSize, keyword, category, status, itemType, statType,
+                storageMode, tag, stocktakeFrequency, orgId));
     }
 
-    @PostMapping("/batch-status")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 批量更新商品状态。
      *
@@ -135,6 +138,8 @@ public class ItemController {
      * @param request 批量状态请求
      * @return 空响应
      */
+    @PostMapping("/batch-status")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> batchUpdateStatus(@RequestParam(required = false) String orgId,
                                                     @Valid @RequestBody ItemBatchStatusUpdateRequest request) {
         itemApplicationService.batchUpdateStatus(orgId, request);

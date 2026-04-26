@@ -1,7 +1,7 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, type ElTree } from 'element-plus';
 import {
   assignAdminRoleMenusApi,
   fetchAdminMenusApi,
@@ -25,7 +25,7 @@ const roles = ref<RoleAdminItem[]>([]);
 const menus = ref<MenuAdminItem[]>([]);
 const selectedRoleId = ref<number>();
 const checkedMenuIds = ref<number[]>([]);
-const menuTreeRef = ref<any>();
+const menuTreeRef = ref<InstanceType<typeof ElTree>>();
 const route = useRoute();
 const sessionStore = useSessionStore();
 const currentOrgId = computed(() => {
@@ -34,6 +34,21 @@ const currentOrgId = computed(() => {
 });
 
 const isGroupMenuPermissionPage = computed(() => route.path.startsWith('/group/'));
+const platformVisibleMenuCodes = new Set([
+  'SYS_MGMT',
+  'GROUP_MGMT_ADMIN',
+  'ROLE_MGMT',
+  'USER_MGMT',
+  'MENU_PERMISSION_MGMT',
+  'MENU_MAINTENANCE',
+  'STORE_BIZ_MOD_ARCHIVE',
+  'STORE_BIZ_GRP_ARCHIVE_ITEM',
+  'STORE_BIZ_MENU_ITEM_CATEGORY',
+  'STORE_BIZ_MENU_UNIT',
+  'STORE_BIZ_MENU_STATISTICS_TYPE',
+  'STORE_BIZ_MENU_ITEM_TAG',
+]);
+const isPlatformRoleMenu = (menu: MenuAdminItem) => platformVisibleMenuCodes.has(menu.menuCode);
 const filteredRoles = computed(() => {
   if (!isGroupMenuPermissionPage.value) {
     return roles.value;
@@ -49,20 +64,14 @@ const filteredRoles = computed(() => {
 const selectedRole = computed(() => filteredRoles.value.find((item) => item.id === selectedRoleId.value));
 const visibleMenus = computed(() => {
   const roleType = selectedRole.value?.roleType;
-  if (isGroupMenuPermissionPage.value) {
-    if (roleType === 'STORE') {
-      return menus.value.filter((item) => item.menuCode.startsWith('STORE_BIZ_'));
-    }
-    if (roleType === 'GROUP') {
-      return menus.value.filter((item) => item.menuCode.startsWith('GROUP_'));
-    }
-    return [];
+  if (roleType === 'PLATFORM') {
+    return menus.value.filter((item) => isPlatformRoleMenu(item));
+  }
+  if (roleType === 'GROUP') {
+    return menus.value.filter((item) => item.menuCode.startsWith('GROUP_'));
   }
   if (roleType === 'STORE') {
     return menus.value.filter((item) => item.menuCode.startsWith('STORE_BIZ_'));
-  }
-  if (roleType === 'GROUP') {
-    return menus.value.filter((item) => !item.menuCode.startsWith('STORE_BIZ_'));
   }
   return menus.value;
 });

@@ -60,7 +60,7 @@ npm.cmd run dev
 开发环境默认对接真实后端接口，需确保后端服务已启动：
 
 ```env
-VITE_API_BASE_URL=http://127.0.0.1:8080
+VITE_API_BASE_URL=http://192.168.88.168:8080
 VITE_USE_REAL_AUTH_API=1
 VITE_USE_REAL_ORG_API=1
 ```

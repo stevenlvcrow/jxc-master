@@ -1,11 +1,12 @@
 package com.boboboom.jxc.inventory.application.service;
 
+import org.springframework.stereotype.Service;
+
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.application.service.DataScopeAccessService;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.workflow.application.service.PurchaseInboundWorkflowService;
-import org.springframework.stereotype.Service;
 
 /**
  * 采购入库权限判断服务。
@@ -13,16 +14,20 @@ import org.springframework.stereotype.Service;
 @Service
 public class PurchaseInboundPermissionService {
 
-    private final PurchaseInboundWorkflowService purchaseInboundWorkflowService;
+    private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
+    private final DataScopeAccessService dataScopeAccessService;
     private final UserRoleRelRepository userRoleRelRepository;
     private final RoleRepository roleRepository;
 
-    public PurchaseInboundPermissionService(PurchaseInboundWorkflowService purchaseInboundWorkflowService,
-                                            UserRoleRelRepository userRoleRelRepository,
-                                            RoleRepository roleRepository) {
-        this.purchaseInboundWorkflowService = purchaseInboundWorkflowService;
-        this.userRoleRelRepository = userRoleRelRepository;
-        this.roleRepository = roleRepository;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public PurchaseInboundPermissionService(InventoryDocumentWorkflowService inventoryDocumentWorkflowServiceValue,
+                                            DataScopeAccessService dataScopeAccessServiceValue,
+                                            UserRoleRelRepository userRoleRelRepositoryValue,
+                                            RoleRepository roleRepositoryValue) {
+        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowServiceValue;
+        this.dataScopeAccessService = dataScopeAccessServiceValue;
+        this.userRoleRelRepository = userRoleRelRepositoryValue;
+        this.roleRepository = roleRepositoryValue;
     }
 
     /**
@@ -56,15 +61,7 @@ public class PurchaseInboundPermissionService {
      * @return 是否可查看全部
      */
     public boolean canViewAll(String scopeType, Long scopeId, Long groupId, Long operatorId) {
-        if (operatorId == null) {
-            return false;
-        }
-        if (hasRoleInScope(operatorId, "STORE_ADMIN", "STORE", scopeId)) {
-            return true;
-        }
-        return "STORE".equals(scopeType)
-                && groupId != null
-                && hasRoleInScope(operatorId, "GROUP_ADMIN", "GROUP", groupId);
+        return dataScopeAccessService.canViewScopeData(scopeType, scopeId, groupId, operatorId);
     }
 
     /**
@@ -77,7 +74,13 @@ public class PurchaseInboundPermissionService {
      * @return 是否可审核
      */
     public boolean canReview(String scopeType, Long scopeId, Long groupId, Long operatorId) {
-        return purchaseInboundWorkflowService.hasBusinessReviewPermission(scopeType, scopeId, groupId, operatorId);
+        return inventoryDocumentWorkflowService.hasBusinessReviewPermission(
+                InventoryDocumentType.PURCHASE_INBOUND,
+                scopeType,
+                scopeId,
+                groupId,
+                operatorId
+        );
     }
 
     /**
@@ -135,7 +138,8 @@ public class PurchaseInboundPermissionService {
                                                    Long groupId,
                                                    Long operatorId,
                                                    String action) {
-        return purchaseInboundWorkflowService.hasBusinessOperationPermission(
+        return inventoryDocumentWorkflowService.hasBusinessOperationPermission(
+                InventoryDocumentType.PURCHASE_INBOUND,
                 scopeType,
                 scopeId,
                 groupId,
@@ -155,6 +159,7 @@ public class PurchaseInboundPermissionService {
         return userRoleRelRepository.findByUserIdRoleAndScope(operatorId, role.getId(), scopeType, scopeId).isPresent();
     }
 
+    /** 库存快照模型，承载权限快照查询结果。 */
     public record PermissionSnapshot(boolean canCreate,
                                      boolean canUpdate,
                                      boolean canDelete,

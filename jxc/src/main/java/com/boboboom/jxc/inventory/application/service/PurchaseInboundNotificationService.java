@@ -1,13 +1,10 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
-import com.boboboom.jxc.workflow.application.service.PurchaseInboundWorkflowService;
-import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
-import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService;
+import java.time.LocalDateTime;
+
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
 
 /**
  * 采购入库通知记录协作服务。
@@ -15,15 +12,11 @@ import java.time.LocalDateTime;
 @Service
 public class PurchaseInboundNotificationService {
 
-    private static final String APPROVAL_ROUTE_PREFIX = "/inventory/1/2/view/";
+    private final InventoryDocumentNotificationService inventoryDocumentNotificationService;
 
-    private final WorkflowApprovalNotificationApplicationService workflowApprovalNotificationApplicationService;
-    private final PurchaseInboundWorkflowService purchaseInboundWorkflowService;
-
-    public PurchaseInboundNotificationService(WorkflowApprovalNotificationApplicationService workflowApprovalNotificationApplicationService,
-                                              PurchaseInboundWorkflowService purchaseInboundWorkflowService) {
-        this.workflowApprovalNotificationApplicationService = workflowApprovalNotificationApplicationService;
-        this.purchaseInboundWorkflowService = purchaseInboundWorkflowService;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public PurchaseInboundNotificationService(InventoryDocumentNotificationService inventoryDocumentNotificationServiceValue) {
+        this.inventoryDocumentNotificationService = inventoryDocumentNotificationServiceValue;
     }
 
     /**
@@ -35,25 +28,12 @@ public class PurchaseInboundNotificationService {
      * @param header    采购入库单
      */
     public void recordSubmit(String scopeType, Long scopeId, Long groupId, PurchaseInboundDO header) {
-        WorkflowActionService.ApprovalTarget approvalTarget = purchaseInboundWorkflowService
-                .resolveApprovalTarget(scopeType, scopeId, groupId, header.getWorkflowTaskName())
-                .orElse(null);
-        workflowApprovalNotificationApplicationService.record(
+        inventoryDocumentNotificationService.recordSubmit(
+                InventoryDocumentType.PURCHASE_INBOUND,
                 scopeType,
                 scopeId,
-                purchaseInboundWorkflowService.businessCode(),
-                purchaseInboundWorkflowService.resolveBusinessName(scopeType, scopeId, groupId),
-                header.getId(),
-                header.getDocumentCode(),
-                AuthContextHolder.userNameOr("system"),
-                "发起人",
-                approvalTarget == null ? null : approvalTarget.userId(),
-                approvalTarget == null ? null : approvalTarget.roleCode(),
-                approvalTarget == null ? null : approvalTarget.roleName(),
-                LocalDateTime.now(),
-                "待审核",
-                "",
-                routePath(header)
+                groupId,
+                PurchaseInboundWorkflowBridge.toHeader(header)
         );
     }
 
@@ -73,22 +53,13 @@ public class PurchaseInboundNotificationService {
                                PurchaseInboundDO header,
                                String approverRole,
                                LocalDateTime approvedAt) {
-        workflowApprovalNotificationApplicationService.record(
+        inventoryDocumentNotificationService.recordApproved(
+                InventoryDocumentType.PURCHASE_INBOUND,
                 scopeType,
                 scopeId,
-                purchaseInboundWorkflowService.businessCode(),
-                purchaseInboundWorkflowService.resolveBusinessName(scopeType, scopeId, groupId),
-                header.getId(),
-                header.getDocumentCode(),
-                AuthContextHolder.userNameOr("system"),
+                PurchaseInboundWorkflowBridge.toHeader(header),
                 approverRole,
-                null,
-                null,
-                null,
-                approvedAt,
-                "通过",
-                "",
-                routePath(header)
+                approvedAt
         );
     }
 
@@ -108,26 +79,13 @@ public class PurchaseInboundNotificationService {
                                PurchaseInboundDO header,
                                String approverRole,
                                String rejectionReason) {
-        workflowApprovalNotificationApplicationService.record(
+        inventoryDocumentNotificationService.recordRejected(
+                InventoryDocumentType.PURCHASE_INBOUND,
                 scopeType,
                 scopeId,
-                purchaseInboundWorkflowService.businessCode(),
-                purchaseInboundWorkflowService.resolveBusinessName(scopeType, scopeId, groupId),
-                header.getId(),
-                header.getDocumentCode(),
-                AuthContextHolder.userNameOr("system"),
+                PurchaseInboundWorkflowBridge.toHeader(header),
                 approverRole,
-                null,
-                null,
-                null,
-                LocalDateTime.now(),
-                "拒绝",
-                rejectionReason,
-                routePath(header)
+                rejectionReason
         );
-    }
-
-    private String routePath(PurchaseInboundDO header) {
-        return APPROVAL_ROUTE_PREFIX + header.getId();
     }
 }

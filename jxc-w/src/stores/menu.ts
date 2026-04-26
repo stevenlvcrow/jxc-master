@@ -69,11 +69,12 @@ const buildMenuTree = (rows: CurrentMenuItem[]): AppMenuItem[] => {
   const roots: AppMenuItem[] = [];
 
   sorted.forEach((row) => {
-    const normalizedTitle = row.routePath === '/group/user-role' ? '用户管理' : row.menuName;
     map.set(row.id, {
       key: `menu-${row.id}`,
-      title: normalizedTitle,
+      title: row.menuName,
+      menuCode: row.menuCode,
       path: normalizeRoutePath(row.routePath) || undefined,
+      componentKey: row.componentKey ?? undefined,
       icon: undefined,
       menuType: row.menuType,
       children: [],
@@ -139,6 +140,7 @@ export const useMenuStore = defineStore('menu', () => {
     loading,
     loadedOrgId,
     menuItems,
+    rawMenus,
     loadMenus,
     clearMenus,
   };

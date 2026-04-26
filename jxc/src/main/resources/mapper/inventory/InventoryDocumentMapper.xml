@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.inventory.infrastructure.persistence.mapper.InventoryDocumentMapper">
+
+    <resultMap id="InventoryDocumentHeaderMap" type="com.boboboom.jxc.inventory.application.service.InventoryDocumentHeader">
+        <id property="id" column="id"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="documentCode" column="document_code"/>
+        <result property="documentDate" column="document_date"/>
+        <result property="primaryName" column="primary_name"/>
+        <result property="secondaryName" column="secondary_name"/>
+        <result property="counterpartyName" column="counterparty_name"/>
+        <result property="counterpartyName2" column="counterparty_name2"/>
+        <result property="reason" column="reason"/>
+        <result property="upstreamCode" column="upstream_code"/>
+        <result property="salesmanUserId" column="salesman_user_id"/>
+        <result property="salesmanName" column="salesman_name"/>
+        <result property="totalAmount" column="total_amount"/>
+        <result property="status" column="status"/>
+        <result property="workflowProcessCode" column="workflow_process_code"/>
+        <result property="workflowDefinitionKey" column="workflow_definition_key"/>
+        <result property="workflowDefinitionId" column="workflow_definition_id"/>
+        <result property="workflowInstanceId" column="workflow_instance_id"/>
+        <result property="workflowTaskId" column="workflow_task_id"/>
+        <result property="workflowTaskName" column="workflow_task_name"/>
+        <result property="workflowStatus" column="workflow_status"/>
+        <result property="pendingOperation" column="pending_operation"/>
+        <result property="remark" column="remark"/>
+        <result property="rejectionReason" column="rejection_reason"/>
+        <result property="extraJson" column="extra_json"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="approvedBy" column="approved_by"/>
+        <result property="approvedAt" column="approved_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="InventoryDocumentLineMap" type="com.boboboom.jxc.inventory.application.service.InventoryDocumentLine">
+        <id property="id" column="id"/>
+        <result property="headerId" column="header_id"/>
+        <result property="itemCode" column="item_code"/>
+        <result property="itemName" column="item_name"/>
+        <result property="spec" column="spec"/>
+        <result property="category" column="category"/>
+        <result property="unitName" column="unit_name"/>
+        <result property="availableQty" column="available_qty"/>
+        <result property="quantity" column="quantity"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="amount" column="amount"/>
+        <result property="lineReason" column="line_reason"/>
+        <result property="dishId" column="dish_id"/>
+        <result property="dishName" column="dish_name"/>
+        <result property="damageReason" column="damage_reason"/>
+        <result property="remark" column="remark"/>
+        <result property="extraJson" column="extra_json"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <sql id="HeaderColumns">
+        <choose>
+            <when test="purchaseInbound">
+                id, scope_type, scope_id, document_code, inbound_date as document_date,
+                warehouse_name as primary_name, null::varchar as secondary_name,
+                supplier_name as counterparty_name, null::varchar as counterparty_name2,
+                null::varchar as reason, upstream_code, salesman_user_id, salesman_name,
+                0::numeric as total_amount, status, workflow_process_code, workflow_definition_key,
+                workflow_definition_id, workflow_instance_id, workflow_task_id, workflow_task_name,
+                workflow_status, pending_operation, remark, rejection_reason, null::text as extra_json,
+                created_by, approved_by, approved_at, created_at, updated_at
+            </when>
+            <otherwise>
+                *
+            </otherwise>
+        </choose>
+    </sql>
+
+    <sql id="LineColumns">
+        <choose>
+            <when test="purchaseInbound">
+                id, inbound_id as header_id, item_code, item_name, spec, category,
+                null::varchar as unit_name, null::numeric as available_qty, quantity, unit_price,
+                quantity * unit_price as amount, null::varchar as line_reason,
+                null::varchar as dish_id, null::varchar as dish_name, null::varchar as damage_reason,
+                null::varchar as remark, null::text as extra_json, created_at
+            </when>
+            <otherwise>
+                *
+            </otherwise>
+        </choose>
+    </sql>
+
+    <select id="selectHeadersByScopeOrdered" resultMap="InventoryDocumentHeaderMap">
+        select
+        <include refid="HeaderColumns"/>
+        from ${headerTable}
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+        order by created_at desc, id desc
+    </select>
+
+    <select id="selectHeadersByScopeAndIds" resultMap="InventoryDocumentHeaderMap">
+        select
+        <include refid="HeaderColumns"/>
+        from ${headerTable}
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        <if test="!viewAll">
+          and (created_by = #{createdBy} or salesman_user_id = #{createdBy})
+        </if>
+        order by id desc
+    </select>
+
+    <select id="selectHeaderByScopeAndId" resultMap="InventoryDocumentHeaderMap">
+        select
+        <include refid="HeaderColumns"/>
+        from ${headerTable}
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and id = #{id}
+        <if test="!viewAll">
+          and (created_by = #{createdBy} or salesman_user_id = #{createdBy})
+        </if>
+        order by id desc
+    </select>
+
+    <select id="countByScopeAndDocumentCode" resultType="java.lang.Long">
+        select count(1)
+        from ${headerTable}
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and document_code = #{documentCode}
+    </select>
+
+    <insert id="insertHeader" useGeneratedKeys="true" keyProperty="header.id">
+        insert into ${headerTable}
+        (scope_type, scope_id, document_code, document_date, primary_name, secondary_name, counterparty_name,
+         counterparty_name2, reason, upstream_code, salesman_user_id, salesman_name, total_amount, status,
+         workflow_process_code, workflow_definition_key, workflow_definition_id, workflow_instance_id,
+         workflow_task_id, workflow_task_name, workflow_status, pending_operation, remark, rejection_reason,
+         extra_json, created_by, approved_by, approved_at, created_at, updated_at)
+        values (#{header.scopeType}, #{header.scopeId}, #{header.documentCode}, #{header.documentDate},
+                #{header.primaryName}, #{header.secondaryName}, #{header.counterpartyName},
+                #{header.counterpartyName2}, #{header.reason}, #{header.upstreamCode},
+                #{header.salesmanUserId}, #{header.salesmanName}, #{header.totalAmount}, #{header.status},
+                #{header.workflowProcessCode}, #{header.workflowDefinitionKey}, #{header.workflowDefinitionId},
+                #{header.workflowInstanceId}, #{header.workflowTaskId}, #{header.workflowTaskName},
+                #{header.workflowStatus}, #{header.pendingOperation}, #{header.remark}, #{header.rejectionReason},
+                #{header.extraJson}, #{header.createdBy}, #{header.approvedBy}, #{header.approvedAt},
+                current_timestamp, current_timestamp)
+    </insert>
+
+    <update id="updateHeader">
+        update ${headerTable}
+        set document_date = #{header.documentDate},
+            primary_name = #{header.primaryName},
+            secondary_name = #{header.secondaryName},
+            counterparty_name = #{header.counterpartyName},
+            counterparty_name2 = #{header.counterpartyName2},
+            reason = #{header.reason},
+            upstream_code = #{header.upstreamCode},
+            salesman_user_id = #{header.salesmanUserId},
+            salesman_name = #{header.salesmanName},
+            total_amount = #{header.totalAmount},
+            status = #{header.status},
+            workflow_process_code = #{header.workflowProcessCode},
+            workflow_definition_key = #{header.workflowDefinitionKey},
+            workflow_definition_id = #{header.workflowDefinitionId},
+            workflow_instance_id = #{header.workflowInstanceId},
+            workflow_task_id = #{header.workflowTaskId},
+            workflow_task_name = #{header.workflowTaskName},
+            workflow_status = #{header.workflowStatus},
+            pending_operation = #{header.pendingOperation},
+            remark = #{header.remark},
+            rejection_reason = #{header.rejectionReason},
+            extra_json = #{header.extraJson},
+            approved_by = #{header.approvedBy},
+            approved_at = #{header.approvedAt},
+            updated_at = current_timestamp
+        where id = #{header.id}
+    </update>
+
+    <delete id="deleteHeaderById">
+        delete from ${headerTable}
+        where id = #{id}
+    </delete>
+
+    <select id="selectLinesByHeaderIds" resultMap="InventoryDocumentLineMap">
+        select
+        <include refid="LineColumns"/>
+        from ${lineTable}
+        where ${headerIdColumn} in
+        <foreach collection="headerIds" item="headerId" open="(" separator="," close=")">
+            #{headerId}
+        </foreach>
+        order by id asc
+    </select>
+
+    <select id="selectLinesByHeaderId" resultMap="InventoryDocumentLineMap">
+        select
+        <include refid="LineColumns"/>
+        from ${lineTable}
+        where ${headerIdColumn} = #{headerId}
+        order by id asc
+    </select>
+
+    <delete id="deleteLinesByHeaderId">
+        delete from ${lineTable}
+        where header_id = #{headerId}
+    </delete>
+
+    <insert id="insertLine" useGeneratedKeys="true" keyProperty="line.id">
+        insert into ${lineTable}
+        (header_id, item_code, item_name, spec, category, unit_name, available_qty, quantity, unit_price,
+         amount, line_reason, dish_id, dish_name, damage_reason, remark, extra_json, created_at)
+        values (#{line.headerId}, #{line.itemCode}, #{line.itemName}, #{line.spec}, #{line.category},
+                #{line.unitName}, #{line.availableQty}, #{line.quantity}, #{line.unitPrice}, #{line.amount},
+                #{line.lineReason}, #{line.dishId}, #{line.dishName}, #{line.damageReason}, #{line.remark},
+                #{line.extraJson}, current_timestamp)
+    </insert>
+</mapper>

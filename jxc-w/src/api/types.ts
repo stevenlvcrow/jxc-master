@@ -23,7 +23,6 @@ export type ApiPage<T> = {
 export type RequestMeta = {
   silent?: boolean;
   skipAuth?: boolean;
-  rawResponse?: boolean;
 };
 
 export type ApiRequestConfig = {

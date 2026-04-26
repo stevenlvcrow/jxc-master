@@ -1,34 +1,40 @@
 package com.boboboom.jxc.infrastructure.support;
 
-import com.boboboom.jxc.infrastructure.persistence.mapper.PostgresMetadataMapper;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import com.boboboom.jxc.infrastructure.persistence.mapper.PostgresMetadataMapper;
 
+/** PostgreSQL DDL 执行器，负责初始化阶段执行结构变更。 */
 @Component
 public class PostgresDdlExecutor {
 
-    private static final Logger log = LoggerFactory.getLogger(PostgresDdlExecutor.class);
+    private static final Logger LOG = LoggerFactory.getLogger(PostgresDdlExecutor.class);
 
     private final PostgresMetadataMapper postgresMetadataMapper;
 
-    public PostgresDdlExecutor(PostgresMetadataMapper postgresMetadataMapper) {
-        this.postgresMetadataMapper = postgresMetadataMapper;
+    /** PostgreSQL DDL 执行器，负责初始化阶段执行结构变更。 */
+    public PostgresDdlExecutor(PostgresMetadataMapper postgresMetadataMapperValue) {
+        this.postgresMetadataMapper = postgresMetadataMapperValue;
     }
 
+    /** 执行数据库结构变更语句。 */
     public void execute(String sql) {
-        log.info("Executing DDL: {}", sql);
+        LOG.info("Executing DDL: {}", sql);
         postgresMetadataMapper.executeSql(sql);
     }
 
+    /** 批量执行数据库结构变更语句。 */
     public void executeBatch(List<String> sqlList) {
         for (String sql : sqlList) {
             execute(sql);
         }
     }
 
+    /** 检查当前 schema 下数据表是否存在。 */
     public boolean tableExists(String tableName) {
         TableRef tableRef = parseTableRef(tableName);
         if (tableRef == null) {
@@ -41,6 +47,7 @@ public class PostgresDdlExecutor {
         return Boolean.TRUE.equals(exists);
     }
 
+    /** 查询当前数据库 schema。 */
     public String currentSchema() {
         return postgresMetadataMapper.currentSchema();
     }

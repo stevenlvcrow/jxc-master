@@ -1,17 +1,19 @@
 ﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonToolbarSection from '@/components/CommonToolbarSection.vue';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import {
   createAdminRoleApi,
+  deleteAdminRoleApi,
   fetchAdminRolesApi,
   updateAdminRoleApi,
   type RoleAdminItem,
   type RoleUpsertPayload,
 } from '@/api/modules/system-admin';
 import { useSessionStore } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 const loading = ref(false);
 const submitting = ref(false);
@@ -21,6 +23,16 @@ const roles = ref<RoleAdminItem[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const sessionStore = useSessionStore();
+const COMMON_STATUS_DICT = 'common.enabled_status';
+const ROLE_TYPE_DICT = 'identity.role_type';
+const DATA_SCOPE_DICT = 'identity.data_scope_type';
+const { optionsOf } = useDictionaryOptions([COMMON_STATUS_DICT, ROLE_TYPE_DICT, DATA_SCOPE_DICT]);
+const statusOptions = optionsOf(COMMON_STATUS_DICT);
+const roleTypeDictionaryOptions = optionsOf(ROLE_TYPE_DICT);
+const dataScopeDictionaryOptions = optionsOf(DATA_SCOPE_DICT);
+const enabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'ENABLED')?.itemCode ?? 'ENABLED'
+));
 
 const queryForm = reactive({
   keyword: '',
@@ -32,6 +44,7 @@ const toolbarButtons = [{ key: 'create', label: '新增角色', type: 'primary' 
 const form = reactive<RoleUpsertPayload>({
   roleCode: '',
   roleName: '',
+  builtin: false,
   roleType: 'PLATFORM',
   dataScopeType: 'ALL',
   description: '',
@@ -40,13 +53,75 @@ const form = reactive<RoleUpsertPayload>({
 });
 
 const roleTypeOptions = ['PLATFORM', 'GROUP', 'STORE'];
-const dataScopeOptions = ['ALL', 'GROUP', 'STORE', 'CUSTOM'];
+const dataScopeValues = ['ALL', 'GROUP', 'STORE', 'SELF'];
+const builtinOptions = [
+  { label: '内置', value: true },
+  { label: '非内置', value: false },
+] as const;
 const isRoleEditable = (role: RoleAdminItem) => role.editable !== false;
 const isBuiltinRole = (role: RoleAdminItem) => role.builtin === true;
+const roleAttributeLabel = (builtin?: boolean) => (builtin ? '内置' : '非内置');
+const roleBuiltinSelectableOptions = computed(() => {
+  if (sessionStore.platformAdminMode) {
+    return builtinOptions;
+  }
+  return form.builtin ? [builtinOptions[0]] : [builtinOptions[1]];
+});
 const roleTypeSelectableOptions = computed(() => (
-  sessionStore.platformAdminMode ? roleTypeOptions : roleTypeOptions.filter((item) => item !== 'PLATFORM')
+  sessionStore.platformAdminMode
+    ? (form.builtin ? ['PLATFORM', 'GROUP', 'STORE'] : ['PLATFORM'])
+    : ['GROUP', 'STORE']
 ));
+const roleTypeSelectOptions = computed(() => (
+  roleTypeDictionaryOptions.value.filter((item) => roleTypeOptions.includes(item.itemCode))
+));
+const roleTypeFormOptions = computed(() => (
+  roleTypeSelectableOptions.value.map((value) => (
+    roleTypeDictionaryOptions.value.find((item) => item.itemCode === value) ?? {
+      id: 0,
+      parentId: null,
+      itemKey: value,
+      itemCode: value,
+      itemLabel: value,
+      sortNo: 0,
+      extraJson: null,
+    }
+  ))
+));
+const roleTypeLabel = (value: string) => (
+  roleTypeDictionaryOptions.value.find((item) => item.itemCode === value)?.itemLabel ?? value
+);
 const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
+
+const normalizeDataScopeForRole = (roleType: string, dataScopeType?: string) => {
+  if (roleType === 'PLATFORM') {
+    return 'ALL';
+  }
+  if (roleType === 'GROUP') {
+    return dataScopeType === 'GROUP' ? 'GROUP' : 'SELF';
+  }
+  if (roleType === 'STORE') {
+    return dataScopeType === 'STORE' ? 'STORE' : 'SELF';
+  }
+  return 'SELF';
+};
+
+const allowedDataScopesByRoleType = computed(() => {
+  if (form.roleType === 'PLATFORM') {
+    return ['ALL'];
+  }
+  if (form.roleType === 'GROUP') {
+    return ['SELF', 'GROUP'];
+  }
+  if (form.roleType === 'STORE') {
+    return ['SELF', 'STORE'];
+  }
+  return ['SELF'];
+});
+const dataScopeFormOptions = computed(() => (
+  dataScopeDictionaryOptions.value.filter((item) => dataScopeValues.includes(item.itemCode)
+    && allowedDataScopesByRoleType.value.includes(item.itemCode))
+));
 
 const filteredRoles = computed(() => {
   const keyword = queryForm.keyword.trim().toLowerCase();
@@ -71,10 +146,11 @@ const pagedRoles = computed(() => {
 const resetForm = () => {
   form.roleCode = '';
   form.roleName = '';
-  form.roleType = 'PLATFORM';
-  form.dataScopeType = 'ALL';
+  form.builtin = false;
+  form.roleType = sessionStore.platformAdminMode ? 'PLATFORM' : 'GROUP';
+  form.dataScopeType = sessionStore.platformAdminMode ? 'ALL' : 'SELF';
   form.description = '';
-  form.status = 'ENABLED';
+  form.status = enabledStatus.value;
   form.menuIds = [];
   editingRoleId.value = null;
 };
@@ -111,22 +187,20 @@ const loadRoles = async () => {
 const openCreate = () => {
   resetForm();
   if (!sessionStore.platformAdminMode) {
+    form.builtin = false;
     form.roleType = 'GROUP';
-    form.dataScopeType = 'GROUP';
+    form.dataScopeType = 'SELF';
   }
   dialogVisible.value = true;
 };
 
 const openEdit = (row: RoleAdminItem) => {
-  if (!isRoleEditable(row)) {
-    ElMessage.warning('内置角色不可编辑');
-    return;
-  }
   editingRoleId.value = row.id;
   form.roleCode = row.roleCode;
   form.roleName = row.roleName;
+  form.builtin = Boolean(row.builtin);
   form.roleType = row.roleType;
-  form.dataScopeType = row.dataScopeType;
+  form.dataScopeType = normalizeDataScopeForRole(row.roleType, row.dataScopeType);
   form.description = row.description ?? '';
   form.status = row.status;
   form.menuIds = row.menuIds ?? [];
@@ -148,10 +222,11 @@ const handleSave = async () => {
     const payload: RoleUpsertPayload = {
       roleCode,
       roleName: form.roleName.trim(),
+      builtin: Boolean(form.builtin),
       roleType: form.roleType ?? 'PLATFORM',
-      dataScopeType: form.dataScopeType ?? 'ALL',
+      dataScopeType: normalizeDataScopeForRole(form.roleType ?? 'PLATFORM', form.dataScopeType),
       description: form.description?.trim(),
-      status: form.status ?? 'ENABLED',
+      status: form.status ?? enabledStatus.value,
       menuIds: form.menuIds ?? [],
     };
     if (editingRoleId.value) {
@@ -166,6 +241,25 @@ const handleSave = async () => {
     await loadRoles();
   } finally {
     submitting.value = false;
+  }
+};
+
+const handleDelete = async (row: RoleAdminItem) => {
+  if (!isRoleEditable(row)) {
+    ElMessage.warning('当前角色不可删除');
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(`确定删除角色“${row.roleName}”吗？`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+    });
+    await deleteAdminRoleApi(row.id, currentOrgId.value);
+    ElMessage.success('角色删除成功');
+    await loadRoles();
+  } catch {
+    // 取消删除或删除失败时由全局错误处理器提示。
   }
 };
 
@@ -185,6 +279,36 @@ watch(
   () => {
     currentPage.value = 1;
   },
+);
+
+watch(
+  () => form.builtin,
+  (builtin) => {
+    if (!sessionStore.platformAdminMode) {
+      return;
+    }
+    if (builtin) {
+      if (!roleTypeOptions.includes(form.roleType)) {
+        form.roleType = 'PLATFORM';
+      }
+      form.dataScopeType = normalizeDataScopeForRole(form.roleType, form.dataScopeType);
+      return;
+    }
+    form.roleType = 'PLATFORM';
+    form.dataScopeType = 'ALL';
+  },
+  { immediate: true },
+);
+
+watch(
+  () => form.roleType,
+  (roleType) => {
+    if (!roleType) {
+      return;
+    }
+    form.dataScopeType = normalizeDataScopeForRole(roleType, form.dataScopeType);
+  },
+  { immediate: true },
 );
 </script>
 
@@ -207,7 +331,12 @@ watch(
             clearable
             style="width: 160px"
           >
-            <el-option v-for="item in roleTypeOptions" :key="item" :label="item" :value="item" />
+            <el-option
+              v-for="item in roleTypeSelectOptions"
+              :key="item.itemCode"
+              :label="item.itemLabel"
+              :value="item.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -226,11 +355,16 @@ watch(
           </template>
         </el-table-column>
         <el-table-column prop="roleName" label="角色名称" min-width="180" />
-        <el-table-column prop="roleType" label="角色类型" width="140" />
+        <el-table-column label="角色类型" width="140">
+          <template #default="{ row }">
+            {{ roleTypeLabel(row.roleType) }}
+          </template>
+        </el-table-column>
         <el-table-column label="属性" width="110">
           <template #default="{ row }">
-            <el-tag v-if="isBuiltinRole(row)" type="warning" size="small">内置</el-tag>
-            <span v-else>-</span>
+            <el-tag :type="isBuiltinRole(row) ? 'warning' : 'info'" size="small">
+              {{ roleAttributeLabel(row.builtin) }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="120" fixed="right">
@@ -242,6 +376,14 @@ watch(
             >
               <el-button type="primary" link :disabled="!isRoleEditable(row)" @click="openEdit(row)">编辑</el-button>
             </el-tooltip>
+            <el-button
+              type="danger"
+              link
+              :disabled="!isRoleEditable(row)"
+              @click="handleDelete(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -270,20 +412,44 @@ watch(
         <el-form-item label="角色名称" required>
           <el-input v-model="form.roleName" />
         </el-form-item>
+        <el-form-item label="角色属性">
+          <el-select v-model="form.builtin" style="width: 100%" :disabled="!sessionStore.platformAdminMode">
+            <el-option
+              v-for="item in roleBuiltinSelectableOptions"
+              :key="String(item.value)"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
+        </el-form-item>
         <el-form-item label="角色类型">
           <el-select v-model="form.roleType" style="width: 100%">
-            <el-option v-for="item in roleTypeSelectableOptions" :key="item" :label="item" :value="item" />
+            <el-option
+              v-for="item in roleTypeFormOptions"
+              :key="item.itemCode"
+              :label="item.itemLabel"
+              :value="item.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="数据范围">
           <el-select v-model="form.dataScopeType" style="width: 100%">
-            <el-option v-for="item in dataScopeOptions" :key="item" :label="item" :value="item" />
+            <el-option
+              v-for="item in dataScopeFormOptions"
+              :key="item.itemCode"
+              :label="item.itemLabel"
+              :value="item.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="form.status" style="width: 100%">
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="item in statusOptions"
+              :key="item.itemCode"
+              :label="item.itemLabel"
+              :value="item.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="描述">

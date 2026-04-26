@@ -1,12 +1,14 @@
 package com.boboboom.jxc.identity.application.auth;
 
-import com.boboboom.jxc.infrastructure.support.RedisOperator;
-import org.springframework.stereotype.Service;
-
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import org.springframework.stereotype.Service;
+
+import com.boboboom.jxc.infrastructure.support.RedisOperator;
+
+/** 身份与权限服务，负责相关业务规则和流程协作。 */
 @Service
 public class TokenService {
 
@@ -17,10 +19,12 @@ public class TokenService {
 
     private final RedisOperator redisOperator;
 
-    public TokenService(RedisOperator redisOperator) {
-        this.redisOperator = redisOperator;
+    /** 身份与权限服务，负责相关业务规则和流程协作。 */
+    public TokenService(RedisOperator redisOperatorValue) {
+        this.redisOperator = redisOperatorValue;
     }
 
+    /** 创建登录会话。 */
     public LoginSession createSession(Long userId, String phone, String realName) {
         String accessToken = nextToken();
         String refreshToken = nextToken();
@@ -36,10 +40,12 @@ public class TokenService {
         return session;
     }
 
+    /** 获取Session。 */
     public LoginSession getSession(String accessToken) {
         return readSession(accessTokenKey(accessToken));
     }
 
+    /** 获取SessionByRefreshToken。 */
     public LoginSession getSessionByRefreshToken(String refreshToken) {
         LoginSession session = readSession(refreshTokenKey(refreshToken));
         if (session != null) {
@@ -56,6 +62,7 @@ public class TokenService {
         return null;
     }
 
+    /** 移除访问令牌会话。 */
     public void removeSession(String accessToken) {
         LoginSession session = getSession(accessToken);
         if (session != null) {
@@ -65,6 +72,7 @@ public class TokenService {
         deleteQuietly(accessTokenKey(accessToken));
     }
 
+    /** 移除刷新令牌会话。 */
     public void removeRefreshSession(String refreshToken) {
         LoginSession session = getSessionByRefreshToken(refreshToken);
         if (session != null) {

@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import ItemPaginationSection from './components/ItemPaginationSection.vue';
 import {
@@ -11,7 +11,7 @@ import {
   type ItemStatisticsTypeRow,
 } from '@/api/modules/item';
 import { useSessionStore } from '@/stores/session';
-import { requireItemOrgId } from './org';
+import { requireItemOrgId, resolveArchiveOrgId } from './org';
 
 const sessionStore = useSessionStore();
 const tableData = ref<ItemStatisticsTypeRow[]>([]);
@@ -24,6 +24,8 @@ const createSubmitting = ref(false);
 const detailLoading = ref(false);
 const exportLoading = ref(false);
 const toolbarButtons = ['新增统计类型', '批量导出'];
+const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
+const emptyText = computed(() => (archiveOrgId.value ? '当前机构暂无数据' : '请先选择门店机构'));
 
 const createDialogVisible = ref(false);
 const createFormRef = ref<FormInstance>();
@@ -40,18 +42,24 @@ const detailDialogVisible = ref(false);
 const detailData = ref<ItemStatisticsTypeDetail | null>(null);
 
 const resolveItemOrgId = () => {
-  return requireItemOrgId(sessionStore.currentOrgId);
+  return requireItemOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
 };
 
 const fetchList = async () => {
   tableLoading.value = true;
   try {
+    const orgId = archiveOrgId.value;
+    if (!orgId) {
+      tableData.value = [];
+      total.value = 0;
+      return;
+    }
     const result = await fetchItemStatisticsTypesApi(
       {
         pageNo: currentPage.value,
         pageSize: pageSize.value,
       },
-      resolveItemOrgId(),
+      orgId,
     );
     tableData.value = result.list ?? [];
     total.value = result.total ?? 0;
@@ -72,6 +80,10 @@ const handlePageSizeChange = async (size: number) => {
 };
 
 const openCreateDialog = () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   createForm.name = '';
   createForm.statisticsCategory = '成本类';
   createDialogVisible.value = true;
@@ -83,6 +95,10 @@ const submitCreate = async () => {
   }
   const valid = await createFormRef.value.validate().catch(() => false);
   if (!valid) {
+    return;
+  }
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
     return;
   }
   createSubmitting.value = true;
@@ -104,6 +120,10 @@ const submitCreate = async () => {
 };
 
 const openDetailDialog = async (row: ItemStatisticsTypeRow) => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   detailDialogVisible.value = true;
   detailLoading.value = true;
   detailData.value = null;
@@ -121,6 +141,10 @@ const toCsvCell = (value: unknown) => {
 };
 
 const handleExport = async () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   exportLoading.value = true;
   try {
     const result = await exportItemStatisticsTypesApi(undefined, resolveItemOrgId());
@@ -162,7 +186,7 @@ const handleToolbarAction = async (action: string) => {
 };
 
 watch(
-  () => sessionStore.currentOrgId,
+  () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
   async () => {
     currentPage.value = 1;
     await fetchList();
@@ -197,6 +221,7 @@ onMounted(async () => {
       scrollbar-always-on
       class="erp-table"
       :height="tableHeight"
+      :empty-text="emptyText"
     >
       <el-table-column prop="index" label="序号" width="60" align="center" />
       <el-table-column prop="code" label="编码" min-width="140" show-overflow-tooltip />

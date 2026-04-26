@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue';
-import { Delete, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
+import { Delete, Plus, RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
+import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 import {
   batchApprovePurchaseInboundApi,
   batchDeletePurchaseInboundApi,
@@ -15,40 +16,37 @@ import {
   type PurchaseInboundRow,
 } from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
+import { fetchItemsApi, type ItemVO } from '@/api/modules/item';
 
 type TimeType = '入库日期' | '创建时间';
-type DocumentStatus = '草稿' | '已提交' | '已审核';
-type ReviewStatus = '未复审' | '已复审';
-type ReconciliationStatus = '未对账' | '部分对账' | '已对账';
-type InvoiceStatus = '未开票' | '部分开票' | '已开票';
-type PrintStatus = '全部' | '未打印' | '已打印';
-type SplitStatus = '未分账' | '已分账';
-type TreeNode = {
-  value: string;
-  label: string;
-  children?: TreeNode[];
-};
 
 const timeTypeOptions: TimeType[] = ['入库日期', '创建时间'];
-const documentStatusOptions: DocumentStatus[] = ['草稿', '已提交', '已审核'];
-const reviewStatusOptions: ReviewStatus[] = ['未复审', '已复审'];
-const reconciliationStatusOptions: ReconciliationStatus[] = ['未对账', '部分对账', '已对账'];
-const splitStatusOptions: SplitStatus[] = ['未分账', '已分账'];
-const invoiceStatusOptions: InvoiceStatus[] = ['未开票', '部分开票', '已开票'];
-const printStatusOptions: PrintStatus[] = ['全部', '未打印', '已打印'];
+const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
+const PURCHASE_RECONCILIATION_STATUS_DICT = 'purchase.reconciliation_status';
+const PURCHASE_INVOICE_STATUS_DICT = 'purchase.invoice_status';
+const PURCHASE_SPLIT_STATUS_DICT = 'purchase.split_status';
+const DOCUMENT_PRINT_STATUS_DICT = 'document.print_status';
+const { optionsOf } = useDictionaryOptions([
+  INVENTORY_DOCUMENT_STATUS_DICT,
+  PURCHASE_RECONCILIATION_STATUS_DICT,
+  PURCHASE_INVOICE_STATUS_DICT,
+  PURCHASE_SPLIT_STATUS_DICT,
+  DOCUMENT_PRINT_STATUS_DICT,
+]);
+const documentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const reconciliationStatusOptions = optionsOf(PURCHASE_RECONCILIATION_STATUS_DICT);
+const splitStatusOptions = optionsOf(PURCHASE_SPLIT_STATUS_DICT);
+const invoiceStatusOptions = optionsOf(PURCHASE_INVOICE_STATUS_DICT);
+const printStatusOptions = optionsOf(DOCUMENT_PRINT_STATUS_DICT, { enabled: true });
+const reviewStatusOptions = ref<Array<{ value: string; label: string }>>([]);
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
-const supplierTree: TreeNode[] = [
-  {
-    value: 'supplier-group',
-    label: '供应商组',
-    children: [
-      { value: '鲜达食品', label: '鲜达食品' },
-      { value: '优选农场', label: '优选农场' },
-      { value: '盒马包材', label: '盒马包材' },
-    ],
-  },
-];
-const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
+const {
+  supplierOptions,
+  loadSupplierOptions,
+} = useSupplierArchiveOptions();
+const itemOptions = ref<Array<{ value: string; label: string }>>([]);
+const optionLoading = ref(false);
 const sessionStore = useSessionStore();
 const router = useRouter();
 
@@ -66,7 +64,7 @@ const query = reactive({
   upstreamCode: '',
   invoiceStatus: '',
   inspectionCount: '',
-  printStatus: '全部' as PrintStatus,
+  printStatus: 'ALL',
   remark: '',
 });
 
@@ -92,17 +90,60 @@ const resolvePurchaseInboundOrgId = () => {
 
 onMounted(() => {
   void loadWarehouseTree();
+  void loadSupplierOptions();
 });
 
 watch(
   () => sessionStore.currentOrgId,
   () => {
     void loadWarehouseTree();
+    void loadSupplierOptions();
   },
 );
 
 const resolveOrgId = () => {
   return resolvePurchaseInboundOrgId();
+};
+
+const fetchAllPages = async <T,>(
+  loader: (pageNo: number, pageSizeValue: number) => Promise<{ list?: T[]; total?: number; pageSize?: number }>,
+  pageSizeValue = 200,
+) => {
+  const rows: T[] = [];
+  let pageNo = 1;
+  let totalValue: number;
+  do {
+    const page = await loader(pageNo, pageSizeValue);
+    const list = Array.isArray(page.list) ? page.list : [];
+    rows.push(...list);
+    totalValue = Number(page.total ?? rows.length);
+    if (!list.length || Number(page.pageSize ?? 0) <= 0) {
+      break;
+    }
+    pageNo += 1;
+  } while (rows.length < totalValue);
+  return rows;
+};
+
+const loadItemOptions = async () => {
+  const orgId = resolveOrgId();
+  if (!orgId) {
+    itemOptions.value = [];
+    return;
+  }
+  optionLoading.value = true;
+  try {
+    const rows = await fetchAllPages<ItemVO>((pageNo, pageSizeValue) =>
+      fetchItemsApi({ pageNo, pageSize: pageSizeValue, status: '全部', itemType: '全部' }, orgId));
+    itemOptions.value = rows.map((item) => ({
+      value: item.code,
+      label: item.name ? `${item.code} / ${item.name}` : item.code,
+    }));
+  } catch {
+    itemOptions.value = [];
+  } finally {
+    optionLoading.value = false;
+  }
 };
 
 const fetchTableData = async () => {
@@ -132,7 +173,7 @@ const fetchTableData = async () => {
       upstreamCode: query.upstreamCode || undefined,
       invoiceStatus: query.invoiceStatus || undefined,
       inspectionCount: query.inspectionCount || undefined,
-      printStatus: query.printStatus === '全部' ? undefined : query.printStatus,
+      printStatus: query.printStatus === 'ALL' ? undefined : query.printStatus,
       remark: query.remark || undefined,
     }, orgId);
     tableData.value = result.list;
@@ -188,7 +229,7 @@ const handleReset = async () => {
   query.upstreamCode = '';
   query.invoiceStatus = '';
   query.inspectionCount = '';
-  query.printStatus = '全部';
+  query.printStatus = 'ALL';
   query.remark = '';
   currentPage.value = 1;
   await fetchTableData();
@@ -196,7 +237,7 @@ const handleReset = async () => {
 
 const handleToolbarAction = async (action: string) => {
   if (action === '新增') {
-    router.push('/inventory/1/2/create');
+    router.push('/inventory/purchase-inbounds/create');
     return;
   }
   if (action === '批量删除') {
@@ -213,8 +254,8 @@ const handleToolbarAction = async (action: string) => {
     } catch {
       return;
     }
-    await batchDeletePurchaseInboundApi(selectedIds.value, resolveOrgId());
-    ElMessage.success('批量删除成功');
+    const result = await batchDeletePurchaseInboundApi(selectedIds.value, resolveOrgId());
+    ElMessage.success(result.message || '批量删除成功');
     await fetchTableData();
     return;
   }
@@ -256,7 +297,6 @@ const handleToolbarAction = async (action: string) => {
     await fetchTableData();
     return;
   }
-  ElMessage.info(`${action}功能待接入`);
 };
 
 const handleDelete = async (row: PurchaseInboundRow) => {
@@ -274,8 +314,8 @@ const handleDelete = async (row: PurchaseInboundRow) => {
     ElMessage.warning('请选择门店后再操作');
     return;
   }
-  await deletePurchaseInboundApi(row.id, orgId);
-  ElMessage.success('删除成功');
+  const result = await deletePurchaseInboundApi(row.id, orgId);
+  ElMessage.success(result.message || '删除成功');
   await fetchTableData();
 };
 
@@ -284,11 +324,11 @@ const handleSelectionChange = (rows: PurchaseInboundRow[]) => {
 };
 
 const handleView = (row: PurchaseInboundRow) => {
-  router.push(`/inventory/1/2/view/${row.id}`);
+  router.push(`/inventory/purchase-inbounds/view/${row.id}`);
 };
 
 const handleEdit = (row: PurchaseInboundRow) => {
-  router.push(`/inventory/1/2/edit/${row.id}`);
+  router.push(`/inventory/purchase-inbounds/edit/${row.id}`);
 };
 
 const handlePageChange = async (page: number) => {
@@ -303,6 +343,7 @@ const handlePageSizeChange = async (size: number) => {
 };
 
 onMounted(async () => {
+  await loadItemOptions();
   await loadPermission();
   await fetchTableData();
 });
@@ -310,6 +351,7 @@ onMounted(async () => {
 watch(
   () => sessionStore.currentOrgId,
   async () => {
+    await loadItemOptions();
     await loadPermission();
     await fetchTableData();
   },
@@ -355,23 +397,27 @@ watch(
         <el-input v-model="query.documentCode" placeholder="请输入单据编号" clearable style="width: 150px" />
       </el-form-item>
       <el-form-item label="供应商">
-        <el-tree-select
+        <el-select
           v-model="query.supplier"
-          :data="supplierTree"
-          :props="{ label: 'label', value: 'value', children: 'children' }"
           clearable
-          check-strictly
-          default-expand-all
           style="width: 150px"
-        />
+          placeholder="请选择供应商"
+        >
+          <el-option
+            v-for="option in supplierOptions"
+            :key="option.id"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
       </el-form-item>
       <el-form-item label="物品">
-        <el-select v-model="query.itemName" clearable style="width: 120px">
+        <el-select v-model="query.itemName" :loading="optionLoading" clearable filterable style="width: 180px">
           <el-option
             v-for="option in itemOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
           />
         </el-select>
       </el-form-item>
@@ -379,9 +425,9 @@ watch(
         <el-select v-model="query.documentStatus" clearable style="width: 120px">
           <el-option
             v-for="option in documentStatusOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
           />
         </el-select>
       </el-form-item>
@@ -389,9 +435,9 @@ watch(
         <el-select v-model="query.reviewStatus" clearable style="width: 120px">
           <el-option
             v-for="option in reviewStatusOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
           />
         </el-select>
       </el-form-item>
@@ -399,9 +445,9 @@ watch(
         <el-select v-model="query.reconciliationStatus" clearable style="width: 120px">
           <el-option
             v-for="option in reconciliationStatusOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
           />
         </el-select>
       </el-form-item>
@@ -409,9 +455,9 @@ watch(
         <el-select v-model="query.splitStatus" clearable style="width: 120px">
           <el-option
             v-for="option in splitStatusOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
           />
         </el-select>
       </el-form-item>
@@ -422,9 +468,9 @@ watch(
         <el-select v-model="query.invoiceStatus" clearable style="width: 120px">
           <el-option
             v-for="option in invoiceStatusOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
           />
         </el-select>
       </el-form-item>
@@ -435,9 +481,9 @@ watch(
         <el-select v-model="query.printStatus" style="width: 120px">
           <el-option
             v-for="option in printStatusOptions"
-            :key="option"
-            :label="option"
-            :value="option"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
           />
         </el-select>
       </el-form-item>
@@ -461,17 +507,14 @@ watch(
         <el-icon><Plus /></el-icon>
         新增
       </el-button>
-      <el-button @click="handleToolbarAction('批量打印')">
-        <el-icon><Printer /></el-icon>
-        批量打印
-      </el-button>
+      <el-button disabled>批量打印</el-button>
       <el-button v-if="canDelete" @click="handleToolbarAction('批量删除')">
         <el-icon><Delete /></el-icon>
         批量删除
       </el-button>
       <el-button v-if="canApprove" @click="handleToolbarAction('批量审核')">批量审核</el-button>
       <el-button v-if="canUnapprove" @click="handleToolbarAction('批量取消审核')">批量取消审核</el-button>
-      <el-button @click="handleToolbarAction('批量导出单据列表')">批量导出单据列表</el-button>
+      <el-button disabled>批量导出单据列表</el-button>
     </div>
 
     <el-table
@@ -487,7 +530,14 @@ watch(
     >
       <el-table-column type="selection" width="44" fixed="left" />
       <el-table-column type="index" label="序号" width="56" fixed="left" />
-      <el-table-column prop="documentCode" label="单据编号" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="documentCode" label="单据编号" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-button v-if="row.documentCode" text type="primary" @click="handleView(row)">
+            {{ row.documentCode }}
+          </el-button>
+          <template v-else>-</template>
+        </template>
+      </el-table-column>
       <el-table-column prop="inboundDate" label="入库日期" min-width="110" show-overflow-tooltip />
       <el-table-column prop="upstreamCode" label="上游单据号" min-width="140" show-overflow-tooltip />
       <el-table-column prop="warehouse" label="仓库" min-width="120" show-overflow-tooltip />
@@ -504,7 +554,6 @@ watch(
       <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
       <el-table-column label="操作" width="160" fixed="right">
         <template #default="{ row }">
-          <el-button text type="primary" @click="handleView(row)">查看</el-button>
           <el-button v-if="canUpdate" text @click="handleEdit(row)">编辑</el-button>
           <el-button v-if="canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
         </template>

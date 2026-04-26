@@ -2,7 +2,8 @@ package com.boboboom.jxc.identity.infrastructure.persistence.dataobject;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 
-@TableName("dev.sys_group")
+/** 身份与权限数据对象，映射数据库表记录。 */
+@TableName("sys_group")
 public class GroupDO extends BaseAuditDO {
 
     private String groupCode;
@@ -10,36 +11,44 @@ public class GroupDO extends BaseAuditDO {
     private String status;
     private String remark;
 
+    /** 获取GroupCode。 */
     public String getGroupCode() {
         return groupCode;
     }
 
-    public void setGroupCode(String groupCode) {
-        this.groupCode = groupCode;
+    /** 设置GroupCode。 */
+    public void setGroupCode(String groupCodeValue) {
+        this.groupCode = groupCodeValue;
     }
 
+    /** 获取GroupName。 */
     public String getGroupName() {
         return groupName;
     }
 
-    public void setGroupName(String groupName) {
-        this.groupName = groupName;
+    /** 设置GroupName。 */
+    public void setGroupName(String groupNameValue) {
+        this.groupName = groupNameValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 
+    /** 获取Remark。 */
     public String getRemark() {
         return remark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    /** 设置Remark。 */
+    public void setRemark(String remarkValue) {
+        this.remark = remarkValue;
     }
 }
 

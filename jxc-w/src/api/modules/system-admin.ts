@@ -15,7 +15,7 @@ const fetchAdminPagedList = async <T>(
 ) => {
   const rows: T[] = [];
   let pageNum = 1;
-  let total = 0;
+  let total: number;
 
   do {
     const page = await apiClient.get<AdminPageData<T>>(url, {
@@ -53,7 +53,7 @@ export type GroupAdminItem = {
   id: number;
   groupCode: string;
   groupName: string;
-  status: 'ENABLED' | 'DISABLED';
+  status: string;
   remark: string | null;
   createdAt: string;
 };
@@ -63,7 +63,7 @@ export type GroupStoreItem = {
   groupId: number;
   storeCode: string;
   storeName: string;
-  status: 'ENABLED' | 'DISABLED';
+  status: string;
   contactName: string | null;
   contactPhone: string | null;
   address: string | null;
@@ -71,23 +71,23 @@ export type GroupStoreItem = {
   createdAt: string;
 };
 
-export type GroupAdminCandidateItem = {
-  userId: number;
-  realName: string;
-  phone: string;
-  storeId: number;
-  storeCode: string;
-  storeName: string;
-};
-
 export type UserAdminItem = {
   id: number;
   username: string;
   realName: string;
   phone: string;
-  status: 'ENABLED' | 'DISABLED';
+  status: string;
   createdAt: string;
+  groups: Array<{ groupId: number; groupName: string }>;
   roles: RoleAssignment[];
+};
+
+export type GroupUserOptionItem = {
+  userId: number;
+  username: string;
+  realName: string;
+  phone: string;
+  status: string;
 };
 
 export type SalesmanCandidateItem = {
@@ -105,7 +105,7 @@ export type RoleAdminItem = {
   roleType: string;
   dataScopeType: string;
   description: string;
-  status: 'ENABLED' | 'DISABLED';
+  status: string;
   menuIds: number[];
   builtin?: boolean;
   editable?: boolean;
@@ -118,18 +118,36 @@ export type MenuAdminItem = {
   parentId: number | null;
   menuType: 'DIRECTORY' | 'MENU' | 'BUTTON' | 'API';
   routePath: string | null;
+  componentKey: string | null;
   permissionCode: string | null;
-  status: 'ENABLED' | 'DISABLED';
+  icon: string | null;
+  status: string;
+  visible?: boolean;
   sortNo: number;
+};
+
+export type MenuMaintenancePayload = {
+  menuCode: string;
+  menuName: string;
+  parentId: number | null;
+  menuType: 'DIRECTORY' | 'MENU' | 'BUTTON' | 'API';
+  routePath?: string | null;
+  componentKey?: string | null;
+  permissionCode?: string | null;
+  icon?: string | null;
+  sortNo: number;
+  visible: boolean;
+  status: string;
 };
 
 export type RoleUpsertPayload = {
   roleCode?: string;
   roleName: string;
+  builtin?: boolean;
   roleType: string;
   dataScopeType: string;
   description?: string;
-  status?: 'ENABLED' | 'DISABLED';
+  status?: string;
   menuIds?: number[];
 };
 
@@ -141,36 +159,36 @@ export const fetchAdminGroupsApi = () => fetchAdminPagedList<GroupAdminItem>('/a
 export const createAdminGroupApi = (payload: {
   groupCode?: string;
   groupName: string;
-  status?: 'ENABLED' | 'DISABLED';
+  adminRealName: string;
+  adminPhone: string;
+  status?: string;
   remark?: string;
 }) => apiClient.post<{ id: number }>('/api/identity/admin/groups', payload);
 
 export const updateAdminGroupApi = (id: number, payload: {
   groupCode?: string;
   groupName: string;
-  status?: 'ENABLED' | 'DISABLED';
+  status?: string;
   remark?: string;
 }) => apiClient.put<void>(`/api/identity/admin/groups/${id}`, payload);
 
-export const updateAdminGroupStatusApi = (id: number, status: 'ENABLED' | 'DISABLED') =>
+export const updateAdminGroupStatusApi = (id: number, status: string) =>
   apiClient.put<void>(`/api/identity/admin/groups/${id}/status`, { status });
 
 export const deleteAdminGroupApi = (id: number) =>
   apiClient.delete<void>(`/api/identity/admin/groups/${id}`);
 
-export const bindGroupAdminApi = (groupId: number, payload: { phone: string; realName?: string }) =>
-  apiClient.post<void>(`/api/identity/admin/groups/${groupId}/bind-admin`, payload);
-
 export const fetchGroupStoresApi = (groupId: number) =>
   fetchAdminPagedList<GroupStoreItem>(`/api/identity/admin/groups/${groupId}/stores`);
 
-export const fetchGroupAdminCandidatesApi = (groupId: number) =>
-  fetchAdminPagedList<GroupAdminCandidateItem>(`/api/identity/admin/groups/${groupId}/admin-candidates`);
+export const fetchGroupUsersApi = (groupId: number) =>
+  fetchAdminPagedList<GroupUserOptionItem>(`/api/identity/admin/groups/${groupId}/users`);
 
 export const createGroupStoreApi = (groupId: number, payload: {
   storeCode?: string;
   storeName: string;
-  status?: 'ENABLED' | 'DISABLED';
+  adminUserId: number;
+  status?: string;
   contactName?: string;
   contactPhone?: string;
   address?: string;
@@ -179,7 +197,7 @@ export const createGroupStoreApi = (groupId: number, payload: {
 
 export const updateGroupStoreApi = (groupId: number, storeId: number, payload: {
   storeName: string;
-  status?: 'ENABLED' | 'DISABLED';
+  status?: string;
   contactName?: string;
   contactPhone?: string;
   address?: string;
@@ -199,7 +217,7 @@ export const createAdminUserApi = (
 export const updateAdminUserApi = (id: number, payload: { realName: string; phone: string; status?: string }) =>
   apiClient.put<void>(`/api/identity/admin/users/${id}`, payload);
 
-export const updateAdminUserStatusApi = (id: number, status: 'ENABLED' | 'DISABLED') =>
+export const updateAdminUserStatusApi = (id: number, status: string) =>
   apiClient.put<void>(`/api/identity/admin/users/${id}/status`, { status });
 
 export const deleteAdminUserApi = (id: number) =>
@@ -226,11 +244,31 @@ export const updateAdminRoleApi = (id: number, payload: RoleUpsertPayload, orgId
     params: orgId ? { orgId } : undefined,
   });
 
-export const updateAdminRoleStatusApi = (id: number, status: 'ENABLED' | 'DISABLED') =>
+export const updateAdminRoleStatusApi = (id: number, status: string) =>
   apiClient.put<void>(`/api/identity/admin/roles/${id}/status`, { status });
+
+export const deleteAdminRoleApi = (id: number, orgId?: string) =>
+  apiClient.delete<void>(`/api/identity/admin/roles/${id}`, {
+    params: orgId ? { orgId } : undefined,
+  });
 
 export const fetchAdminMenusApi = (orgId?: string) =>
   fetchAdminPagedList<MenuAdminItem>('/api/identity/admin/menus', orgId ? { orgId } : undefined);
 
 export const assignAdminRoleMenusApi = (id: number, menuIds: number[]) =>
   apiClient.put<void>(`/api/identity/admin/roles/${id}/menus`, { menuIds });
+
+export const fetchMenuMaintenanceApi = () =>
+  apiClient.get<MenuAdminItem[]>('/api/identity/admin/menu-maintenance');
+
+export const createMenuMaintenanceApi = (payload: MenuMaintenancePayload) =>
+  apiClient.post<{ id: number }>('/api/identity/admin/menu-maintenance', payload);
+
+export const updateMenuMaintenanceApi = (id: number, payload: MenuMaintenancePayload) =>
+  apiClient.put<void>(`/api/identity/admin/menu-maintenance/${id}`, payload);
+
+export const deleteMenuMaintenanceApi = (id: number) =>
+  apiClient.delete<void>(`/api/identity/admin/menu-maintenance/${id}`);
+
+export const sortMenuMaintenanceApi = (items: Array<{ id: number; parentId: number | null; sortNo: number }>) =>
+  apiClient.put<void>('/api/identity/admin/menu-maintenance/sort', { items });

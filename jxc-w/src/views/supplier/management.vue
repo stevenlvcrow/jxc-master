@@ -23,7 +23,7 @@ import {
   supplierToolbarButtons,
   supplyRelationOptions,
 } from './management-data';
-import type { SupplierRow } from './types';
+import type { SupplierQuery, SupplierRow } from './types';
 
 const router = useRouter();
 const sessionStore = useSessionStore();
@@ -110,6 +110,10 @@ const handleReset = async () => {
   await fetchTableData();
 };
 
+const handleQueryChange = (value: SupplierQuery) => {
+  Object.assign(query, value);
+};
+
 const ensureSelection = () => {
   if (!selectedRows.value.length) {
     ElMessage.warning('请先选择供应商');
@@ -120,7 +124,7 @@ const ensureSelection = () => {
 
 const handleToolbarAction = async (action: string) => {
   if (action === '新增') {
-    router.push('/archive/3/1/create');
+    router.push('/archive/suppliers/create');
     return;
   }
 
@@ -137,7 +141,7 @@ const handleSelectionChange = (selection: SupplierRow[]) => {
 };
 
 const handleEdit = (row: SupplierRow) => {
-  router.push(`/archive/3/1/edit/${row.id}`);
+  router.push(`/archive/suppliers/edit/${row.id}`);
 };
 
 const handleBind = (row: SupplierRow) => {
@@ -234,6 +238,7 @@ onMounted(async () => {
         :bind-status-options="bindStatusOptions"
         :source-options="sourceOptions"
         :supply-relation-options="supplyRelationOptions"
+        @update:model-value="handleQueryChange"
         @search="handleSearch"
         @reset="handleReset"
       />

@@ -1,13 +1,14 @@
 package com.boboboom.jxc.workflow.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
-import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
-import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowConfigSaveRequest;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+
 import org.flowable.bpmn.converter.BpmnXMLConverter;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.EndEvent;
@@ -22,23 +23,29 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
+import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
+import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
+import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowConfigSaveRequest;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
+/** 流程配置业务服务，负责审批节点配置保存和读取。 */
 @Service
 public class WorkflowConfigApplicationService {
+
+    private static final int DEFAULT_PUBLISH_HISTORY_LIMIT = 200;
+    private static final int MAX_PUBLISH_HISTORY_LIMIT = 1000;
 
     private static final String SCOPE_PLATFORM = "PLATFORM";
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
-    private static final String STATUS_DRAFT = "DRAFT";
-    private static final String STATUS_PUBLISHED = "PUBLISHED";
     private static final String NODE_TYPE_NORMAL = "NORMAL";
     private static final String NODE_TYPE_CONDITION = "CONDITION";
     private static final String NODE_TYPE_SUCCESS = "SUCCESS";
@@ -48,22 +55,31 @@ public class WorkflowConfigApplicationService {
     private static final String ROLE_SIGN_MODE_OR = "OR";
     private static final String ROLE_SIGN_MODE_AND = "AND";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
+    private static final String UNSUPPORTED_ADVANCED_FIELD_MESSAGE = "当前版本暂不支持条件表达式、会签方式、允许驳回或允许反审核配置";
 
     private final WorkflowDefinitionConfigRepository configRepository;
+    private final WorkflowProcessRegistryRepository processRegistryRepository;
     private final ObjectMapper objectMapper;
     private final RepositoryService repositoryService;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
-    public WorkflowConfigApplicationService(WorkflowDefinitionConfigRepository configRepository,
-                                            ObjectMapper objectMapper,
-                                            RepositoryService repositoryService,
-                                            OrgScopeService orgScopeService) {
-        this.configRepository = configRepository;
-        this.objectMapper = objectMapper;
-        this.repositoryService = repositoryService;
-        this.orgScopeService = orgScopeService;
+    /** 流程配置业务服务，负责审批节点配置保存和读取。 */
+    public WorkflowConfigApplicationService(WorkflowDefinitionConfigRepository configRepositoryValue,
+                                            WorkflowProcessRegistryRepository processRegistryRepositoryValue,
+                                            ObjectMapper objectMapperValue,
+                                            RepositoryService repositoryServiceValue,
+                                            OrgScopeService orgScopeServiceValue,
+                                            DictionaryLookupService dictionaryLookupServiceValue) {
+        this.configRepository = configRepositoryValue;
+        this.processRegistryRepository = processRegistryRepositoryValue;
+        this.objectMapper = objectMapperValue;
+        this.repositoryService = repositoryServiceValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 获取Current。 */
     public WorkflowConfigView getCurrent(String orgId, String businessCode, String workflowCode) {
         Scope scope = resolveScope(orgId);
         String normalizedBusinessCode = normalizeCode(businessCode, "业务编码不能为空");
@@ -75,6 +91,7 @@ public class WorkflowConfigApplicationService {
         return toView(config, parseNodes(config.getNodeConfigJson()), scope, scope, false);
     }
 
+    /** 保存业务数据。 */
     @Transactional
     public void save(String orgId, WorkflowConfigSaveRequest request) {
         Scope scope = resolveScope(orgId);
@@ -95,7 +112,7 @@ public class WorkflowConfigApplicationService {
         }
         config.setWorkflowName(workflowName);
         config.setNodeConfigJson(toConfigJson(nodes));
-        config.setStatus(STATUS_DRAFT);
+        config.setStatus(draftStatus());
         config.setUpdatedBy(operatorId);
         config.setProcessDefinitionKey(null);
         config.setProcessDefinitionId(null);
@@ -107,6 +124,7 @@ public class WorkflowConfigApplicationService {
         }
     }
 
+    /** 发布流程配置。 */
     @Transactional
     public PublishResultView publish(String orgId, String businessCode, String workflowCode) {
         Scope scope = resolveScope(orgId);
@@ -124,6 +142,7 @@ public class WorkflowConfigApplicationService {
         return publishConfig(scope, config, nodes, operatorId);
     }
 
+    /** 查询流程发布历史。 */
     public List<WorkflowPublishHistoryView> history(String orgId, String businessCode, String workflowCode) {
         Scope scope = resolveScope(orgId);
         String normalizedBusinessCode = normalizeCode(businessCode, "业务编码不能为空");
@@ -146,9 +165,10 @@ public class WorkflowConfigApplicationService {
         return rows;
     }
 
+    /** 分页查询流程发布历史。 */
     public List<WorkflowPublishHistoryManageView> publishHistories(String orgId, Integer limit) {
         Scope scope = resolveScope(orgId);
-        int safeLimit = limit == null || limit < 1 ? 200 : Math.min(limit, 1000);
+        int safeLimit = limit == null || limit < 1 ? DEFAULT_PUBLISH_HISTORY_LIMIT : Math.min(limit, MAX_PUBLISH_HISTORY_LIMIT);
         List<WorkflowDefinitionConfigDO> configs = configRepository.findByScopeOrdered(
                 scope.scopeType(),
                 scope.scopeId(),
@@ -169,15 +189,21 @@ public class WorkflowConfigApplicationService {
         return rows;
     }
 
+    /** 审批流程配置类，注册框架组件和运行参数。 */
     @Transactional
     public void deleteConfig(String orgId, Long id) {
         Scope scope = resolveScope(orgId);
-        WorkflowDefinitionConfigDO config = configRepository.findById(id)
-                .filter(row -> scope.scopeType().equals(row.getScopeType()))
-                .filter(row -> scope.scopeId().equals(row.getScopeId()))
-                .orElse(null);
-        if (config == null) {
+        WorkflowDefinitionConfigDO config = configRepository.findById(id).orElse(null);
+        if (config == null
+                || !scope.scopeType().equals(config.getScopeType())
+                || !scope.scopeId().equals(config.getScopeId())) {
             throw new BusinessException("流程模板不存在");
+        }
+        WorkflowProcessRegistryDO registry = processRegistryRepository
+                .findByScopeAndProcessCode(config.getScopeType(), config.getScopeId(), config.getBusinessCode())
+                .orElse(null);
+        if (registry != null && config.getWorkflowCode().equals(registry.getTemplateId())) {
+            throw new BusinessException("正在使用的流程版本不允许删除");
         }
         configRepository.deleteById(config.getId());
     }
@@ -189,7 +215,7 @@ public class WorkflowConfigApplicationService {
                 businessCode,
                 workflowCode,
                 "",
-                STATUS_DRAFT,
+                draftStatus(),
                 0,
                 List.of(),
                 null,
@@ -227,19 +253,18 @@ public class WorkflowConfigApplicationService {
     private NodeView toNodeView(NodeConfig node) {
         String nodeType = normalizeNodeType(node.nodeType());
         boolean roleNode = supportsRoleAssignment(nodeType);
-        boolean conditionNode = NODE_TYPE_CONDITION.equals(nodeType);
         return new NodeView(
                 node.nodeKey(),
                 node.nodeName(),
                 node.x(),
                 node.y(),
                 roleNode ? trimNullable(node.approverRoleCode()) : "",
-                conditionNode ? normalizeRoleSignMode(node.roleSignMode()) : ROLE_SIGN_MODE_OR,
+                ROLE_SIGN_MODE_OR,
                 supportsApproverUser(nodeType) ? node.approverUserId() : null,
                 false,
-                node.allowUnapprove(),
+                false,
                 nodeType,
-                node.conditionExpression() == null ? "" : node.conditionExpression(),
+                "",
                 node.triggerActions() == null ? List.of() : node.triggerActions()
         );
     }
@@ -270,7 +295,7 @@ public class WorkflowConfigApplicationService {
 
         int nextVersion = (config.getVersionNo() == null ? 0 : config.getVersionNo()) + 1;
         LocalDateTime deployedAt = LocalDateTime.now();
-        config.setStatus(STATUS_PUBLISHED);
+        config.setStatus(publishedStatus());
         config.setVersionNo(nextVersion);
         config.setProcessDefinitionKey(processDefinition.getKey());
         config.setProcessDefinitionId(processDefinition.getId());
@@ -296,9 +321,8 @@ public class WorkflowConfigApplicationService {
             String nodeType = normalizeNodeType(node.nodeType());
             String nodeName = requiredTrim(node.nodeName(), "节点名称不能为空");
             boolean roleNode = supportsRoleAssignment(nodeType);
-            boolean conditionNode = NODE_TYPE_CONDITION.equals(nodeType);
-            String roleCode = roleNode && trimNullable(node.approverRoleCode()) != null ? trimNullable(node.approverRoleCode()) : "";
-            String roleSignMode = conditionNode ? normalizeRoleSignMode(node.roleSignMode()) : ROLE_SIGN_MODE_OR;
+            validateUnsupportedAdvancedFields(node);
+            String roleCode = normalizeApproverRoleCode(node, roleNode);
             Long approverUserId = supportsApproverUser(nodeType) ? node.approverUserId() : null;
             List<String> triggerActions = normalizeTriggerActions(node.triggerActions(), nodeType);
             if (NODE_TYPE_NORMAL.equals(nodeType) && !triggerActions.isEmpty() && !StringUtils.hasText(roleCode)) {
@@ -314,16 +338,21 @@ public class WorkflowConfigApplicationService {
                     node.x(),
                     node.y(),
                     roleCode,
-                    roleSignMode,
+                    ROLE_SIGN_MODE_OR,
                     approverUserId,
                     false,
-                    NODE_TYPE_SUCCESS.equals(nodeType) && Boolean.TRUE.equals(node.allowUnapprove()),
+                    false,
                     nodeType,
-                    trimNullable(node.conditionExpression()) == null ? "" : trimNullable(node.conditionExpression()),
+                    "",
                     triggerActions
             ));
         }
         return normalized;
+    }
+
+    private String normalizeApproverRoleCode(WorkflowConfigSaveRequest.NodeItem node, boolean roleNode) {
+        String roleCode = trimNullable(node.approverRoleCode());
+        return roleNode && roleCode != null ? roleCode : "";
     }
 
     private List<NodeConfig> parseNodes(String configJson) {
@@ -371,7 +400,7 @@ public class WorkflowConfigApplicationService {
             if (NODE_TYPE_START.equals(nodeType)) {
                 continue;
             }
-            if (NODE_TYPE_END.equals(nodeType)) {
+            if (isTerminalNode(nodeType)) {
                 process.addFlowElement(sequenceFlow("flow_" + i, sourceRef, endEvent.getId()));
                 sourceRef = endEvent.getId();
                 break;
@@ -383,10 +412,7 @@ public class WorkflowConfigApplicationService {
             userTask.setName(node.nodeName());
             userTask.setDocumentation(
                     "nodeType=" + nodeType
-                            + ";allowReject=" + node.allowReject()
-                            + ";allowUnapprove=" + node.allowUnapprove()
                             + ";approverRoleCode=" + (node.approverRoleCode() == null ? "" : node.approverRoleCode())
-                            + ";roleSignMode=" + normalizeRoleSignMode(node.roleSignMode())
                             + ";approverUserId=" + (node.approverUserId() == null ? "" : node.approverUserId())
                             + ";triggerActions=" + String.join(",", node.triggerActions() == null ? List.of() : node.triggerActions())
             );
@@ -407,6 +433,12 @@ public class WorkflowConfigApplicationService {
         sequenceFlow.setSourceRef(sourceRef);
         sequenceFlow.setTargetRef(targetRef);
         return sequenceFlow;
+    }
+
+    private boolean isTerminalNode(String nodeType) {
+        return NODE_TYPE_END.equals(nodeType)
+                || NODE_TYPE_SUCCESS.equals(nodeType)
+                || NODE_TYPE_FAIL.equals(nodeType);
     }
 
     private Scope resolveScope(String orgId) {
@@ -489,12 +521,35 @@ public class WorkflowConfigApplicationService {
         return ROLE_SIGN_MODE_OR;
     }
 
+    private void validateUnsupportedAdvancedFields(WorkflowConfigSaveRequest.NodeItem node) {
+        if (node == null) {
+            return;
+        }
+        if (Boolean.TRUE.equals(node.allowReject())
+                || Boolean.TRUE.equals(node.allowUnapprove())
+                || StringUtils.hasText(trimNullable(node.conditionExpression()))) {
+            throw new BusinessException(UNSUPPORTED_ADVANCED_FIELD_MESSAGE);
+        }
+        String roleSignMode = trimNullable(node.roleSignMode());
+        if (roleSignMode != null && !ROLE_SIGN_MODE_OR.equalsIgnoreCase(roleSignMode)) {
+            throw new BusinessException(UNSUPPORTED_ADVANCED_FIELD_MESSAGE);
+        }
+    }
+
     private boolean supportsRoleAssignment(String nodeType) {
         return NODE_TYPE_NORMAL.equals(nodeType) || NODE_TYPE_CONDITION.equals(nodeType);
     }
 
     private boolean supportsApproverUser(String nodeType) {
         return NODE_TYPE_CONDITION.equals(nodeType);
+    }
+
+    private String draftStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.WORKFLOW_DEFINITION_STATUS, DictionaryCodes.DRAFT);
+    }
+
+    private String publishedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.WORKFLOW_DEFINITION_STATUS, DictionaryCodes.PUBLISHED);
     }
 
     private String requiredTrim(String value, String message) {
@@ -516,6 +571,7 @@ public class WorkflowConfigApplicationService {
         return value == null ? "" : DATETIME_FORMATTER.format(value);
     }
 
+    /** 审批流程视图模型，承载页面展示数据。 */
     public record WorkflowConfigView(Long scopeId,
                                      String scopeType,
                                      String businessCode,
@@ -532,6 +588,7 @@ public class WorkflowConfigApplicationService {
                                      Long sourceScopeId) {
     }
 
+    /** 审批流程视图模型，承载页面展示数据。 */
     public record NodeView(String nodeKey,
                            String nodeName,
                            Integer x,
@@ -546,18 +603,21 @@ public class WorkflowConfigApplicationService {
                            List<String> triggerActions) {
     }
 
+    /** 审批流程视图模型，承载页面展示数据。 */
     public record PublishResultView(String processDefinitionId,
                                     String processDefinitionKey,
                                     Integer version,
                                     String deployedAt) {
     }
 
+    /** 审批流程视图模型，承载页面展示数据。 */
     public record WorkflowPublishHistoryView(String processDefinitionId,
                                              String processDefinitionKey,
                                              Integer version,
                                              String deploymentId) {
     }
 
+    /** 审批流程视图模型，承载页面展示数据。 */
     public record WorkflowPublishHistoryManageView(Long id,
                                                    String businessCode,
                                                    String workflowCode,

@@ -1,7 +1,13 @@
 package com.boboboom.jxc.common.logging;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -10,30 +16,28 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.web.util.ContentCachingRequestWrapper;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Map;
-import java.util.regex.Pattern;
-import java.util.Set;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
+/** 接口访问日志拦截器，负责记录请求入口、响应状态和耗时。 */
 @Component
 public class ApiAccessLogInterceptor implements HandlerInterceptor {
 
-    private static final Logger log = LoggerFactory.getLogger(ApiAccessLogInterceptor.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ApiAccessLogInterceptor.class);
     private static final String START_TIME_ATTR = ApiAccessLogInterceptor.class.getName() + ".START_TIME";
     private static final int MAX_LOG_LENGTH = 4000;
     private static final Set<String> SENSITIVE_KEYS = new HashSet<>(Arrays.asList(
             "password", "pass", "pwd", "token", "accessToken", "refreshToken", "authorization"
     ));
 
+    /** 请求进入业务处理前记录访问上下文。 */
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         request.setAttribute(START_TIME_ATTR, System.currentTimeMillis());
         return true;
     }
 
+    /** 请求完成后记录响应状态和耗时。 */
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         long startTime = resolveStartTime(request);
@@ -43,11 +47,11 @@ public class ApiAccessLogInterceptor implements HandlerInterceptor {
         String output = truncate(maskSensitive(readResponseContent(response)));
 
         if (ex != null) {
-            log.info("API [{}] input={} output={} status={} cost={}ms error={}",
+            LOG.info("API [{}] input={} output={} status={} cost={}ms error={}",
                     apiName, input, output, response.getStatus(), costMs, ex.getMessage());
             return;
         }
-        log.info("API [{}] input={} output={} status={} cost={}ms",
+        LOG.info("API [{}] input={} output={} status={} cost={}ms",
                 apiName, input, output, response.getStatus(), costMs);
     }
 

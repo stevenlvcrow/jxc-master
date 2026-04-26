@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.purchase.infrastructure.persistence.mapper.PurchaseReportMapper">
+
+    <resultMap id="PurchaseReportLineSnapshotMap" type="com.boboboom.jxc.purchase.application.service.PurchaseReportLineSnapshot">
+        <constructor>
+            <idArg column="document_id" javaType="java.lang.Long"/>
+            <arg column="line_id" javaType="java.lang.Long"/>
+            <arg column="document_code" javaType="java.lang.String"/>
+            <arg column="document_date" javaType="java.time.LocalDate"/>
+            <arg column="expected_arrival_date" javaType="java.time.LocalDate"/>
+            <arg column="document_status" javaType="java.lang.String"/>
+            <arg column="receive_status" javaType="java.lang.String"/>
+            <arg column="source_document_code" javaType="java.lang.String"/>
+            <arg column="supplier_name" javaType="java.lang.String"/>
+            <arg column="supplier_code" javaType="java.lang.String"/>
+            <arg column="warehouse_name" javaType="java.lang.String"/>
+            <arg column="item_code" javaType="java.lang.String"/>
+            <arg column="item_name" javaType="java.lang.String"/>
+            <arg column="spec" javaType="java.lang.String"/>
+            <arg column="item_category" javaType="java.lang.String"/>
+            <arg column="purchase_unit" javaType="java.lang.String"/>
+            <arg column="base_unit" javaType="java.lang.String"/>
+            <arg column="base_conversion" javaType="java.lang.String"/>
+            <arg column="quantity" javaType="java.math.BigDecimal"/>
+            <arg column="review_qty" javaType="java.math.BigDecimal"/>
+            <arg column="received_qty" javaType="java.math.BigDecimal"/>
+            <arg column="unit_price" javaType="java.math.BigDecimal"/>
+            <arg column="amount" javaType="java.math.BigDecimal"/>
+            <arg column="is_gift" javaType="java.lang.Boolean"/>
+            <arg column="line_warehouse_name" javaType="java.lang.String"/>
+            <arg column="line_expected_arrival_date" javaType="java.time.LocalDate"/>
+        </constructor>
+    </resultMap>
+
+    <select id="selectLines" resultMap="PurchaseReportLineSnapshotMap">
+        select
+            h.id as document_id,
+            l.id as line_id,
+            h.document_code,
+            h.document_date,
+            h.expected_arrival_date,
+            h.document_status,
+            h.receive_status,
+            h.source_document_code,
+            coalesce(nullif(l.supplier_name, ''), h.supplier_name) as supplier_name,
+            sp.supplier_code,
+            h.warehouse_name,
+            l.item_code,
+            l.item_name,
+            l.spec,
+            l.item_category,
+            l.purchase_unit,
+            l.base_unit,
+            l.base_conversion,
+            l.quantity,
+            l.review_qty,
+            l.received_qty,
+            l.unit_price,
+            l.amount,
+            l.is_gift,
+            l.warehouse_name as line_warehouse_name,
+            l.expected_arrival_date as line_expected_arrival_date
+        from purchase_document h
+        join purchase_document_line l on l.document_id = h.id
+        left join supplier_profile sp
+          on sp.scope_type = h.scope_type
+         and sp.scope_id = h.scope_id
+         and sp.supplier_name = coalesce(nullif(l.supplier_name, ''), h.supplier_name)
+        where h.scope_type = #{scopeType}
+          and h.scope_id = #{scopeId}
+          and h.document_type = #{documentType}
+        <if test="!viewAll">
+          and h.created_by = #{createdBy}
+        </if>
+        order by h.document_date desc, h.id desc, l.id asc
+    </select>
+</mapper>

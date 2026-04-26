@@ -1,10 +1,7 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.item.application.service.DishApplicationService;
-import com.boboboom.jxc.item.application.service.DishApplicationService.DishListRow;
-import com.boboboom.jxc.item.application.service.DishApplicationService.PageData;
-import com.boboboom.jxc.item.application.service.DishApplicationService.TreeNode;
+import java.util.List;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,14 +9,18 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.item.application.service.DishApplicationService;
+import com.boboboom.jxc.item.application.service.DishApplicationService.DishListRow;
+import com.boboboom.jxc.item.application.service.DishApplicationService.PageData;
+import com.boboboom.jxc.item.application.service.DishApplicationService.TreeNode;
 
-@Validated
-@RestController
-@RequestMapping("/api/dishes")
 /**
  * 菜品接口，负责菜品分页查询和分类树查询。
  */
+@Validated
+@RestController
+@RequestMapping("/api/dishes")
 public class DishController {
 
     private final DishApplicationService dishApplicationService;
@@ -27,10 +28,10 @@ public class DishController {
     /**
      * 构造菜品接口。
      *
-     * @param dishApplicationService 菜品服务
+     * @param dishApplicationServiceValue 菜品服务
      */
-    public DishController(DishApplicationService dishApplicationService) {
-        this.dishApplicationService = dishApplicationService;
+    public DishController(DishApplicationService dishApplicationServiceValue) {
+        this.dishApplicationService = dishApplicationServiceValue;
     }
 
     /**

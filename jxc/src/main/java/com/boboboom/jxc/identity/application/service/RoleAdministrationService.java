@@ -1,68 +1,84 @@
 package com.boboboom.jxc.identity.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.common.BusinessCodeGenerator;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.identity.domain.repository.GroupRepository;
-import com.boboboom.jxc.identity.domain.repository.RoleRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleMenuRelDO;
-import com.boboboom.jxc.identity.domain.repository.RoleMenuRelRepository;
-import com.boboboom.jxc.identity.interfaces.rest.request.RoleUpsertRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.common.BusinessCodeGenerator;
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.domain.repository.GroupRepository;
+import com.boboboom.jxc.identity.domain.repository.RoleMenuRelRepository;
+import com.boboboom.jxc.identity.domain.repository.RoleRepository;
+import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleMenuRelDO;
+import com.boboboom.jxc.identity.interfaces.rest.request.RoleUpsertRequest;
+
+/** 角色管理业务服务，负责角色资料、状态和权限入口维护。 */
 @Service
 public class RoleAdministrationService {
 
-    private static final String STATUS_ENABLED = "ENABLED";
-    private static final String STATUS_DISABLED = "DISABLED";
-    private static final String GROUP_ROLE_TEMPLATE_DESC = "GROUP_ROLE_TEMPLATE";
+    private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
+    private static final String PLATFORM_ROLE_TYPE = "PLATFORM";
     private static final String ROLE_CODE_PREFIX = "JSBM";
-    private static final Set<String> PROTECTED_ROLE_CODES = Set.of("GROUP_ADMIN", "STORE_ADMIN");
+    private static final Set<String> PROTECTED_ROLE_CODES = Set.of(PLATFORM_SUPER_ADMIN_ROLE_CODE);
     private static final Set<String> MANAGED_ROLE_TYPES = Set.of("GROUP", "STORE");
+    private static final String DATA_SCOPE_ALL = "ALL";
+    private static final String DATA_SCOPE_GROUP = "GROUP";
+    private static final String DATA_SCOPE_STORE = "STORE";
+    private static final String DATA_SCOPE_SELF = "SELF";
 
     private final RoleRepository roleRepository;
     private final GroupRepository groupRepository;
     private final RoleMenuRelRepository roleMenuRelRepository;
+    private final UserRoleRelRepository userRoleRelRepository;
     private final IdentityAccessControlService identityAccessControlService;
     private final RoleMenuAdministrationService roleMenuAdministrationService;
     private final BusinessCodeGenerator businessCodeGenerator;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
-    public RoleAdministrationService(RoleRepository roleRepository,
-                                     GroupRepository groupRepository,
-                                     RoleMenuRelRepository roleMenuRelRepository,
-                                     IdentityAccessControlService identityAccessControlService,
-                                     RoleMenuAdministrationService roleMenuAdministrationService,
-                                     BusinessCodeGenerator businessCodeGenerator,
-                                     OrgScopeService orgScopeService) {
-        this.roleRepository = roleRepository;
-        this.groupRepository = groupRepository;
-        this.roleMenuRelRepository = roleMenuRelRepository;
-        this.identityAccessControlService = identityAccessControlService;
-        this.roleMenuAdministrationService = roleMenuAdministrationService;
-        this.businessCodeGenerator = businessCodeGenerator;
-        this.orgScopeService = orgScopeService;
+    /** 角色管理业务服务，负责角色资料、状态和权限入口维护。 */
+    public RoleAdministrationService(RoleRepository roleRepositoryValue,
+                                     GroupRepository groupRepositoryValue,
+                                     RoleMenuRelRepository roleMenuRelRepositoryValue,
+                                     UserRoleRelRepository userRoleRelRepositoryValue,
+                                     IdentityAccessControlService identityAccessControlServiceValue,
+                                     RoleMenuAdministrationService roleMenuAdministrationServiceValue,
+                                     BusinessCodeGenerator businessCodeGeneratorValue,
+                                     OrgScopeService orgScopeServiceValue,
+                                     DictionaryLookupService dictionaryLookupServiceValue) {
+        this.roleRepository = roleRepositoryValue;
+        this.groupRepository = groupRepositoryValue;
+        this.roleMenuRelRepository = roleMenuRelRepositoryValue;
+        this.userRoleRelRepository = userRoleRelRepositoryValue;
+        this.identityAccessControlService = identityAccessControlServiceValue;
+        this.roleMenuAdministrationService = roleMenuAdministrationServiceValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 查询角色列表。 */
     public List<RoleAdminSnapshot> listRoles(Long operatorId, boolean platformAdmin, String orgId) {
-        Long tenantGroupId = resolveTenantGroupId(operatorId, platformAdmin, orgId);
         List<RoleDO> roles;
-        if (tenantGroupId == null) {
-            roles = sortRoles(roleRepository.findAll());
+        if (platformAdmin) {
+            roles = sortRoles(roleRepository.findByTenantGroupId(0L).stream()
+                    .filter(role -> !PLATFORM_SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode()))
+                    .toList());
         } else {
+            Long tenantGroupId = resolveManagedGroupId(operatorId, orgId);
             ensureGroupBuiltinRoles(tenantGroupId, operatorId);
             roles = sortRoles(roleRepository.findByTenantGroupId(tenantGroupId).stream()
                     .filter(role -> MANAGED_ROLE_TYPES.contains(role.getRoleType()))
@@ -97,9 +113,9 @@ public class RoleAdministrationService {
         List<RoleAdminSnapshot> result = new ArrayList<>(roles.size());
         for (RoleDO role : roles) {
             List<Long> menuIds = roleMenuIdMap.getOrDefault(role.getId(), Collections.emptyList());
-            String displayRoleCode = tenantGroupId == null
+            String displayRoleCode = platformAdmin
                     ? role.getRoleCode()
-                    : toTenantDisplayRoleCode(role.getRoleCode(), tenantGroupId);
+                    : toTenantDisplayRoleCode(role.getRoleCode(), role.getTenantGroupId());
             result.add(new RoleAdminSnapshot(
                     role.getId(),
                     displayRoleCode,
@@ -118,15 +134,19 @@ public class RoleAdministrationService {
         return result;
     }
 
+    /** 创建角色。 */
     @Transactional
     public RoleDO createRole(RoleUpsertRequest request, Long operatorId, boolean platformAdmin, String orgId) {
+        boolean builtin = normalizeBuiltin(request.getBuiltin());
         String roleType = trim(request.getRoleType());
-        if (!platformAdmin && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
-            throw new BusinessException("集团账号仅可创建集团/门店角色");
-        }
-        Long tenantGroupId = resolveTenantGroupId(operatorId, platformAdmin, orgId);
-        if (tenantGroupId == null) {
+        String dataScopeType = normalizeDataScopeType(roleType, request.getDataScopeType());
+        Long tenantGroupId;
+        if (platformAdmin) {
+            ensurePlatformRoleType(roleType, builtin, "创建");
             tenantGroupId = 0L;
+        } else {
+            ensureGroupRoleType(roleType, builtin, null, "创建");
+            tenantGroupId = resolveManagedGroupId(operatorId, orgId);
         }
 
         String roleCode = generateRoleCode(tenantGroupId);
@@ -139,8 +159,9 @@ public class RoleAdministrationService {
         role.setTenantGroupId(tenantGroupId);
         role.setRoleCode(roleCode);
         role.setRoleName(trim(request.getRoleName()));
+        role.setBuiltin(builtin);
         role.setRoleType(roleType);
-        role.setDataScopeType(trim(request.getDataScopeType()));
+        role.setDataScopeType(dataScopeType);
         role.setDescription(trimNullable(request.getDescription()));
         role.setStatus(normalizeStatus(request.getStatus()));
         role.setCreatedBy(operatorId);
@@ -149,6 +170,7 @@ public class RoleAdministrationService {
         return role;
     }
 
+    /** 更新角色。 */
     @Transactional
     public void updateRole(RoleDO role,
                            RoleUpsertRequest request,
@@ -161,19 +183,66 @@ public class RoleAdministrationService {
         identityAccessControlService.ensureCanManageRole(operatorId, role);
         ensureRoleMutable(role);
 
+        boolean builtin = normalizeBuiltin(request.getBuiltin());
         String roleType = trim(request.getRoleType());
-        if (!platformAdmin && !"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
-            throw new BusinessException("集团账号仅可设置集团/门店角色");
+        String dataScopeType = normalizeDataScopeType(roleType, request.getDataScopeType());
+        if (platformAdmin) {
+            ensurePlatformRoleType(roleType, builtin, "设置");
+        } else {
+            ensureGroupRoleType(roleType, builtin, role, "设置");
         }
         role.setRoleName(trim(request.getRoleName()));
+        role.setBuiltin(builtin);
         role.setRoleType(roleType);
-        role.setDataScopeType(trim(request.getDataScopeType()));
+        role.setDataScopeType(dataScopeType);
         role.setDescription(trimNullable(request.getDescription()));
         role.setStatus(normalizeStatus(request.getStatus()));
         roleRepository.update(role);
         roleMenuAdministrationService.saveRoleMenus(role, request.getMenuIds());
     }
 
+    private void ensurePlatformRoleType(String roleType, boolean builtin, String actionName) {
+        if (builtin && !isSupportedPlatformTemplateRoleType(roleType)) {
+            throw new BusinessException("平台模板角色仅支持平台/集团/门店类型");
+        }
+        if (!builtin && !PLATFORM_ROLE_TYPE.equals(roleType)) {
+            throw new BusinessException("平台真实角色仅可" + actionName + "平台角色");
+        }
+    }
+
+    private void ensureGroupRoleType(String roleType, boolean builtin, RoleDO currentRole, String actionName) {
+        if (currentRole == null && builtin) {
+            throw new BusinessException("集团仅可创建真实角色");
+        }
+        if (currentRole != null && builtin != isRoleBuiltin(currentRole)) {
+            throw new BusinessException("集团不可修改角色属性");
+        }
+        if (!"GROUP".equals(roleType) && !"STORE".equals(roleType)) {
+            throw new BusinessException("集团账号仅可" + actionName + "集团/门店角色");
+        }
+    }
+
+    private boolean isSupportedPlatformTemplateRoleType(String roleType) {
+        return PLATFORM_ROLE_TYPE.equals(roleType) || "GROUP".equals(roleType) || "STORE".equals(roleType);
+    }
+
+    /** 删除角色。 */
+    @Transactional
+    public void deleteRole(RoleDO role,
+                           Long operatorId,
+                           boolean platformAdmin,
+                           String orgId) {
+        if (role == null) {
+            throw new BusinessException("角色不存在");
+        }
+        identityAccessControlService.ensureCanManageRole(operatorId, role);
+        ensureRoleMutable(role);
+        roleMenuRelRepository.deleteByRoleId(role.getId());
+        userRoleRelRepository.deleteByRoleId(role.getId());
+        roleRepository.deleteById(role.getId());
+    }
+
+    /** 更新角色状态。 */
     @Transactional
     public void updateRoleStatus(RoleDO role, String nextStatus, Long operatorId) {
         if (role == null) {
@@ -181,18 +250,20 @@ public class RoleAdministrationService {
         }
         identityAccessControlService.ensureCanManageRole(operatorId, role);
         String normalizedStatus = normalizeStatus(nextStatus);
-        if (STATUS_DISABLED.equals(normalizedStatus)) {
+        if (disabledStatus().equals(normalizedStatus)) {
             ensureRoleMutable(role);
         }
         role.setStatus(normalizedStatus);
         roleRepository.update(role);
     }
 
+    /** 查询并校验角色存在。 */
     public RoleDO requireRole(Long id) {
         return roleRepository.findById(id)
                 .orElseThrow(() -> new BusinessException("角色不存在"));
     }
 
+    /** 判断RoleBuiltin。 */
     public boolean isRoleBuiltin(RoleDO role) {
         if (role == null) {
             return false;
@@ -200,16 +271,25 @@ public class RoleAdministrationService {
         if (PROTECTED_ROLE_CODES.contains(role.getRoleCode())) {
             return true;
         }
-        return GROUP_ROLE_TEMPLATE_DESC.equals(role.getDescription());
+        if (role.getBuiltin() != null) {
+            return Boolean.TRUE.equals(role.getBuiltin());
+        }
+        String roleCode = trimNullable(role.getRoleCode());
+        if (roleCode == null) {
+            return false;
+        }
+        return !roleCode.startsWith(ROLE_CODE_PREFIX);
     }
 
+    /** 判断RoleMutable。 */
     public boolean isRoleMutable(RoleDO role) {
         if (role == null) {
             return true;
         }
-        return !isRoleBuiltin(role);
+        return !PROTECTED_ROLE_CODES.contains(role.getRoleCode());
     }
 
+    /** 校验并保证角色Mutable满足业务规则。 */
     public void ensureRoleMutable(RoleDO role) {
         if (!isRoleMutable(role)) {
             throw new BusinessException("内置角色不允许修改或删除");
@@ -220,34 +300,37 @@ public class RoleAdministrationService {
         if (groupId == null || groupId <= 0) {
             return;
         }
-        List<RoleDO> templateRoles = roleRepository.findBuiltinTemplateRoles();
+        String enabledStatus = enabledStatus();
+        List<RoleDO> templateRoles = roleRepository.findBuiltinTemplateRoles(enabledStatus);
         for (RoleDO template : templateRoles) {
             RoleDO existing = roleRepository.findByTenantGroupIdAndRoleCode(groupId, template.getRoleCode()).orElse(null);
             if (existing != null) {
-                if (!STATUS_ENABLED.equals(existing.getStatus())) {
-                    existing.setStatus(STATUS_ENABLED);
-                    roleRepository.update(existing);
+                existing.setBuiltin(Boolean.TRUE);
+                if (!enabledStatus.equals(existing.getStatus())) {
+                    existing.setStatus(enabledStatus);
                 }
+                roleRepository.update(existing);
                 continue;
             }
             RoleDO role = new RoleDO();
             role.setTenantGroupId(groupId);
             role.setRoleCode(template.getRoleCode());
             role.setRoleName(template.getRoleName());
+            role.setBuiltin(Boolean.TRUE);
             role.setRoleType(template.getRoleType());
             role.setDataScopeType(template.getDataScopeType());
             role.setDescription(template.getDescription());
-            role.setStatus(STATUS_ENABLED);
+            role.setStatus(enabledStatus);
             role.setCreatedBy(operatorId);
             roleRepository.save(role);
         }
     }
 
-    private Long resolveTenantGroupId(Long operatorId, boolean platformAdmin, String orgId) {
-        if (platformAdmin && !StringUtils.hasText(orgId)) {
-            return null;
-        }
+    private Long resolveManagedGroupId(Long operatorId, String orgId) {
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScopeAllowAnonymous(operatorId, orgId);
+        if (!OrgScopeService.SCOPE_GROUP.equals(scope.scopeType())) {
+            throw new BusinessException("请先选择集团机构");
+        }
         return scope.groupId();
     }
 
@@ -265,12 +348,41 @@ public class RoleAdministrationService {
     private String normalizeStatus(String rawStatus) {
         String status = trimNullable(rawStatus);
         if (status == null) {
-            return STATUS_ENABLED;
+            return enabledStatus();
         }
-        if (!STATUS_ENABLED.equals(status) && !STATUS_DISABLED.equals(status)) {
-            throw new BusinessException("状态仅支持 ENABLED 或 DISABLED");
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.COMMON_ENABLED_STATUS, status);
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
+    }
+
+    private String disabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.DISABLED);
+    }
+
+    private boolean normalizeBuiltin(Boolean builtin) {
+        return Boolean.TRUE.equals(builtin);
+    }
+
+    private String normalizeDataScopeType(String roleType, String rawDataScopeType) {
+        String dataScopeType = trim(rawDataScopeType);
+        if (PLATFORM_ROLE_TYPE.equals(roleType)) {
+            if (!DATA_SCOPE_ALL.equals(dataScopeType)) {
+                throw new BusinessException("平台角色数据范围仅支持全部数据");
+            }
+            return DATA_SCOPE_ALL;
         }
-        return status;
+        if (DATA_SCOPE_SELF.equals(dataScopeType)) {
+            return DATA_SCOPE_SELF;
+        }
+        if ("GROUP".equals(roleType) && DATA_SCOPE_GROUP.equals(dataScopeType)) {
+            return DATA_SCOPE_GROUP;
+        }
+        if ("STORE".equals(roleType) && DATA_SCOPE_STORE.equals(dataScopeType)) {
+            return DATA_SCOPE_STORE;
+        }
+        throw new BusinessException("角色类型与数据范围不匹配");
     }
 
     private String trim(String value) {
@@ -318,6 +430,7 @@ public class RoleAdministrationService {
         return businessCodeGenerator.nextCode(ROLE_CODE_PREFIX, existingCodes);
     }
 
+    /** 身份与权限快照模型，承载角色管理快照查询结果。 */
     public record RoleAdminSnapshot(Long id,
                                     String roleCode,
                                     Long tenantGroupId,

@@ -1,15 +1,18 @@
 package com.boboboom.jxc.identity.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.common.BusinessCodeGenerator;
-import com.boboboom.jxc.identity.domain.repository.UnitRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.List;
+import com.boboboom.jxc.common.BusinessCodeGenerator;
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.domain.repository.UnitRepository;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
 
+/** 身份与权限服务，负责相关业务规则和流程协作。 */
 @Service
 public class UnitAdministrationService {
 
@@ -17,13 +20,18 @@ public class UnitAdministrationService {
 
     private final UnitRepository unitRepository;
     private final BusinessCodeGenerator businessCodeGenerator;
+    private final DictionaryLookupService dictionaryLookupService;
 
-    public UnitAdministrationService(UnitRepository unitRepository,
-                                     BusinessCodeGenerator businessCodeGenerator) {
-        this.unitRepository = unitRepository;
-        this.businessCodeGenerator = businessCodeGenerator;
+    /** 身份与权限服务，负责相关业务规则和流程协作。 */
+    public UnitAdministrationService(UnitRepository unitRepositoryValue,
+                                     BusinessCodeGenerator businessCodeGeneratorValue,
+                                     DictionaryLookupService dictionaryLookupServiceValue) {
+        this.unitRepository = unitRepositoryValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 查询单位列表。 */
     public List<UnitDO> listUnits(String scopeType,
                                   Long scopeId,
                                   String keyword,
@@ -42,6 +50,7 @@ public class UnitAdministrationService {
                 .toList();
     }
 
+    /** 创建单位。 */
     @Transactional
     public UnitDO createUnit(String scopeType,
                              Long scopeId,
@@ -68,6 +77,7 @@ public class UnitAdministrationService {
         return entity;
     }
 
+    /** 更新单位。 */
     @Transactional
     public UnitDO updateUnit(Long id,
                              String scopeType,
@@ -89,6 +99,7 @@ public class UnitAdministrationService {
         return entity;
     }
 
+    /** 更新单位状态。 */
     @Transactional
     public UnitDO updateUnitStatus(Long id, String scopeType, Long scopeId, String status) {
         UnitDO entity = requireUnit(id, scopeType, scopeId);
@@ -97,12 +108,14 @@ public class UnitAdministrationService {
         return entity;
     }
 
+    /** 删除单位。 */
     @Transactional
     public void deleteUnit(Long id, String scopeType, Long scopeId) {
         requireUnit(id, scopeType, scopeId);
         unitRepository.deleteByIdAndScope(id, scopeType, scopeId);
     }
 
+    /** 查询并校验单位存在。 */
     public UnitDO requireUnit(Long id, String scopeType, Long scopeId) {
         return unitRepository.findByIdAndScope(id, scopeType, scopeId)
                 .orElseThrow(() -> new BusinessException("单位不存在"));
@@ -137,15 +150,9 @@ public class UnitAdministrationService {
     private String normalizeStatus(String value) {
         String status = trimNullable(value);
         if (status == null || status.isEmpty()) {
-            return "ENABLED";
+            return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
         }
-        if ("ENABLED".equalsIgnoreCase(status)) {
-            return "ENABLED";
-        }
-        if ("DISABLED".equalsIgnoreCase(status)) {
-            return "DISABLED";
-        }
-        throw new BusinessException("状态参数非法");
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.COMMON_ENABLED_STATUS, status);
     }
 
     private String normalizeUnitTypeNullable(String value) {
@@ -159,15 +166,9 @@ public class UnitAdministrationService {
     private String normalizeUnitType(String value) {
         String unitType = trimNullable(value);
         if (unitType == null || unitType.isEmpty()) {
-            return "STANDARD";
+            return dictionaryLookupService.codeOf(DictionaryCodes.UNIT_TYPE, DictionaryCodes.STANDARD);
         }
-        if ("STANDARD".equalsIgnoreCase(unitType)) {
-            return "STANDARD";
-        }
-        if ("AUXILIARY".equalsIgnoreCase(unitType)) {
-            return "AUXILIARY";
-        }
-        throw new BusinessException("单位类型参数非法");
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.UNIT_TYPE, unitType);
     }
 
     private String trimNullable(String value) {

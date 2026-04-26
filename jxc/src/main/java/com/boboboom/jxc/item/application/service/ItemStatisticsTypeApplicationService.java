@@ -1,5 +1,16 @@
 package com.boboboom.jxc.item.application.service;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
@@ -8,19 +19,12 @@ import com.boboboom.jxc.item.domain.repository.ItemStatisticsTypeRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemStatisticsTypeDO;
 import com.boboboom.jxc.item.interfaces.rest.request.StatisticsTypeBatchExportRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.StatisticsTypeCreateRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-
+/** 物品统计类型业务服务，负责统计类型查询、创建和导出。 */
 @Service
 public class ItemStatisticsTypeApplicationService {
+
+    private static final long MAX_PAGE_SIZE = 200L;
 
     private static final String CREATE_TYPE_SYSTEM_BUILTIN = "SYSTEM_BUILTIN";
     private static final String CREATE_TYPE_CUSTOM = "CUSTOM";
@@ -30,14 +34,16 @@ public class ItemStatisticsTypeApplicationService {
     private final OrgScopeService orgScopeService;
     private final BusinessCodeGenerator businessCodeGenerator;
 
-    public ItemStatisticsTypeApplicationService(ItemStatisticsTypeRepository itemStatisticsTypeRepository,
-                                                 OrgScopeService orgScopeService,
-                                                 BusinessCodeGenerator businessCodeGenerator) {
-        this.itemStatisticsTypeRepository = itemStatisticsTypeRepository;
-        this.orgScopeService = orgScopeService;
-        this.businessCodeGenerator = businessCodeGenerator;
+    /** 物品统计类型业务服务，负责统计类型查询、创建和导出。 */
+    public ItemStatisticsTypeApplicationService(ItemStatisticsTypeRepository itemStatisticsTypeRepositoryValue,
+                                                 OrgScopeService orgScopeServiceValue,
+                                                 BusinessCodeGenerator businessCodeGeneratorValue) {
+        this.itemStatisticsTypeRepository = itemStatisticsTypeRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
     }
 
+    /** 分页查询业务列表。 */
     public PageResult<StatisticsTypeListItem> list(
             long pageNo,
             long pageSize,
@@ -45,7 +51,7 @@ public class ItemStatisticsTypeApplicationService {
             String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         long normalizedPageNo = Math.max(pageNo, 1L);
-        long normalizedPageSize = Math.max(1L, Math.min(pageSize, 200L));
+        long normalizedPageSize = Math.max(1L, Math.min(pageSize, MAX_PAGE_SIZE));
         String normalizedKeyword = trimNullable(keyword);
 
         List<ItemStatisticsTypeDO> filtered = itemStatisticsTypeRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
@@ -72,6 +78,7 @@ public class ItemStatisticsTypeApplicationService {
         );
     }
 
+    /** 查询业务详情。 */
     public StatisticsTypeDetailItem detail(Long id,
                                            String orgId) {
         ItemScope scope = resolveItemScope(orgId);
@@ -88,6 +95,7 @@ public class ItemStatisticsTypeApplicationService {
         );
     }
 
+    /** 创建业务记录。 */
     @Transactional
     public CreateResult create(String orgId,
                                StatisticsTypeCreateRequest request) {
@@ -114,6 +122,7 @@ public class ItemStatisticsTypeApplicationService {
         return new CreateResult(row.getId(), row.getCode());
     }
 
+    /** 批量导出业务数据。 */
     public BatchExportResult batchExport(String orgId,
                                          StatisticsTypeBatchExportRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -217,7 +226,7 @@ public class ItemStatisticsTypeApplicationService {
     }
 
     private ItemScope resolveItemScope(String orgId) {
-        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolvePlatformOrStoreScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
         return new ItemScope(scope.scopeType(), scope.scopeId());
     }
 
@@ -225,9 +234,11 @@ public class ItemStatisticsTypeApplicationService {
         return value != null && value.contains(keyword);
     }
 
+    /** 物品与供应商结果模型，承载业务处理结果。 */
     public record PageResult<T>(List<T> list, long total, long pageNo, long pageSize) {
     }
 
+    /** 物品与供应商明细项模型，承载子表或批量操作明细。 */
     public record StatisticsTypeListItem(Long id,
                                          long index,
                                          String code,
@@ -237,6 +248,7 @@ public class ItemStatisticsTypeApplicationService {
                                          String modifiedTime) {
     }
 
+    /** 物品与供应商明细项模型，承载子表或批量操作明细。 */
     public record StatisticsTypeDetailItem(Long id,
                                            String code,
                                            String name,
@@ -247,9 +259,11 @@ public class ItemStatisticsTypeApplicationService {
                                            LocalDateTime updatedAt) {
     }
 
+    /** 物品与供应商结果模型，承载业务处理结果。 */
     public record CreateResult(Long id, String code) {
     }
 
+    /** 物品与供应商明细项模型，承载子表或批量操作明细。 */
     public record StatisticsTypeExportItem(Long id,
                                            String code,
                                            String name,
@@ -258,6 +272,7 @@ public class ItemStatisticsTypeApplicationService {
                                            String modifiedTime) {
     }
 
+    /** 物品与供应商结果模型，承载业务处理结果。 */
     public record BatchExportResult(String fileName, List<StatisticsTypeExportItem> rows) {
     }
 

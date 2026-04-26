@@ -1,11 +1,12 @@
 package com.boboboom.jxc.identity.domain.repository;
 
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
+
+/** 身份与权限仓储接口，定义领域需要的数据访问能力。 */
 public interface UserRoleRelRepository {
 
     List<UserRoleRelDO> findByUserIdAndStatus(Long userId, String status);
@@ -33,6 +34,8 @@ public interface UserRoleRelRepository {
     void update(UserRoleRelDO rel);
 
     void deleteByUserId(Long userId);
+
+    void deleteByRoleId(Long roleId);
 
     void deleteByScopeTypeAndScopeId(String scopeType, Long scopeId);
 

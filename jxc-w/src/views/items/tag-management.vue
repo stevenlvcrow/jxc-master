@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import {
   batchImportItemTagsApi,
@@ -10,7 +10,7 @@ import {
   type ItemTagRow,
 } from '@/api/modules/item';
 import { useSessionStore } from '@/stores/session';
-import { requireItemOrgId } from './org';
+import { requireItemOrgId, resolveArchiveOrgId } from './org';
 
 type TagDialogForm = {
   tagCode: string;
@@ -29,7 +29,8 @@ const pageSize = ref(10);
 const total = ref(0);
 const tableHeight = 360;
 const tableLoading = ref(false);
-const emptyText = '当前机构暂无数据';
+const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
+const emptyText = computed(() => (archiveOrgId.value ? '当前机构暂无数据' : '请先选择门店机构'));
 const tableData = ref<ItemTagRow[]>([]);
 const toolbarButtons = ['新增标签', '批量导入'];
 const query = reactive({
@@ -58,19 +59,25 @@ const formRules: FormRules<TagDialogForm> = {
 };
 
 const resolveItemOrgId = () => {
-  return requireItemOrgId(sessionStore.currentOrgId);
+  return requireItemOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
 };
 
 const fetchList = async () => {
   tableLoading.value = true;
   try {
+    const orgId = archiveOrgId.value;
+    if (!orgId) {
+      tableData.value = [];
+      total.value = 0;
+      return;
+    }
     const data = await fetchItemTagsApi({
       pageNo: currentPage.value,
       pageSize: pageSize.value,
       tagCode: query.tagCode.trim() || undefined,
       tagName: query.tagName.trim() || undefined,
       itemName: query.itemName.trim() || undefined,
-    }, resolveItemOrgId());
+    }, orgId);
     tableData.value = data.list ?? [];
     total.value = data.total ?? 0;
   } finally {
@@ -110,12 +117,20 @@ const resetForm = () => {
 };
 
 const openCreateDialog = () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   resetForm();
   dialogTitle.value = '新增标签';
   createDialogVisible.value = true;
 };
 
 const openEditDialog = (row: ItemTagRow) => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   editingTagId.value = row.id;
   form.tagCode = row.tagCode;
   form.tagName = row.tagName;
@@ -156,6 +171,10 @@ const handleSubmit = async () => {
 };
 
 const handleDelete = async (row: ItemTagRow) => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   try {
     await ElMessageBox.confirm(`确认删除标签“${row.tagName}”吗？`, '删除确认', {
       type: 'warning',
@@ -175,6 +194,10 @@ const resetBatchRows = () => {
 };
 
 const openBatchDialog = () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   resetBatchRows();
   batchImportDialogVisible.value = true;
 };
@@ -196,6 +219,10 @@ const removeBatchRow = (index: number) => {
 };
 
 const handleBatchImportSubmit = async () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   const rows = batchRows.value.map((row) => ({
     tagName: row.tagName.trim(),
     itemName: row.itemName.trim(),
@@ -234,6 +261,14 @@ const handleToolbarAction = (action: string) => {
 onMounted(async () => {
   await fetchList();
 });
+
+watch(
+  () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
+  async () => {
+    currentPage.value = 1;
+    await fetchList();
+  },
+);
 </script>
 
 <template>

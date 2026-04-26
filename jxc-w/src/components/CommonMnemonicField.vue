@@ -23,12 +23,22 @@ const emit = defineEmits<{
   (event: 'update:modelValue', value: string): void;
 }>();
 
+let mnemonicRequestId = 0;
+
+const fillMnemonicCode = async (value: string) => {
+  const requestId = ++mnemonicRequestId;
+  const code = await buildMnemonicCode(value);
+  if (requestId === mnemonicRequestId) {
+    emit('update:modelValue', code);
+  }
+};
+
 const sourceModel = computed({
   get: () => props.sourceValue ?? '',
   set: (value: string) => {
     emit('update:sourceValue', value);
     if (props.autoFill) {
-      emit('update:modelValue', buildMnemonicCode(value));
+      void fillMnemonicCode(value);
     }
   },
 });

@@ -1,41 +1,76 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ArrowDown, Delete, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ArrowDown, Delete, Download, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { useRouter } from 'vue-router';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
+import {
+  batchApproveInventoryCheckApi,
+  batchDeleteInventoryCheckApi,
+  batchPrintInventoryCheckApi,
+  batchSubmitInventoryCheckApi,
+  batchUnapproveInventoryCheckApi,
+  fetchInventoryCheckPageApi,
+  fetchInventoryCheckPermissionApi,
+  generateMultiInventoryCheckApi,
+  type InventoryCheckRow,
+} from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 
 type TimeType = '盘点日期' | '创建时间';
-type DocumentStatus = '草稿' | '已提交' | '已审核';
-type GeneratedStatus = '全部' | '已生成' | '未生成';
-type PrintStatus = '全部' | '未打印' | '已打印';
-type TreeNode = {
-  value: string;
-  label: string;
-  children?: TreeNode[];
-};
-type MultiInventoryCheckRow = {
-  id: number;
-  documentCode: string;
-  checkDate: string;
-  warehouse: string;
-  itemCount: number;
-  status: DocumentStatus;
-  auditDate: string;
-  generatedStatus: Exclude<GeneratedStatus, '全部'>;
-  printStatus: Exclude<PrintStatus, '全部'>;
-  createdAt: string;
-  creator: string;
-};
+type PrintFilter = '' | 'UNPRINTED' | 'PRINTED';
 
-const timeTypeOptions: TimeType[] = ['盘点日期', '创建时间'];
-const documentStatusOptions: DocumentStatus[] = ['草稿', '已提交', '已审核'];
-const generatedStatusOptions: GeneratedStatus[] = ['全部', '已生成', '未生成'];
-const printStatusOptions: PrintStatus[] = ['全部', '未打印', '已打印'];
-const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
 const sessionStore = useSessionStore();
+const router = useRouter();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
+const { orgId, requireOrgId } = useRequiredOrgScope();
+const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
+const INVENTORY_CHECK_RANGE_TYPE_DICT = 'inventory.check_range_type';
+const STOCKTAKE_FREQUENCY_DICT = 'inventory.stocktake_frequency';
+const INVENTORY_CHECK_GENERATION_STATUS_DICT = 'inventory.check_generation_status';
+const DOCUMENT_PRINT_STATUS_DICT = 'document.print_status';
+const { optionsOf } = useDictionaryOptions([
+  INVENTORY_DOCUMENT_STATUS_DICT,
+  INVENTORY_CHECK_RANGE_TYPE_DICT,
+  STOCKTAKE_FREQUENCY_DICT,
+  INVENTORY_CHECK_GENERATION_STATUS_DICT,
+  DOCUMENT_PRINT_STATUS_DICT,
+]);
+const documentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const checkRangeTypeOptions = optionsOf(INVENTORY_CHECK_RANGE_TYPE_DICT);
+const stocktakeFrequencyOptions = optionsOf(STOCKTAKE_FREQUENCY_DICT);
+const generatedStatusOptions = optionsOf(INVENTORY_CHECK_GENERATION_STATUS_DICT);
+const printStatusOptions = computed(() => [
+  { label: '全部', value: '' },
+  ...optionsOf(DOCUMENT_PRINT_STATUS_DICT).value.map((item) => ({ label: item.itemLabel, value: item.itemCode })),
+]);
+const statusLabelMap = computed(() =>
+  documentStatusOptions.value.reduce<Record<string, string>>((result, item) => {
+    result[item.itemCode] = item.itemLabel;
+    return result;
+  }, {}),
+);
+const generatedStatusLabelMap = computed(() =>
+  generatedStatusOptions.value.reduce<Record<string, string>>((result, item) => {
+    result[item.itemCode] = item.itemLabel;
+    return result;
+  }, {}),
+);
+const stocktakeFrequencyLabelMap = computed(() =>
+  stocktakeFrequencyOptions.value.reduce<Record<string, string>>((result, item) => {
+    result[item.itemCode] = item.itemLabel;
+    return result;
+  }, {}),
+);
+const printStatusLabelMap = computed(() =>
+  optionsOf(DOCUMENT_PRINT_STATUS_DICT).value.reduce<Record<string, string>>((result, item) => {
+    result[item.itemCode] = item.itemLabel;
+    return result;
+  }, {}),
+);
 
 const query = reactive({
   timeType: '盘点日期' as TimeType,
@@ -43,147 +78,300 @@ const query = reactive({
   endDate: '',
   documentCode: '',
   warehouse: '',
+  checkRangeType: '',
+  stocktakeFrequency: '',
   itemName: '',
-  documentStatus: '',
-  generatedStatus: '全部' as GeneratedStatus,
-  printStatus: '全部' as PrintStatus,
+  status: '',
+  generatedStatus: '',
+  printStatus: '' as PrintFilter,
   remark: '',
 });
 
-const tableData: MultiInventoryCheckRow[] = [
-  {
-    id: 1,
-    documentCode: 'MPD-202604-001',
-    checkDate: '2026-04-13',
-    warehouse: '中央成品仓',
-    itemCount: 96,
-    status: '已审核',
-    auditDate: '2026-04-13',
-    generatedStatus: '已生成',
-    printStatus: '已打印',
-    createdAt: '2026-04-13 10:28:00',
-    creator: '张敏',
-  },
-  {
-    id: 2,
-    documentCode: 'MPD-202604-002',
-    checkDate: '2026-04-12',
-    warehouse: '北区原料仓',
-    itemCount: 54,
-    status: '已提交',
-    auditDate: '-',
-    generatedStatus: '未生成',
-    printStatus: '未打印',
-    createdAt: '2026-04-12 16:24:00',
-    creator: '李娜',
-  },
-  {
-    id: 3,
-    documentCode: 'MPD-202604-003',
-    checkDate: '2026-04-11',
-    warehouse: '南区包材仓',
-    itemCount: 32,
-    status: '草稿',
-    auditDate: '-',
-    generatedStatus: '未生成',
-    printStatus: '未打印',
-    createdAt: '2026-04-11 09:58:00',
-    creator: '王磊',
-  },
-];
-
-onMounted(() => {
-  void loadWarehouseTree();
-});
-
-watch(
-  () => sessionStore.currentOrgId,
-  () => {
-    void loadWarehouseTree();
-  },
-);
-
+const loading = ref(false);
+const exportLoading = ref(false);
+const rows = ref<InventoryCheckRow[]>([]);
+const total = ref(0);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const selectedIds = ref<number[]>([]);
-
-const filteredRows = computed(() => {
-  const codeKeyword = query.documentCode.trim().toLowerCase();
-  const remarkKeyword = query.remark.trim().toLowerCase();
-  return tableData.filter((row) => {
-    const dateField = query.timeType === '盘点日期' ? row.checkDate : row.createdAt.slice(0, 10);
-    const matchedStartDate = !query.startDate || dateField >= query.startDate;
-    const matchedEndDate = !query.endDate || dateField <= query.endDate;
-    const matchedCode = !codeKeyword || row.documentCode.toLowerCase().includes(codeKeyword);
-    const matchedWarehouse = !query.warehouse || row.warehouse === query.warehouse;
-    const matchedItem = !query.itemName || row.documentCode.includes(query.itemName);
-    const matchedStatus = !query.documentStatus || row.status === query.documentStatus;
-    const matchedGeneratedStatus = query.generatedStatus === '全部' || row.generatedStatus === query.generatedStatus;
-    const matchedPrintStatus = query.printStatus === '全部' || row.printStatus === query.printStatus;
-    const matchedRemark = !remarkKeyword || row.documentCode.toLowerCase().includes(remarkKeyword);
-    return matchedStartDate
-      && matchedEndDate
-      && matchedCode
-      && matchedWarehouse
-      && matchedItem
-      && matchedStatus
-      && matchedGeneratedStatus
-      && matchedPrintStatus
-      && matchedRemark;
-  });
+const permissions = reactive({
+  canCreate: false,
+  canUpdate: false,
+  canDelete: false,
+  canApprove: false,
+  canUnapprove: false,
 });
 
-const pagedRows = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  return filteredRows.value.slice(start, start + pageSize.value);
-});
-
-const handleSearch = () => {
-  currentPage.value = 1;
+const loadPermissions = async () => {
+  if (!orgId.value) {
+    permissions.canCreate = false;
+    permissions.canUpdate = false;
+    permissions.canDelete = false;
+    permissions.canApprove = false;
+    permissions.canUnapprove = false;
+    return;
+  }
+  const result = await fetchInventoryCheckPermissionApi('multi-inventory-checks', orgId.value);
+  permissions.canCreate = Boolean(result.canCreate);
+  permissions.canUpdate = Boolean(result.canUpdate);
+  permissions.canDelete = Boolean(result.canDelete);
+  permissions.canApprove = Boolean(result.canApprove);
+  permissions.canUnapprove = Boolean(result.canUnapprove);
 };
 
-const handleReset = () => {
+const loadRows = async () => {
+  if (!orgId.value) {
+    rows.value = [];
+    total.value = 0;
+    selectedIds.value = [];
+    return;
+  }
+  loading.value = true;
+  try {
+    const result = await fetchInventoryCheckPageApi('multi-inventory-checks', {
+      pageNum: currentPage.value,
+      pageSize: pageSize.value,
+      timeType: query.timeType,
+      startDate: query.startDate || undefined,
+      endDate: query.endDate || undefined,
+      documentCode: query.documentCode || undefined,
+      warehouse: query.warehouse || undefined,
+      itemName: query.itemName || undefined,
+      status: query.status || undefined,
+      checkRangeType: query.checkRangeType || undefined,
+      stocktakeFrequency: query.stocktakeFrequency || undefined,
+      printStatus: query.printStatus || undefined,
+      generatedStatus: query.generatedStatus || undefined,
+      remark: query.remark || undefined,
+    }, orgId.value);
+    rows.value = result.list;
+    total.value = Number(result.total ?? 0);
+    selectedIds.value = [];
+  } catch {
+    rows.value = [];
+    total.value = 0;
+    selectedIds.value = [];
+    ElMessage.error('多人盘点单列表加载失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const fetchAllPages = async <T>(loader: (pageNum: number, pageSizeValue: number) => Promise<{ list: T[]; total: number; pageSize: number }>) => {
+  const collected: T[] = [];
+  let pageNum = 1;
+  let totalCount: number;
+  do {
+    const page = await loader(pageNum, 200);
+    const list = Array.isArray(page.list) ? page.list : [];
+    collected.push(...list);
+    totalCount = Number(page.total ?? collected.length);
+    if (!list.length || Number(page.pageSize ?? 0) <= 0) {
+      break;
+    }
+    pageNum += 1;
+  } while (collected.length < totalCount);
+  return collected;
+};
+
+const toCsvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+const handleExport = async () => {
+  const currentOrgId = requireOrgId();
+  if (!currentOrgId) {
+    return;
+  }
+  exportLoading.value = true;
+  try {
+    const exportRows = await fetchAllPages<InventoryCheckRow>(async (pageNum, pageSizeValue) => {
+      const page = await fetchInventoryCheckPageApi('multi-inventory-checks', {
+        pageNum,
+        pageSize: pageSizeValue,
+        timeType: query.timeType,
+        startDate: query.startDate || undefined,
+        endDate: query.endDate || undefined,
+        documentCode: query.documentCode || undefined,
+        warehouse: query.warehouse || undefined,
+        itemName: query.itemName || undefined,
+        status: query.status || undefined,
+        checkRangeType: query.checkRangeType || undefined,
+        stocktakeFrequency: query.stocktakeFrequency || undefined,
+        printStatus: query.printStatus || undefined,
+        generatedStatus: query.generatedStatus || undefined,
+        remark: query.remark || undefined,
+      }, currentOrgId);
+      return {
+        list: page.list,
+        total: Number(page.total ?? 0),
+        pageSize: Number(page.pageSize ?? pageSizeValue),
+      };
+    });
+    const lines = [
+      ['单据编号', '盘点日期', '仓库', '物品数', '盘点频次', '状态', '审核日期', '生成状态', '打印状态', '创建时间', '创建人', '备注']
+        .map(toCsvCell)
+        .join(','),
+    ];
+    exportRows.forEach((row) => {
+      lines.push([
+        row.documentCode,
+        row.checkDate,
+        row.warehouseName,
+        row.itemCount,
+        stocktakeFrequencyLabelMap.value[row.stocktakeFrequency] ?? row.stocktakeFrequency,
+        statusLabelMap.value[row.status] ?? row.status,
+        row.auditDate,
+        generatedStatusLabelMap.value[row.generatedStatus] ?? row.generatedStatus,
+        printStatusLabelMap.value[row.printStatus] ?? row.printStatus,
+        row.createdAt,
+        row.creator,
+        row.remark,
+      ].map(toCsvCell).join(','));
+    });
+    const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = '多人盘点单列表.csv';
+    document.body.appendChild(link);
+    link.click();
+    URL.revokeObjectURL(link.href);
+    document.body.removeChild(link);
+    ElMessage.success('导出成功');
+  } finally {
+    exportLoading.value = false;
+  }
+};
+
+const refreshAll = async () => {
+  await Promise.all([loadPermissions(), loadRows(), loadWarehouseTree()]);
+};
+
+const handleSearch = async () => {
+  currentPage.value = 1;
+  await loadRows();
+};
+
+const handleReset = async () => {
   query.timeType = '盘点日期';
   query.startDate = '';
   query.endDate = '';
   query.documentCode = '';
   query.warehouse = '';
+  query.checkRangeType = '';
+  query.stocktakeFrequency = '';
   query.itemName = '';
-  query.documentStatus = '';
-  query.generatedStatus = '全部';
-  query.printStatus = '全部';
+  query.status = '';
+  query.generatedStatus = '';
+  query.printStatus = '';
   query.remark = '';
   currentPage.value = 1;
+  await loadRows();
 };
 
-const handleToolbarAction = (action: string) => {
-  ElMessage.info(`${action}功能待接入`);
+const handleToolbarAction = async (action: '新增' | '生成盘点单' | '批量打印' | '批量删除' | '批量提交' | '批量审核' | '批量反审核') => {
+  if (action === '新增') {
+    router.push({ name: 'InventoryCheckCreate' });
+    return;
+  }
+  if (action === '生成盘点单') {
+    if (!selectedIds.value.length) {
+      ElMessage.warning('请先选择单据');
+      return;
+    }
+    await generateMultiInventoryCheckApi(selectedIds.value, orgId.value);
+    ElMessage.success('生成成功');
+    await loadRows();
+    return;
+  }
+  if (!selectedIds.value.length) {
+    ElMessage.warning('请先选择单据');
+    return;
+  }
+  if (action === '批量删除') {
+    try {
+      await ElMessageBox.confirm(`确认删除选中的 ${selectedIds.value.length} 条多人盘点单吗？`, '删除确认', {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      });
+    } catch {
+      return;
+    }
+    await batchDeleteInventoryCheckApi('multi-inventory-checks', selectedIds.value, orgId.value);
+    ElMessage.success('删除成功');
+    await loadRows();
+    return;
+  }
+  if (action === '批量提交') {
+    await batchSubmitInventoryCheckApi('multi-inventory-checks', selectedIds.value, orgId.value);
+    ElMessage.success('提交成功');
+    await loadRows();
+    return;
+  }
+  if (action === '批量审核') {
+    await batchApproveInventoryCheckApi('multi-inventory-checks', selectedIds.value, orgId.value);
+    ElMessage.success('审核成功');
+    await loadRows();
+    return;
+  }
+  if (action === '批量反审核') {
+    try {
+      const { value } = await ElMessageBox.prompt('请输入拒审原因', '反审核确认', {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        inputType: 'textarea',
+        inputPlaceholder: '请输入拒审原因',
+        inputValidator: (input: string) => (input.trim() ? true : '请填写拒审原因'),
+      });
+      await batchUnapproveInventoryCheckApi('multi-inventory-checks', selectedIds.value, value.trim(), orgId.value);
+      ElMessage.success('反审核成功');
+      await loadRows();
+    } catch {
+      // 用户取消
+    }
+    return;
+  }
+  await batchPrintInventoryCheckApi('multi-inventory-checks', selectedIds.value, orgId.value);
+  ElMessage.success('打印状态已更新');
+  await loadRows();
 };
 
-const handleTableSettingCommand = (command: string | number | object) => {
-  ElMessage.info(`表格设置：${String(command)}`);
+const handleSelectionChange = (selection: InventoryCheckRow[]) => {
+  selectedIds.value = selection.map((item) => item.id);
 };
 
-const handleSelectionChange = (rows: MultiInventoryCheckRow[]) => {
-  selectedIds.value = rows.map((row) => row.id);
+const handleDelete = async (row: InventoryCheckRow) => {
+  try {
+    await ElMessageBox.confirm(`确认删除多人盘点单 ${row.documentCode} 吗？`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    });
+  } catch {
+    return;
+  }
+  await batchDeleteInventoryCheckApi('multi-inventory-checks', [row.id], orgId.value);
+  ElMessage.success('删除成功');
+  await loadRows();
 };
 
-const handleView = (row: MultiInventoryCheckRow) => {
-  ElMessage.info(`查看：${row.documentCode}`);
+const handleGenerateRow = async (row: InventoryCheckRow) => {
+  await generateMultiInventoryCheckApi([row.id], orgId.value);
+  ElMessage.success('生成成功');
+  await loadRows();
 };
 
-const handleEdit = (row: MultiInventoryCheckRow) => {
-  ElMessage.info(`编辑：${row.documentCode}`);
-};
+watch(
+  () => sessionStore.currentOrgId,
+  () => {
+    currentPage.value = 1;
+    selectedIds.value = [];
+    void refreshAll();
+  },
+);
 
-const handlePageChange = (page: number) => {
-  currentPage.value = page;
-};
-
-const handlePageSizeChange = (size: number) => {
-  pageSize.value = size;
-  currentPage.value = 1;
-};
+onMounted(() => {
+  void refreshAll();
+});
 </script>
 
 <template>
@@ -191,26 +379,15 @@ const handlePageSizeChange = (size: number) => {
     <CommonQuerySection :model="query">
       <el-form-item label="时间类型">
         <el-select v-model="query.timeType" style="width: 120px">
-          <el-option v-for="option in timeTypeOptions" :key="option" :label="option" :value="option" />
+          <el-option label="盘点日期" value="盘点日期" />
+          <el-option label="创建时间" value="创建时间" />
         </el-select>
       </el-form-item>
       <el-form-item label="开始日期">
-        <el-date-picker
-          v-model="query.startDate"
-          type="date"
-          value-format="YYYY-MM-DD"
-          placeholder="请选择开始日期"
-          style="width: 160px"
-        />
+        <el-date-picker v-model="query.startDate" type="date" value-format="YYYY-MM-DD" placeholder="请选择开始日期" style="width: 160px" />
       </el-form-item>
       <el-form-item label="结束日期">
-        <el-date-picker
-          v-model="query.endDate"
-          type="date"
-          value-format="YYYY-MM-DD"
-          placeholder="请选择结束日期"
-          style="width: 160px"
-        />
+        <el-date-picker v-model="query.endDate" type="date" value-format="YYYY-MM-DD" placeholder="请选择结束日期" style="width: 160px" />
       </el-form-item>
       <el-form-item label="单据编号">
         <el-input v-model="query.documentCode" placeholder="请输入单据编号" clearable style="width: 160px" />
@@ -226,24 +403,56 @@ const handlePageSizeChange = (size: number) => {
           style="width: 160px"
         />
       </el-form-item>
+      <el-form-item label="盘点范围">
+        <el-select v-model="query.checkRangeType" clearable style="width: 160px">
+          <el-option label="全部" value="" />
+          <el-option
+            v-for="item in checkRangeTypeOptions"
+            :key="item.itemCode"
+            :label="item.itemLabel"
+            :value="item.itemCode"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="盘点频次">
+        <el-select v-model="query.stocktakeFrequency" clearable style="width: 140px">
+          <el-option label="全部" value="" />
+          <el-option
+            v-for="item in stocktakeFrequencyOptions"
+            :key="item.itemCode"
+            :label="item.itemLabel"
+            :value="item.itemCode"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="物品">
-        <el-select v-model="query.itemName" clearable style="width: 120px">
-          <el-option v-for="option in itemOptions" :key="option" :label="option" :value="option" />
+        <el-input v-model="query.itemName" placeholder="请输入物品编码/名称" clearable style="width: 160px" />
+      </el-form-item>
+      <el-form-item label="状态">
+        <el-select v-model="query.status" clearable style="width: 120px">
+          <el-option label="全部" value="" />
+          <el-option
+            v-for="item in documentStatusOptions"
+            :key="item.itemCode"
+            :label="item.itemLabel"
+            :value="item.itemCode"
+          />
         </el-select>
       </el-form-item>
-      <el-form-item label="单据状态">
-        <el-select v-model="query.documentStatus" clearable style="width: 120px">
-          <el-option v-for="option in documentStatusOptions" :key="option" :label="option" :value="option" />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="是否生成盘点单">
-        <el-select v-model="query.generatedStatus" style="width: 140px">
-          <el-option v-for="option in generatedStatusOptions" :key="option" :label="option" :value="option" />
+      <el-form-item label="生成状态">
+        <el-select v-model="query.generatedStatus" clearable style="width: 120px">
+          <el-option label="全部" value="" />
+          <el-option
+            v-for="item in generatedStatusOptions"
+            :key="item.itemCode"
+            :label="item.itemLabel"
+            :value="item.itemCode"
+          />
         </el-select>
       </el-form-item>
       <el-form-item label="打印状态">
-        <el-select v-model="query.printStatus" style="width: 120px">
-          <el-option v-for="option in printStatusOptions" :key="option" :label="option" :value="option" />
+        <el-select v-model="query.printStatus" clearable style="width: 120px">
+          <el-option v-for="item in printStatusOptions" :key="String(item.value)" :label="item.label" :value="String(item.value)" />
         </el-select>
       </el-form-item>
       <el-form-item label="备注">
@@ -262,7 +471,7 @@ const handlePageSizeChange = (size: number) => {
     </CommonQuerySection>
 
     <div class="table-toolbar">
-      <el-button type="primary" @click="handleToolbarAction('新增')">
+      <el-button v-if="permissions.canCreate" type="primary" @click="handleToolbarAction('新增')">
         <el-icon><Plus /></el-icon>
         新增
       </el-button>
@@ -271,38 +480,42 @@ const handlePageSizeChange = (size: number) => {
         <el-icon><Printer /></el-icon>
         批量打印
       </el-button>
-      <el-button @click="handleToolbarAction('批量提交')">批量提交</el-button>
-      <el-button @click="handleToolbarAction('批量删除')">
+      <el-button v-if="permissions.canDelete" @click="handleToolbarAction('批量删除')">
         <el-icon><Delete /></el-icon>
         批量删除
       </el-button>
-      <el-button @click="handleToolbarAction('批量审核')">批量审核</el-button>
-      <el-button @click="handleToolbarAction('批量反审核')">批量反审核</el-button>
-      <el-dropdown @command="handleTableSettingCommand">
+      <el-button v-if="permissions.canApprove" @click="handleToolbarAction('批量提交')">批量提交</el-button>
+      <el-button v-if="permissions.canApprove" @click="handleToolbarAction('批量审核')">批量审核</el-button>
+      <el-button v-if="permissions.canUnapprove" @click="handleToolbarAction('批量反审核')">批量反审核</el-button>
+      <el-button :loading="exportLoading" @click="handleExport">
+        <el-icon><Download /></el-icon>
+        导出
+      </el-button>
+      <el-dropdown>
         <el-button>
           表格设置
           <el-icon><ArrowDown /></el-icon>
         </el-button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="单据编号">单据编号</el-dropdown-item>
-            <el-dropdown-item command="盘点日期">盘点日期</el-dropdown-item>
-            <el-dropdown-item command="仓库">仓库</el-dropdown-item>
-            <el-dropdown-item command="物品数">物品数</el-dropdown-item>
-            <el-dropdown-item command="状态">状态</el-dropdown-item>
-            <el-dropdown-item command="审核日期">审核日期</el-dropdown-item>
-            <el-dropdown-item command="是否生成盘点单">是否生成盘点单</el-dropdown-item>
-            <el-dropdown-item command="打印状态">打印状态</el-dropdown-item>
-            <el-dropdown-item command="创建日期">创建日期</el-dropdown-item>
-            <el-dropdown-item command="创建人">创建人</el-dropdown-item>
-            <el-dropdown-item command="操作">操作</el-dropdown-item>
+            <el-dropdown-item>单据编号</el-dropdown-item>
+            <el-dropdown-item>盘点日期</el-dropdown-item>
+            <el-dropdown-item>仓库</el-dropdown-item>
+            <el-dropdown-item>物品（项）</el-dropdown-item>
+            <el-dropdown-item>盘点频次</el-dropdown-item>
+            <el-dropdown-item>状态</el-dropdown-item>
+            <el-dropdown-item>生成状态</el-dropdown-item>
+            <el-dropdown-item>打印状态</el-dropdown-item>
+            <el-dropdown-item>创建时间</el-dropdown-item>
+            <el-dropdown-item>备注</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
     </div>
 
     <el-table
-      :data="pagedRows"
+      v-loading="loading"
+      :data="rows"
       border
       stripe
       class="erp-table"
@@ -315,18 +528,28 @@ const handlePageSizeChange = (size: number) => {
       <el-table-column type="index" label="序号" width="56" fixed="left" />
       <el-table-column prop="documentCode" label="单据编号" min-width="150" show-overflow-tooltip />
       <el-table-column prop="checkDate" label="盘点日期" min-width="110" show-overflow-tooltip />
-      <el-table-column prop="warehouse" label="仓库" min-width="120" show-overflow-tooltip />
+      <el-table-column prop="warehouseName" label="仓库" min-width="120" show-overflow-tooltip />
       <el-table-column prop="itemCount" label="物品数" min-width="90" show-overflow-tooltip />
-      <el-table-column prop="status" label="状态" min-width="100" show-overflow-tooltip />
+      <el-table-column prop="stocktakeFrequency" label="盘点频次" min-width="100" show-overflow-tooltip>
+        <template #default="{ row }">{{ stocktakeFrequencyLabelMap[row.stocktakeFrequency] ?? row.stocktakeFrequency }}</template>
+      </el-table-column>
+      <el-table-column prop="status" label="状态" min-width="100" show-overflow-tooltip>
+        <template #default="{ row }">{{ statusLabelMap[row.status] ?? row.status }}</template>
+      </el-table-column>
       <el-table-column prop="auditDate" label="审核日期" min-width="110" show-overflow-tooltip />
-      <el-table-column prop="generatedStatus" label="是否生成盘点单" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="printStatus" label="打印状态" min-width="100" show-overflow-tooltip />
-      <el-table-column prop="createdAt" label="创建日期" min-width="170" show-overflow-tooltip />
+      <el-table-column prop="generatedStatus" label="生成状态" min-width="110" show-overflow-tooltip>
+        <template #default="{ row }">{{ generatedStatusLabelMap[row.generatedStatus] ?? row.generatedStatus }}</template>
+      </el-table-column>
+      <el-table-column prop="printStatus" label="打印状态" min-width="100" show-overflow-tooltip>
+        <template #default="{ row }">{{ printStatusLabelMap[row.printStatus] ?? row.printStatus }}</template>
+      </el-table-column>
+      <el-table-column prop="createdAt" label="创建时间" min-width="170" show-overflow-tooltip />
       <el-table-column prop="creator" label="创建人" min-width="100" show-overflow-tooltip />
+      <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
-          <el-button text type="primary" @click="handleView(row)">查看</el-button>
-          <el-button text @click="handleEdit(row)">编辑</el-button>
+          <el-button text type="primary" @click="handleGenerateRow(row)">生成</el-button>
+          <el-button v-if="permissions.canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -337,12 +560,12 @@ const handlePageSizeChange = (size: number) => {
         :current-page="currentPage"
         :page-size="pageSize"
         :page-sizes="[10, 20, 50]"
-        :total="filteredRows.length"
+        :total="total"
         background
         small
         layout="total, sizes, prev, pager, next, jumper"
-        @current-change="handlePageChange"
-        @size-change="handlePageSizeChange"
+        @current-change="(page: number) => { currentPage = page; void loadRows(); }"
+        @size-change="(size: number) => { pageSize = size; currentPage = 1; void loadRows(); }"
       />
     </div>
   </section>

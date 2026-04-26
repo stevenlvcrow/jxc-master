@@ -2,6 +2,7 @@ package com.boboboom.jxc.identity.interfaces.rest.request;
 
 import jakarta.validation.constraints.NotBlank;
 
+/** 身份与权限请求参数，承载接口入参。 */
 public class AuthLoginRequest {
 
     @NotBlank
@@ -10,19 +11,23 @@ public class AuthLoginRequest {
     @NotBlank
     private String password;
 
+    /** 获取Account。 */
     public String getAccount() {
         return account;
     }
 
-    public void setAccount(String account) {
-        this.account = account;
+    /** 设置Account。 */
+    public void setAccount(String accountValue) {
+        this.account = accountValue;
     }
 
+    /** 获取Password。 */
     public String getPassword() {
         return password;
     }
 
-    public void setPassword(String password) {
-        this.password = password;
+    /** 设置Password。 */
+    public void setPassword(String passwordValue) {
+        this.password = passwordValue;
     }
 }

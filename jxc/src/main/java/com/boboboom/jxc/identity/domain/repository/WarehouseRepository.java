@@ -1,10 +1,11 @@
 package com.boboboom.jxc.identity.domain.repository;
 
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
-
 import java.util.List;
 import java.util.Optional;
 
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
+
+/** 身份与权限仓储接口，定义领域需要的数据访问能力。 */
 public interface WarehouseRepository {
 
     Optional<WarehouseDO> findById(Long id);

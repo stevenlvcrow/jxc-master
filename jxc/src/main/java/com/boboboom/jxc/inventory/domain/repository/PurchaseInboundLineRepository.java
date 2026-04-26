@@ -1,9 +1,10 @@
 package com.boboboom.jxc.inventory.domain.repository;
 
-import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
-
 import java.util.List;
 
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
+
+/** 库存仓储接口，定义领域需要的数据访问能力。 */
 public interface PurchaseInboundLineRepository {
 
     List<PurchaseInboundLineDO> findByInboundIds(List<Long> inboundIds);

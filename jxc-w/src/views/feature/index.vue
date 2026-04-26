@@ -19,7 +19,7 @@ import WarehouseItemRuleManagementView from '@/views/system/warehouse-item-rule-
 import OrgManagementView from '@/views/system/org-management.vue';
 import PurchasePricingView from '@/views/purchase/purchase-pricing.vue';
 import PricingAdjustmentManagementView from '@/views/purchase/pricing-adjustment-management.vue';
-import WarehouseOpeningBalanceView from '@/views/inventory/warehouse-opening-balance.vue';
+import PeriodOpeningView from '@/views/inventory/period-opening.vue';
 import PurchaseInboundView from '@/views/inventory/purchase-inbound.vue';
 import PurchaseReturnOutboundView from '@/views/inventory/purchase-return-outbound.vue';
 import StockTransferView from '@/views/inventory/stock-transfer.vue';
@@ -37,8 +37,6 @@ import CustomerSalesOutboundView from '@/views/inventory/customer-sales-outbound
 import CustomerReturnInboundView from '@/views/inventory/customer-return-inbound.vue';
 import InventoryCheckView from '@/views/inventory/inventory-check.vue';
 import MultiInventoryCheckView from '@/views/inventory/multi-inventory-check.vue';
-import ProfitInboundView from '@/views/inventory/profit-inbound.vue';
-import LossOutboundView from '@/views/inventory/loss-outbound.vue';
 import DishConsumptionOutboundView from '@/views/inventory/dish-consumption-outbound.vue';
 import BatchAdjustmentView from '@/views/inventory/batch-adjustment.vue';
 import InventoryTemplateView from '@/views/inventory/inventory-template.vue';
@@ -46,6 +44,9 @@ import TransferGroupView from '@/views/inventory/transfer-group.vue';
 import StockLimitsView from '@/views/inventory/stock-limits.vue';
 import StockLockView from '@/views/inventory/stock-lock.vue';
 import StockLockLogView from '@/views/inventory/stock-lock-log.vue';
+import RealTimeStockQueryView from '@/views/inventory/realtime-stock-query.vue';
+import DishConsumptionOutboundReportView from '@/views/inventory/dish-consumption-outbound-report.vue';
+import InventoryInoutDetailReportView from '@/views/inventory/inventory-inout-detail-report.vue';
 
 const route = useRoute();
 
@@ -74,7 +75,7 @@ const isWarehouseItemRuleManagement = computed(() => title.value === '仓库物�
 const isOrgManagement = computed(() => title.value === '机构管理');
 const isPurchasePricing = computed(() => title.value === '采购单定价');
 const isPricingAdjustmentManagement = computed(() => title.value === '采购定价明细调整单');
-const isWarehouseOpeningBalance = computed(() => title.value === '仓库期初');
+const isPeriodOpening = computed(() => title.value === '期初库存');
 const isPurchaseInbound = computed(() => title.value === '采购入库');
 const isPurchaseReturnOutbound = computed(() => title.value === '采购退货出库');
 const isStockTransfer = computed(() => title.value === '移库单');
@@ -92,8 +93,6 @@ const isCustomerSalesOutbound = computed(() => title.value === '客户销售出�
 const isCustomerReturnInbound = computed(() => title.value === '客户退货入库');
 const isInventoryCheck = computed(() => title.value === '盘点单');
 const isMultiInventoryCheck = computed(() => title.value === '多人盘点单');
-const isProfitInbound = computed(() => title.value === '盘盈单');
-const isLossOutbound = computed(() => title.value === '盘亏单');
 const isDishConsumptionOutbound = computed(() => title.value === '菜品消耗出库');
 const isBatchAdjustment = computed(() => title.value === '批次调整单');
 const isInventoryTemplate = computed(() => title.value === '库存模板');
@@ -101,6 +100,9 @@ const isTransferGroup = computed(() => title.value === '调拨分组');
 const isStockLimits = computed(() => title.value === '库存上下限');
 const isStockLock = computed(() => title.value === '库存锁库');
 const isStockLockLog = computed(() => title.value === '锁库日志');
+const isRealTimeStockQuery = computed(() => title.value === '实时库存查询表');
+const isDishConsumptionOutboundReport = computed(() => title.value === '菜品消耗出库查询表');
+const isInventoryInoutDetailReport = computed(() => title.value === '出入库明细表');
 
 const pendingTasks = [
   '补充查询条件与默认筛选项',
@@ -164,8 +166,8 @@ const pendingTasks = [
   <div v-else-if="isPricingAdjustmentManagement" class="page-grid single">
     <PricingAdjustmentManagementView />
   </div>
-  <div v-else-if="isWarehouseOpeningBalance" class="page-grid single">
-    <WarehouseOpeningBalanceView />
+  <div v-else-if="isPeriodOpening" class="page-grid single">
+    <PeriodOpeningView />
   </div>
   <div v-else-if="isPurchaseInbound" class="page-grid single">
     <PurchaseInboundView />
@@ -218,12 +220,6 @@ const pendingTasks = [
   <div v-else-if="isMultiInventoryCheck" class="page-grid single">
     <MultiInventoryCheckView />
   </div>
-  <div v-else-if="isProfitInbound" class="page-grid single">
-    <ProfitInboundView />
-  </div>
-  <div v-else-if="isLossOutbound" class="page-grid single">
-    <LossOutboundView />
-  </div>
   <div v-else-if="isDishConsumptionOutbound" class="page-grid single">
     <DishConsumptionOutboundView />
   </div>
@@ -244,6 +240,15 @@ const pendingTasks = [
   </div>
   <div v-else-if="isStockLockLog" class="page-grid single">
     <StockLockLogView />
+  </div>
+  <div v-else-if="isRealTimeStockQuery" class="page-grid single">
+    <RealTimeStockQueryView />
+  </div>
+  <div v-else-if="isDishConsumptionOutboundReport" class="page-grid single">
+    <DishConsumptionOutboundReportView />
+  </div>
+  <div v-else-if="isInventoryInoutDetailReport" class="page-grid single">
+    <InventoryInoutDetailReportView />
   </div>
 
   <div v-else class="page-grid">
@@ -285,4 +290,3 @@ const pendingTasks = [
     </section>
   </div>
 </template>
-

@@ -1,11 +1,12 @@
 package com.boboboom.jxc.inventory.application.service;
 
+import java.time.LocalDateTime;
+
+import org.springframework.stereotype.Service;
+
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
 import com.boboboom.jxc.workflow.application.service.WorkflowApprovalNotificationApplicationService;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
 
 /**
  * 通用库存单据通知记录服务。
@@ -16,10 +17,11 @@ public class InventoryDocumentNotificationService {
     private final WorkflowApprovalNotificationApplicationService workflowApprovalNotificationApplicationService;
     private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
 
-    public InventoryDocumentNotificationService(WorkflowApprovalNotificationApplicationService workflowApprovalNotificationApplicationService,
-                                                InventoryDocumentWorkflowService inventoryDocumentWorkflowService) {
-        this.workflowApprovalNotificationApplicationService = workflowApprovalNotificationApplicationService;
-        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowService;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public InventoryDocumentNotificationService(WorkflowApprovalNotificationApplicationService workflowApprovalNotificationApplicationServiceValue,
+                                                InventoryDocumentWorkflowService inventoryDocumentWorkflowServiceValue) {
+        this.workflowApprovalNotificationApplicationService = workflowApprovalNotificationApplicationServiceValue;
+        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowServiceValue;
     }
 
     /**
@@ -39,13 +41,15 @@ public class InventoryDocumentNotificationService {
         WorkflowActionService.ApprovalTarget approvalTarget = inventoryDocumentWorkflowService
                 .resolveApprovalTarget(type, scopeType, scopeId, groupId, header.getWorkflowTaskName())
                 .orElse(null);
+        String workflowName = inventoryDocumentWorkflowService.resolveBusinessName(type, scopeType, scopeId, groupId) + "流程";
         workflowApprovalNotificationApplicationService.record(
                 scopeType,
                 scopeId,
                 type.getBusinessCode(),
-                type.getBusinessName() + "流程",
+                workflowName,
                 header.getId(),
                 header.getDocumentCode(),
+                AuthContextHolder.userIdOr(null),
                 AuthContextHolder.userNameOr("system"),
                 "发起人",
                 approvalTarget == null ? null : approvalTarget.userId(),
@@ -81,6 +85,7 @@ public class InventoryDocumentNotificationService {
                 type.getBusinessName() + "流程",
                 header.getId(),
                 header.getDocumentCode(),
+                AuthContextHolder.userIdOr(null),
                 AuthContextHolder.userNameOr("system"),
                 approverRole,
                 null,
@@ -116,6 +121,7 @@ public class InventoryDocumentNotificationService {
                 type.getBusinessName() + "流程",
                 header.getId(),
                 header.getDocumentCode(),
+                AuthContextHolder.userIdOr(null),
                 AuthContextHolder.userNameOr("system"),
                 approverRole,
                 null,

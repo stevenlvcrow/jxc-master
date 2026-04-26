@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
+import { Download } from '@element-plus/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonNumberInput from '@/components/CommonNumberInput.vue';
 import CommonSelectorDialog, {
   type SelectorColumn,
   type SelectorTreeNode,
@@ -16,7 +18,19 @@ import {
 import { fetchCurrentUserRolesApi } from '@/api/modules/auth';
 import { fetchStoreSalesmenApi, type SalesmanCandidateItem } from '@/api/modules/system-admin';
 import { fetchStoreWarehousesApi, type WarehouseRow as ApiWarehouseRow } from '@/api/modules/warehouse';
+import {
+  createInventoryCheckApi,
+  fetchInventoryCheckDetailApi,
+  fetchInventoryBalancesApi,
+  fetchInventoryCheckPermissionApi,
+  type InventoryBalanceRow as ApiInventoryBalanceRow,
+  updateInventoryCheckApi,
+  type InventoryCheckDetail,
+  type InventoryCheckSavePayload,
+} from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 type SalesmanOption = {
   userId: number;
@@ -32,7 +46,7 @@ type WarehouseOption = {
   label: string;
 };
 
-type CheckTypeOption = '指定物品' | '全仓盘点';
+type CheckTypeOption = '指定物品' | '分区盘点' | '全仓盘点';
 type UnitOption = '库存单位';
 
 type ItemCandidate = {
@@ -42,6 +56,7 @@ type ItemCandidate = {
   spec: string;
   category: string;
   stockUnit: string;
+  productionCost: string;
   status: string;
 };
 
@@ -67,42 +82,44 @@ type InventoryCheckItemRow = {
   profitAmount: number | null;
   lossOutboundPrice: number | null;
   lossAmount: number | null;
+  differenceReasonCode: string;
   remark: string;
 };
 
-type MockDetailLine = {
-  itemCode: string;
-  itemName: string;
-  spec: string;
-  category: string;
-  unit1ActualQty: number;
-  unit1: string;
-  bookQty: number;
-  bookPrice: number;
-  profitLossReason: string;
-  remark: string;
-};
-
-type MockDetail = {
-  warehouse: string;
-  checkDate: string;
-  checkType: CheckTypeOption;
-  summaryUnit: UnitOption;
-  salesmanName: string;
-  remark: string;
-  items: MockDetailLine[];
-};
-
-const checkTypeOptions: CheckTypeOption[] = ['指定物品', '全仓盘点'];
+const checkTypeOptions: CheckTypeOption[] = ['指定物品', '分区盘点', '全仓盘点'];
 const summaryUnitOptions: UnitOption[] = ['库存单位'];
+const checkRangeTypeCodeMap: Record<CheckTypeOption, string> = {
+  指定物品: 'SPECIFIC_ITEM',
+  分区盘点: 'PARTITION',
+  全仓盘点: 'FULL_WAREHOUSE',
+};
+const checkRangeTypeLabelMap: Record<string, CheckTypeOption> = {
+  SPECIFIC_ITEM: '指定物品',
+  PARTITION: '分区盘点',
+  FULL_WAREHOUSE: '全仓盘点',
+};
 
 const router = useRouter();
 const route = useRoute();
 const sessionStore = useSessionStore();
+const { orgId: currentOrgId, storeId } = useRequiredOrgScope();
+const ITEM_STATUS_DICT = 'item.status';
+const STOCKTAKE_FREQUENCY_DICT = 'inventory.stocktake_frequency';
+const DIFFERENCE_REASON_DICT = 'inventory.check_difference_reason';
+const { optionsOf } = useDictionaryOptions([ITEM_STATUS_DICT, STOCKTAKE_FREQUENCY_DICT, DIFFERENCE_REASON_DICT]);
+const itemStatusOptions = optionsOf(ITEM_STATUS_DICT, { enabled: true, label: '全部', value: '' });
+const stocktakeFrequencyOptions = optionsOf(STOCKTAKE_FREQUENCY_DICT);
+const differenceReasonOptions = optionsOf(DIFFERENCE_REASON_DICT);
+const normalizedItemStatusOptions = computed(() => itemStatusOptions.value.map((item) => ({
+  label: item.itemLabel,
+  value: item.itemCode,
+})));
 const activeNav = ref('basic');
 const basicSectionRef = ref<HTMLElement | null>(null);
 const itemSectionRef = ref<HTMLElement | null>(null);
 const pageLoading = ref(false);
+const snapshotRefreshing = ref(false);
+const hydratingDetail = ref(false);
 
 const sectionNavs = [
   { key: 'basic', label: '基础信息' },
@@ -118,7 +135,15 @@ const routeId = computed(() => {
 const isCreateMode = computed(() => route.name === 'InventoryCheckCreate');
 const isViewMode = computed(() => route.name === 'InventoryCheckView');
 const isEditMode = computed(() => route.name === 'InventoryCheckEdit');
-const isReadonlyMode = computed(() => isViewMode.value);
+const canCreate = ref(false);
+const canUpdate = ref(false);
+const canApprove = ref(false);
+const canUnapprove = ref(false);
+const detailStatus = ref('');
+const isReadonlyMode = computed(() => isViewMode.value
+  || detailStatus.value === 'APPROVED'
+  || (isCreateMode.value && !canCreate.value)
+  || (isEditMode.value && !canUpdate.value));
 
 const warehouseOptions = ref<WarehouseOption[]>([]);
 const salesmanOptions = ref<SalesmanOption[]>([]);
@@ -137,7 +162,7 @@ const salesmanSelectOptions = computed(() => {
 
 const itemSelectorVisible = ref(false);
 const itemSelectorKeyword = ref('');
-const itemSelectorStatus = ref('启用');
+const itemSelectorStatus = ref('');
 const activeItemTreeId = ref<string>('all');
 const itemSelectorCurrentPage = ref(1);
 const itemSelectorPageSize = ref(10);
@@ -146,6 +171,8 @@ const itemSelectorTotal = ref(0);
 const selectedItemCandidates = ref<Array<Record<string, unknown>>>([]);
 const itemTreeData = ref<SelectorTreeNode[]>([]);
 const itemCandidateSource = ref<ItemCandidate[]>([]);
+const selectingItemRowIndex = ref<number | null>(null);
+const itemSelectorMode = ref<'append' | 'replace'>('append');
 
 const itemTableColumns: SelectorColumn[] = [
   { prop: 'code', label: '物品编码', minWidth: 130 },
@@ -161,7 +188,10 @@ const form = reactive({
   warehouseName: '',
   checkDate: '',
   checkType: '指定物品' as CheckTypeOption,
+  stocktakeFrequency: 'DAILY',
   summaryUnit: '库存单位' as UnitOption,
+  freezeStock: false,
+  collaborativeFlag: false,
   thirdPartyDocument: '--',
   salesmanUserId: undefined as number | undefined,
   salesmanName: '',
@@ -171,87 +201,6 @@ const form = reactive({
 
 const rowSeed = ref(2);
 const rows = ref<InventoryCheckItemRow[]>([]);
-
-const mockDetailMap: Record<number, MockDetail> = {
-  1: {
-    warehouse: '中央成品仓',
-    checkDate: '2026-04-13',
-    checkType: '指定物品',
-    summaryUnit: '库存单位',
-    salesmanName: '张敏',
-    remark: '月度盘点',
-    items: [
-      {
-        itemCode: 'ITEM-001',
-        itemName: '鸡胸肉',
-        spec: '2kg/袋',
-        category: '肉类',
-        unit1ActualQty: 32,
-        unit1: '袋',
-        bookQty: 30,
-        bookPrice: 46.5,
-        profitLossReason: '盘盈补录',
-        remark: '冷库复盘',
-      },
-      {
-        itemCode: 'ITEM-004',
-        itemName: '酸梅汤',
-        spec: '500ml*12瓶',
-        category: '饮品',
-        unit1ActualQty: 10,
-        unit1: '箱',
-        bookQty: 12,
-        bookPrice: 72,
-        profitLossReason: '破损报损',
-        remark: '货架清点',
-      },
-    ],
-  },
-  2: {
-    warehouse: '北区原料仓',
-    checkDate: '2026-04-12',
-    checkType: '指定物品',
-    summaryUnit: '库存单位',
-    salesmanName: '李娜',
-    remark: '抽盘复核',
-    items: [
-      {
-        itemCode: 'ITEM-009',
-        itemName: '牛腩',
-        spec: '5kg/箱',
-        category: '冻品',
-        unit1ActualQty: 8,
-        unit1: '箱',
-        bookQty: 9,
-        bookPrice: 168,
-        profitLossReason: '称重损耗',
-        remark: '冻库盘点',
-      },
-    ],
-  },
-  3: {
-    warehouse: '南区包材仓',
-    checkDate: '2026-04-11',
-    checkType: '指定物品',
-    summaryUnit: '库存单位',
-    salesmanName: '王磊',
-    remark: '循环盘点',
-    items: [
-      {
-        itemCode: 'ITEM-015',
-        itemName: '包装盒',
-        spec: '200只/箱',
-        category: '包材',
-        unit1ActualQty: 15,
-        unit1: '箱',
-        bookQty: 15,
-        bookPrice: 68,
-        profitLossReason: '',
-        remark: '包装区复盘',
-      },
-    ],
-  },
-};
 
 const createEmptyRow = (id: number): InventoryCheckItemRow => ({
   id,
@@ -275,6 +224,7 @@ const createEmptyRow = (id: number): InventoryCheckItemRow => ({
   profitAmount: null,
   lossOutboundPrice: null,
   lossAmount: null,
+  differenceReasonCode: '',
   remark: '',
 });
 
@@ -314,6 +264,8 @@ const syncRowDerived = (row: InventoryCheckItemRow) => {
     row.abnormalFlag = '';
   } else if (diff === 0) {
     row.abnormalFlag = '正常';
+    row.differenceReasonCode = '';
+    row.profitLossReason = '';
   } else {
     row.abnormalFlag = '异常';
   }
@@ -322,47 +274,23 @@ const syncRowDerived = (row: InventoryCheckItemRow) => {
 const totalActualAmount = computed(() => rows.value.reduce((sum, row) => sum + (row.actualAmount ?? 0), 0));
 const totalBookAmount = computed(() => rows.value.reduce((sum, row) => sum + (row.bookAmount ?? 0), 0));
 const totalDiffQty = computed(() => rows.value.reduce((sum, row) => sum + (row.profitQty ?? 0) - (row.lossQty ?? 0), 0));
+const autoFillLoading = ref(false);
+const exportLoading = ref(false);
 
 const resolveOrgId = () => {
-  const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!currentOrgId || !currentOrgId.startsWith('store-')) {
-    return undefined;
-  }
-  return currentOrgId;
-};
-
-const resolveWarehouseStoreId = () => {
-  const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!currentOrgId) {
-    return undefined;
-  }
-  if (currentOrgId.startsWith('store-')) {
-    const storeId = Number(currentOrgId.slice('store-'.length));
-    return Number.isNaN(storeId) ? undefined : storeId;
-  }
-  const currentOrg = sessionStore.currentOrg;
-  if (currentOrg?.type === 'group') {
-    const firstStore = currentOrg.children?.[0];
-    if (!firstStore) {
-      return undefined;
-    }
-    const storeId = Number(String(firstStore.id).slice('store-'.length));
-    return Number.isNaN(storeId) ? undefined : storeId;
-  }
-  const firstStore = sessionStore.flatOrgs.find((item) => item.type === 'store');
-  if (!firstStore) {
-    return undefined;
-  }
-  const storeId = Number(String(firstStore.id).slice('store-'.length));
-  return Number.isNaN(storeId) ? undefined : storeId;
+  return currentOrgId.value;
 };
 
 const resetForm = () => {
+  detailStatus.value = 'DRAFT';
   form.warehouseId = 0;
   form.warehouseName = '';
   form.checkDate = '';
   form.checkType = '指定物品';
+  form.stocktakeFrequency = 'DAILY';
   form.summaryUnit = '库存单位';
+  form.freezeStock = false;
+  form.collaborativeFlag = false;
   form.thirdPartyDocument = '--';
   form.salesmanUserId = undefined;
   form.salesmanName = '';
@@ -373,12 +301,11 @@ const resetForm = () => {
 };
 
 const loadWarehouseOptions = async () => {
-  const storeId = resolveWarehouseStoreId();
-  if (!storeId) {
+  if (!storeId.value) {
     warehouseOptions.value = [];
     return;
   }
-  const result = await fetchStoreWarehousesApi(storeId, { status: 'ENABLED' });
+  const result = await fetchStoreWarehousesApi(storeId.value, { status: 'ENABLED' });
   warehouseOptions.value = result
     .map((item: ApiWarehouseRow) => ({
       id: item.id,
@@ -408,10 +335,10 @@ const loadSalesmanOptions = async () => {
   }));
   const normalized = Array.from(new Map(options.map((item) => [item.userId, item])).values());
   salesmanOptions.value = isSalesman
-    ? normalized.filter((item) => item.phone === sessionStore.loginAccount)
+    ? normalized.filter((item) => item.phone === sessionStore.userPhone)
     : normalized;
   if (isCreateMode.value && !form.salesmanUserId) {
-    const selfCandidate = salesmanOptions.value.find((item) => item.phone === sessionStore.loginAccount);
+    const selfCandidate = salesmanOptions.value.find((item) => item.phone === sessionStore.userPhone);
     if (selfCandidate) {
       form.salesmanUserId = selfCandidate.userId;
       form.salesmanName = selfCandidate.realName;
@@ -444,6 +371,7 @@ const mapItemCandidate = (row: ItemVO): ItemCandidate => ({
   spec: row.spec,
   category: row.category,
   stockUnit: row.stockUnit || row.purchaseUnit,
+  productionCost: row.productionCost,
   status: row.status,
 });
 
@@ -462,6 +390,7 @@ const loadItemCandidates = async () => {
       keyword: itemSelectorKeyword.value.trim() || undefined,
       category: activeItemTreeId.value === 'all' ? undefined : activeItemTreeId.value,
       status: itemSelectorStatus.value || undefined,
+      stocktakeFrequency: form.stocktakeFrequency,
     }, orgId);
     itemCandidateSource.value = page.list.map(mapItemCandidate);
     itemSelectorTotal.value = Number(page.total ?? 0);
@@ -470,23 +399,116 @@ const loadItemCandidates = async () => {
   }
 };
 
-const resolveMockBookSnapshot = (itemCode: string, rowIndex: number) => {
-  const detailItems = Object.values(mockDetailMap).flatMap((detail) => detail.items);
-  const matched = detailItems.find((item) => item.itemCode === itemCode);
-  if (matched) {
+const fetchAllPages = async <T>(loader: (pageNum: number, pageSize: number) => Promise<{ list: T[]; total: number; pageSize: number }>) => {
+  const collected: T[] = [];
+  let pageNum = 1;
+  let totalCount: number;
+  do {
+    const page = await loader(pageNum, 200);
+    const list = Array.isArray(page.list) ? page.list : [];
+    collected.push(...list);
+    totalCount = Number(page.total ?? collected.length);
+    if (!list.length || Number(page.pageSize ?? 0) <= 0) {
+      break;
+    }
+    pageNum += 1;
+  } while (collected.length < totalCount);
+  return collected;
+};
+
+const fetchAllItems = async () => fetchAllPages<ItemCandidate>(async (pageNum, pageSizeValue) => {
+  const page = await fetchItemsApi({
+    pageNo: pageNum,
+    pageSize: pageSizeValue,
+    status: 'ENABLED',
+    stocktakeFrequency: form.stocktakeFrequency,
+  }, resolveOrgId());
+  return {
+    list: page.list.map(mapItemCandidate),
+    total: Number(page.total ?? 0),
+    pageSize: Number(page.pageSize ?? pageSizeValue),
+  };
+});
+
+const fetchAllBalances = async () => fetchAllPages<ApiInventoryBalanceRow>(async (pageNum, pageSizeValue) => {
+  const page = await fetchInventoryBalancesApi({
+    pageNum,
+    pageSize: pageSizeValue,
+    warehouse: form.warehouseName,
+    checkDate: form.checkDate,
+  }, resolveOrgId());
+  return {
+    list: page.list,
+    total: Number(page.total ?? 0),
+    pageSize: Number(page.pageSize ?? pageSizeValue),
+  };
+});
+
+const parseNumberOrNull = (value: string | number | null | undefined) => {
+  if (value == null) {
+    return null;
+  }
+  const parsed = typeof value === 'number' ? value : Number.parseFloat(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const loadBookSnapshot = async (item: ItemCandidate) => {
+  const orgId = resolveOrgId();
+  if (!orgId || !form.warehouseName || !form.checkDate) {
     return {
-      bookQty: matched.bookQty,
-      bookPrice: matched.bookPrice,
+      bookQty: null as number | null,
+      bookPrice: parseNumberOrNull(item.productionCost),
     };
   }
+  const balances = await fetchAllBalances();
+  const matched = balances.find((row: ApiInventoryBalanceRow) => row.itemCode === item.code);
   return {
-    bookQty: 10 + rowIndex * 2,
-    bookPrice: 20 + rowIndex * 5,
+    bookQty: parseNumberOrNull(matched?.quantity ?? null),
+    bookPrice: parseNumberOrNull(item.productionCost),
   };
 };
 
-const applyItemToRow = (row: InventoryCheckItemRow, item: ItemCandidate, rowIndex: number) => {
-  const snapshot = resolveMockBookSnapshot(item.code, rowIndex);
+const loadFullWarehouseRows = async () => {
+  if (form.checkType !== '全仓盘点') {
+    return;
+  }
+  if (!form.warehouseName) {
+    ElMessage.warning('请选择仓库');
+    return;
+  }
+  if (!form.checkDate) {
+    ElMessage.warning('请选择盘点日期');
+    return;
+  }
+  autoFillLoading.value = true;
+  try {
+    const [balances, items] = await Promise.all([fetchAllBalances(), fetchAllItems()]);
+    const itemMap = new Map(items.map((item) => [item.code, item]));
+    const nextRows = balances.map((balance, index) => {
+      const matched = itemMap.get(balance.itemCode);
+      const row = createEmptyRow(index + 1);
+      row.itemCode = balance.itemCode;
+      row.itemName = balance.itemName || matched?.name || '';
+      row.spec = matched?.spec || '';
+      row.category = matched?.category || '';
+      row.unit1 = matched?.stockUnit || '';
+      row.actualTotalUnit = row.unit1;
+      row.bookQty = parseNumberOrNull(balance.quantity);
+      row.bookPrice = parseNumberOrNull(matched?.productionCost);
+      row.unit1ActualQty = row.bookQty;
+      syncRowDerived(row);
+      return row;
+    });
+    rows.value = nextRows.length ? nextRows : [createEmptyRow(rowSeed.value++)];
+    rowSeed.value = rows.value.length + 1;
+    ElMessage.success('已按全仓盘点自动装载账面库存');
+  } finally {
+    autoFillLoading.value = false;
+  }
+};
+
+const applyItemToRow = async (row: InventoryCheckItemRow, item: ItemCandidate) => {
+  const snapshot = await loadBookSnapshot(item);
   row.itemCode = item.code;
   row.itemName = item.name;
   row.spec = item.spec;
@@ -495,10 +517,86 @@ const applyItemToRow = (row: InventoryCheckItemRow, item: ItemCandidate, rowInde
   row.actualTotalUnit = item.stockUnit;
   row.bookQty = snapshot.bookQty;
   row.bookPrice = snapshot.bookPrice;
+  row.unit1ActualQty = null;
   syncRowDerived(row);
 };
 
-const appendItems = (items: ItemCandidate[]) => {
+const refreshBookSnapshots = async () => {
+  if (snapshotRefreshing.value || isReadonlyMode.value || hydratingDetail.value) {
+    return;
+  }
+  if (!form.checkDate || !form.warehouseName) {
+    return;
+  }
+  const targetRows = rows.value.filter((row) => row.itemCode);
+  if (!targetRows.length) {
+    return;
+  }
+  snapshotRefreshing.value = true;
+  try {
+    const balances = await fetchAllBalances();
+    const balanceMap = new Map(balances.map((balance) => [balance.itemCode, balance]));
+    rows.value.forEach((row) => {
+      if (!row.itemCode) {
+        return;
+      }
+      const matched = balanceMap.get(row.itemCode);
+      row.bookQty = parseNumberOrNull(matched?.quantity ?? null);
+      if (matched?.itemName) {
+        row.itemName = matched.itemName;
+      }
+      syncRowDerived(row);
+    });
+  } finally {
+    snapshotRefreshing.value = false;
+  }
+};
+
+const toCsvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
+const handleExportBookList = () => {
+  if (!rows.value.length) {
+    ElMessage.warning('请先加载盘点明细');
+    return;
+  }
+  exportLoading.value = true;
+  try {
+    const lines = [
+      ['物品编码', '物品名称', '规格型号', '物品类别', '单位', '账面数', '账面单价', '实盘数', '盘盈数量', '盘亏数量', '盈亏原因', '备注']
+        .map(toCsvCell)
+        .join(','),
+    ];
+    rows.value.forEach((row) => {
+      lines.push([
+        row.itemCode,
+        row.itemName,
+        row.spec,
+        row.category,
+        row.unit1,
+        row.bookQty ?? '',
+        row.bookPrice ?? '',
+        row.unit1ActualQty ?? '',
+        row.profitQty ?? '',
+        row.lossQty ?? '',
+        row.profitLossReason,
+        row.remark,
+      ].map(toCsvCell).join(','));
+    });
+    const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `盘点账面清单-${form.warehouseName || '未命名'}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    URL.revokeObjectURL(link.href);
+    document.body.removeChild(link);
+    ElMessage.success('导出成功');
+  } finally {
+    exportLoading.value = false;
+  }
+};
+
+const appendItems = async (items: ItemCandidate[]) => {
   if (!items.length) {
     ElMessage.warning('请至少选择一个物品');
     return;
@@ -510,47 +608,55 @@ const appendItems = (items: ItemCandidate[]) => {
     itemSelectorVisible.value = false;
     return;
   }
-  appendable.forEach((item, index) => {
+  const newRows = await Promise.all(appendable.map(async (item) => {
     const row = createEmptyRow(rowSeed.value++);
-    applyItemToRow(row, item, rows.value.length + index);
-    rows.value.push(row);
-  });
+    await applyItemToRow(row, item);
+    return row;
+  }));
+  rows.value.push(...newRows);
   itemSelectorVisible.value = false;
   ElMessage.success(`已添加 ${appendable.length} 条盘点物品`);
 };
 
-const applyDetail = (detail: MockDetail) => {
-  form.warehouseName = detail.warehouse;
-  form.warehouseId = warehouseOptions.value.find((item) => item.name === detail.warehouse)?.id ?? 0;
+const applyDetail = (detail: InventoryCheckDetail) => {
+  form.warehouseName = detail.warehouseName;
+  form.warehouseId = warehouseOptions.value.find((item) => item.name === detail.warehouseName)?.id ?? 0;
   form.checkDate = detail.checkDate;
-  form.checkType = detail.checkType;
-  form.summaryUnit = detail.summaryUnit;
+  form.checkType = checkRangeTypeLabelMap[detail.checkRangeType] ?? '指定物品';
+  form.stocktakeFrequency = detail.stocktakeFrequency || 'DAILY';
+  form.summaryUnit = '库存单位';
+  form.freezeStock = detail.freezeStock;
+  form.collaborativeFlag = detail.collaborativeFlag;
+  form.thirdPartyDocument = detail.thirdPartyDocument || '--';
   form.salesmanName = detail.salesmanName;
-  form.salesmanUserId = salesmanOptions.value.find((item) => item.realName === detail.salesmanName)?.userId;
+  form.salesmanUserId = detail.salesmanUserId ?? salesmanOptions.value.find((item) => item.realName === detail.salesmanName)?.userId;
+  form.planName = detail.planName;
   form.remark = detail.remark;
+  detailStatus.value = detail.status;
   rows.value = detail.items.map((item, index) => {
     const row = {
       id: index + 1,
       itemCode: item.itemCode,
       itemName: item.itemName,
-      abnormalFlag: '',
+      abnormalFlag: item.abnormalFlag || '',
       spec: item.spec,
       category: item.category,
-      unit1ActualQty: item.unit1ActualQty,
-      unit1: item.unit1,
-      actualTotalQty: item.unit1ActualQty,
-      actualTotalUnit: item.unit1,
-      bookQty: item.bookQty,
-      bookPrice: item.bookPrice,
-      profitQty: 0,
-      lossQty: 0,
+      unit1ActualQty: item.actualQty ?? item.bookQty ?? 0,
+      unit1: item.unitName,
+      actualTotalQty: item.actualQty ?? item.bookQty ?? 0,
+      actualTotalUnit: item.unitName,
+      bookQty: item.bookQty ?? 0,
+      bookPrice: item.bookPrice ?? 0,
+      profitQty: item.profitQty ?? 0,
+      lossQty: item.lossQty ?? 0,
       profitLossReason: item.profitLossReason,
-      actualAmount: null,
-      bookAmount: null,
-      profitInboundPrice: null,
-      profitAmount: null,
-      lossOutboundPrice: null,
-      lossAmount: null,
+      actualAmount: item.actualAmount ?? null,
+      bookAmount: item.bookAmount ?? null,
+      profitInboundPrice: item.profitInboundPrice ?? null,
+      profitAmount: item.profitAmount ?? null,
+      lossOutboundPrice: item.lossOutboundPrice ?? null,
+      lossAmount: item.lossAmount ?? null,
+      differenceReasonCode: item.differenceReasonCode || '',
       remark: item.remark,
     } as InventoryCheckItemRow;
     syncRowDerived(row);
@@ -559,30 +665,43 @@ const applyDetail = (detail: MockDetail) => {
   rowSeed.value = rows.value.length + 1;
 };
 
+const loadPermissions = async () => {
+  if (!currentOrgId.value) {
+    canCreate.value = false;
+    canUpdate.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
+    return;
+  }
+  const result = await fetchInventoryCheckPermissionApi('inventory-checks', currentOrgId.value);
+  canCreate.value = Boolean(result.canCreate);
+  canUpdate.value = Boolean(result.canUpdate);
+  canApprove.value = Boolean(result.canApprove);
+  canUnapprove.value = Boolean(result.canUnapprove);
+};
+
 const loadPageData = async () => {
   pageLoading.value = true;
+  hydratingDetail.value = true;
   try {
     await Promise.all([
+      loadPermissions(),
       loadWarehouseOptions(),
       loadSalesmanOptions(),
     ]);
     resetForm();
-    if (!isCreateMode.value && routeId.value != null) {
-      const detail = mockDetailMap[routeId.value];
-      if (detail) {
-        applyDetail(detail);
-      } else {
-        ElMessage.warning('未找到对应盘点单，已返回列表');
-        router.replace('/inventory/2/1');
-      }
+    if (!isCreateMode.value && routeId.value != null && currentOrgId.value) {
+      const detail = await fetchInventoryCheckDetailApi('inventory-checks', routeId.value, currentOrgId.value);
+      applyDetail(detail);
     }
   } finally {
+    hydratingDetail.value = false;
     pageLoading.value = false;
   }
 };
 
 const handleBack = () => {
-  router.push('/inventory/2/1');
+  router.push('/inventory/inventory-checks');
 };
 
 const scrollToSection = (key: string) => {
@@ -597,6 +716,16 @@ const scrollToSection = (key: string) => {
 const handleWarehouseChange = (warehouseId: number) => {
   const matched = warehouseOptions.value.find((item) => item.id === warehouseId);
   form.warehouseName = matched?.name ?? '';
+  if (form.checkType === '全仓盘点') {
+    void loadFullWarehouseRows();
+  }
+};
+
+const handleCheckTypeChange = (checkType: CheckTypeOption) => {
+  form.checkType = checkType;
+  if (checkType === '全仓盘点' && form.warehouseName) {
+    void loadFullWarehouseRows();
+  }
 };
 
 const handleSalesmanChange = (salesmanUserId: number) => {
@@ -628,10 +757,20 @@ const removeRow = (index: number) => {
   rows.value.splice(index, 1);
 };
 
-const openItemSelector = async () => {
+const openItemSelector = async (index?: number) => {
   if (isReadonlyMode.value) {
     return;
   }
+  if (!form.warehouseName) {
+    ElMessage.warning('请选择仓库');
+    return;
+  }
+  if (!form.checkDate) {
+    ElMessage.warning('请选择盘点日期');
+    return;
+  }
+  selectingItemRowIndex.value = typeof index === 'number' ? index : null;
+  itemSelectorMode.value = typeof index === 'number' ? 'replace' : 'append';
   selectedItemCandidates.value = [];
   if (!itemTreeData.value.length) {
     await loadItemTree();
@@ -661,16 +800,49 @@ const handleItemClear = () => {
   selectedItemCandidates.value = [];
 };
 
-const handleItemSelectorConfirm = (selectedRows: Array<Record<string, unknown>>) => {
-  appendItems(selectedRows as ItemCandidate[]);
+const handleItemSelectorConfirm = async (selectedRows: Array<Record<string, unknown>>) => {
+  const picked = selectedRows as ItemCandidate[];
+  if (!picked.length) {
+    ElMessage.warning('请至少选择一个物品');
+    return;
+  }
+  if (itemSelectorMode.value === 'append') {
+    await appendItems(picked);
+    itemSelectorVisible.value = false;
+    return;
+  }
+  if (picked.length > 1) {
+    ElMessage.warning('当前仅支持选择一个物品');
+    return;
+  }
+  const targetIndex = selectingItemRowIndex.value;
+  if (targetIndex == null) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  const targetRow = rows.value[targetIndex];
+  if (!targetRow) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  await applyItemToRow(targetRow, picked[0]);
+  itemSelectorVisible.value = false;
 };
 
 const handleToolbarAction = async (action: string) => {
+  if (action === '导出账面清单') {
+    handleExportBookList();
+    return;
+  }
   if (isReadonlyMode.value) {
     return;
   }
-  if (action === '添加物品') {
+  if (action === '选择盘点物品') {
     await openItemSelector();
+    return;
+  }
+  if (action === '新增空行') {
+    addRow();
     return;
   }
   if (action === '移除账面数为 0 的物品') {
@@ -694,19 +866,10 @@ const handleToolbarAction = async (action: string) => {
     });
     return;
   }
-  if (action === '添加有账未盘物品') {
-    const candidates = itemCandidateSource.value.length ? itemCandidateSource.value : [
-      { id: 'BOOK-001', code: 'BOOK-001', name: '有账未盘物品A', spec: '标准', category: '补盘', stockUnit: '个', status: '启用' },
-      { id: 'BOOK-002', code: 'BOOK-002', name: '有账未盘物品B', spec: '标准', category: '补盘', stockUnit: '箱', status: '启用' },
-    ];
-    appendItems(candidates.slice(0, 2));
-    return;
-  }
   if (action === '排序') {
     rows.value = [...rows.value].sort((left, right) => left.itemCode.localeCompare(right.itemCode));
     return;
   }
-  ElMessage.info(`${action}功能待接入`);
 };
 
 const formatNumber = (value: number | null, digits: number) => {
@@ -739,23 +902,100 @@ const validateForm = () => {
     ElMessage.warning('请完善盘点明细（实盘数、账面数、账面单价）');
     return false;
   }
+  const missingReasonRow = validRows.find((row) => {
+    const diff = (row.unit1ActualQty ?? 0) - (row.bookQty ?? 0);
+    return diff !== 0 && !row.differenceReasonCode;
+  });
+  if (missingReasonRow) {
+    ElMessage.warning('存在盘点差异时请选择差异原因');
+    return false;
+  }
   return true;
 };
 
-const handleSaveDraft = () => {
-  ElMessage.info('草稿功能待接口接入');
+const buildSavePayload = (submitted: boolean): InventoryCheckSavePayload => ({
+  checkDate: form.checkDate,
+  warehouseName: form.warehouseName,
+  checkRangeType: checkRangeTypeCodeMap[form.checkType],
+  stocktakeFrequency: form.stocktakeFrequency,
+  freezeStock: form.freezeStock,
+  collaborativeFlag: form.collaborativeFlag,
+  planName: form.planName,
+  thirdPartyDocument: form.thirdPartyDocument,
+  salesmanUserId: form.salesmanUserId,
+  salesmanName: form.salesmanName,
+  remark: form.remark,
+  submitted,
+  items: rows.value
+    .filter((row) => row.itemCode)
+    .map((row) => ({
+      itemCode: row.itemCode,
+      itemName: row.itemName,
+      spec: row.spec,
+      category: row.category,
+      unitName: row.unit1,
+      availableQty: row.bookQty,
+      bookQty: row.bookQty,
+      actualQty: row.unit1ActualQty,
+      bookPrice: row.bookPrice,
+      profitLossReason: row.profitLossReason,
+      differenceReasonCode: row.differenceReasonCode,
+      remark: row.remark,
+      extraFields: {},
+    })),
+});
+
+const handleItemSelectorPageChange = (page: number) => {
+  itemSelectorCurrentPage.value = page;
+  void loadItemCandidates();
 };
 
-const handleSave = () => {
+const handleItemSelectorPageSizeChange = (size: number) => {
+  itemSelectorPageSize.value = size;
+  itemSelectorCurrentPage.value = 1;
+  void loadItemCandidates();
+};
+
+const handleSaveDraft = async () => {
   if (isReadonlyMode.value) {
     return;
   }
   if (!validateForm()) {
     return;
   }
-  const documentCode = `PD-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-001`;
-  ElMessage.success(`${isEditMode.value ? '编辑' : '新增'}盘点单成功：${documentCode}`);
-  router.push('/inventory/2/1');
+  if (!currentOrgId.value) {
+    ElMessage.warning('未选择机构');
+    return;
+  }
+  const payload = buildSavePayload(false);
+  if (isCreateMode.value) {
+    await createInventoryCheckApi('inventory-checks', payload, currentOrgId.value);
+  } else if (routeId.value != null) {
+    await updateInventoryCheckApi('inventory-checks', routeId.value, payload, currentOrgId.value);
+  }
+  ElMessage.success('草稿已保存');
+  router.push('/inventory/inventory-checks');
+};
+
+const handleSave = async () => {
+  if (isReadonlyMode.value) {
+    return;
+  }
+  if (!validateForm()) {
+    return;
+  }
+  if (!currentOrgId.value) {
+    ElMessage.warning('未选择机构');
+    return;
+  }
+  const payload = buildSavePayload(true);
+  if (isCreateMode.value) {
+    await createInventoryCheckApi('inventory-checks', payload, currentOrgId.value);
+  } else if (routeId.value != null) {
+    await updateInventoryCheckApi('inventory-checks', routeId.value, payload, currentOrgId.value);
+  }
+  ElMessage.success(`${isEditMode.value ? '编辑' : '新增'}盘点单成功`);
+  router.push('/inventory/inventory-checks');
 };
 
 watch(
@@ -766,6 +1006,19 @@ watch(
     });
   },
   { immediate: true },
+);
+
+watch(
+  () => [form.checkDate, form.warehouseName],
+  () => {
+    if (!isCreateMode.value && !isEditMode.value) {
+      return;
+    }
+    if (hydratingDetail.value) {
+      return;
+    }
+    void refreshBookSnapshots();
+  },
 );
 </script>
 
@@ -813,12 +1066,22 @@ watch(
               />
             </el-form-item>
             <el-form-item label="盘点类型">
-              <el-select v-model="form.checkType" style="width: 100%" :disabled="isReadonlyMode">
+              <el-select v-model="form.checkType" style="width: 100%" :disabled="isReadonlyMode" @change="handleCheckTypeChange">
                 <el-option
                   v-for="option in checkTypeOptions"
                   :key="option"
                   :label="option"
                   :value="option"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="盘点频次">
+              <el-select v-model="form.stocktakeFrequency" style="width: 100%" :disabled="isReadonlyMode">
+                <el-option
+                  v-for="option in stocktakeFrequencyOptions"
+                  :key="option.itemCode"
+                  :label="option.itemLabel"
+                  :value="option.itemCode"
                 />
               </el-select>
             </el-form-item>
@@ -831,6 +1094,12 @@ watch(
                   :value="option"
                 />
               </el-select>
+            </el-form-item>
+            <el-form-item label="冻结库存">
+              <el-switch v-model="form.freezeStock" :disabled="isReadonlyMode" active-text="冻结" inactive-text="不冻结" />
+            </el-form-item>
+            <el-form-item label="协同盘点">
+              <el-switch v-model="form.collaborativeFlag" :disabled="isReadonlyMode" active-text="启用" inactive-text="关闭" />
             </el-form-item>
             <el-form-item label="第三方单据">
               <div class="readonly-field">{{ form.thirdPartyDocument }}</div>
@@ -865,19 +1134,18 @@ watch(
         <h3 class="form-section-title">盘点明细</h3>
         <div class="table-toolbar">
           <el-button v-for="action in [
-            '添加物品',
-            '导出盘点物品',
-            '导入盘点结果',
-            '通过模板新建',
+            '选择盘点物品',
+            '新增空行',
             '移除账面数为 0 的物品',
             '实盘数设置为账面数',
             '实盘数设置为 0',
-            '添加有账未盘物品',
-            '加工品盘点',
-            '加工品导入',
             '排序',
           ]" :key="action" :disabled="isReadonlyMode" @click="handleToolbarAction(action)">
             {{ action }}
+          </el-button>
+          <el-button :loading="exportLoading" @click="handleToolbarAction('导出账面清单')">
+            <el-icon><Download /></el-icon>
+            导出账面清单
           </el-button>
         </div>
 
@@ -890,7 +1158,11 @@ watch(
             </template>
           </el-table-column>
           <el-table-column label="物品编码" min-width="170">
-            <template #default="{ row }">{{ row.itemCode || '-' }}</template>
+            <template #default="{ row, $index }">
+              <el-button text class="item-code-trigger" :disabled="isReadonlyMode" @click="openItemSelector($index)">
+                {{ row.itemCode || '点击选择物品' }}
+              </el-button>
+            </template>
           </el-table-column>
           <el-table-column label="物品名称" min-width="130">
             <template #default="{ row }">{{ row.itemName || '-' }}</template>
@@ -910,12 +1182,10 @@ watch(
           </el-table-column>
           <el-table-column label="单位一实盘数" min-width="120">
             <template #default="{ row }">
-              <el-input-number
+              <CommonNumberInput
                 v-model="row.unit1ActualQty"
                 :min="0"
                 :precision="4"
-                :step="1"
-                controls-position="right"
                 :disabled="isReadonlyMode"
                 @change="syncRowDerived(row)"
               />
@@ -942,9 +1212,22 @@ watch(
           <el-table-column label="盘亏数量" min-width="110">
             <template #default="{ row }">{{ formatNumber(row.lossQty, 4) }}</template>
           </el-table-column>
-          <el-table-column label="盈亏原因" min-width="160">
+          <el-table-column label="差异原因" min-width="160">
             <template #default="{ row }">
-              <el-input v-model="row.profitLossReason" placeholder="请输入盈亏原因" :disabled="isReadonlyMode" />
+              <el-select
+                v-model="row.differenceReasonCode"
+                clearable
+                placeholder="请选择"
+                :disabled="isReadonlyMode || ((row.unit1ActualQty ?? 0) - (row.bookQty ?? 0) === 0)"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="option in differenceReasonOptions"
+                  :key="option.itemCode"
+                  :label="option.itemLabel"
+                  :value="option.itemCode"
+                />
+              </el-select>
             </template>
           </el-table-column>
           <el-table-column label="实盘金额" min-width="120">
@@ -997,11 +1280,7 @@ watch(
       keyword-label="物品"
       keyword-placeholder="支持按物品编码和名称查询..."
       status-label="启用状态"
-      :status-options="[
-        { label: '全部', value: '' },
-        { label: '启用', value: '启用' },
-        { label: '停用', value: '停用' },
-      ]"
+      :status-options="normalizedItemStatusOptions"
       :total="itemSelectorTotal"
       :current-page="itemSelectorCurrentPage"
       :page-size="itemSelectorPageSize"
@@ -1009,8 +1288,8 @@ watch(
       @node-change="handleItemNodeChange"
       @selection-change="handleItemSelectionChange"
       @clear-selection="handleItemClear"
-      @page-change="(page) => { itemSelectorCurrentPage = page; loadItemCandidates(); }"
-      @page-size-change="(size) => { itemSelectorPageSize = size; itemSelectorCurrentPage = 1; loadItemCandidates(); }"
+      @page-change="handleItemSelectorPageChange"
+      @page-size-change="handleItemSelectorPageSizeChange"
       @confirm="handleItemSelectorConfirm"
     />
   </div>
@@ -1040,14 +1319,21 @@ watch(
   min-height: 22px;
 }
 
-.inventory-check-item-table :deep(.el-input-number) {
+.inventory-check-item-table :deep(.common-number-input) {
   width: 100%;
 }
 
 .inventory-check-item-table :deep(.el-input__wrapper),
-.inventory-check-item-table :deep(.el-input-number),
+.inventory-check-item-table :deep(.common-number-input),
 .inventory-check-item-table :deep(.el-select__wrapper) {
   min-height: 24px;
+}
+
+.item-code-trigger {
+  padding: 0;
+  justify-content: flex-start;
+  color: #2563eb;
+  font-weight: 500;
 }
 
 .abnormal-flag {

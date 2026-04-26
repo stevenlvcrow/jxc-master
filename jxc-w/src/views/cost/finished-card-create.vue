@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch, type ComponentPublicInstance } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import type { ComponentPublicInstance } from 'vue';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonNumberInput from '@/components/CommonNumberInput.vue';
 import CommonSelectorDialog, {
   type SelectorColumn,
   type SelectorTreeNode,
@@ -470,7 +470,7 @@ const removeMaterialRow = (index: number) => {
 };
 
 const backToArchive = () => {
-  router.push('/archive/2/1');
+  router.push('/archive/cost-card-archives');
 };
 
 const registerSectionRef = (key: string) => (el: Element | ComponentPublicInstance | null) => {
@@ -534,7 +534,7 @@ watch(() => sessionStore.currentOrgId, () => {
               <el-input v-model="baseForm.name" placeholder="请输入成本卡名称" />
             </el-form-item>
             <el-form-item label="加工份数">
-              <el-input-number v-model="baseForm.processPortions" :min="1" :step="1" controls-position="right" />
+              <CommonNumberInput v-model="baseForm.processPortions" :min="1" />
             </el-form-item>
             <el-form-item label="使用菜品类型">
               <el-radio-group v-model="baseForm.usageDishType">
@@ -547,16 +547,16 @@ watch(() => sessionStore.currentOrgId, () => {
               <el-input v-model="baseForm.usageDishSpec" placeholder="请输入使用菜品规格" />
             </el-form-item>
             <el-form-item label="物品成本（含税）">
-              <el-input-number v-model="baseForm.itemCostTax" :min="0" :precision="2" controls-position="right" />
+              <CommonNumberInput v-model="baseForm.itemCostTax" :min="0" :precision="2" />
             </el-form-item>
             <el-form-item label="其他成本">
-              <el-input-number v-model="baseForm.otherCost" :min="0" :precision="2" controls-position="right" />
+              <CommonNumberInput v-model="baseForm.otherCost" :min="0" :precision="2" />
             </el-form-item>
             <el-form-item label="合计成本（含税）">
               <el-input :model-value="totalCostTax.toFixed(2)" readonly />
             </el-form-item>
             <el-form-item label="备注" class="item-intro-wide-form-item">
-              <el-input v-model="baseForm.remark" type="textarea" :rows="2" placeholder="请输入备注" />
+              <el-input v-model="baseForm.remark" placeholder="请输入备注" />
             </el-form-item>
           </div>
         </section>
@@ -635,27 +635,27 @@ watch(() => sessionStore.currentOrgId, () => {
             </el-table-column>
             <el-table-column label="净料量" width="90">
               <template #default="{ row }">
-                <el-input-number v-model="row.netAmount" :min="0" :precision="4" controls-position="right" />
+                <CommonNumberInput v-model="row.netAmount" :min="0" :precision="4" />
               </template>
             </el-table-column>
             <el-table-column label="净料率" width="90">
               <template #default="{ row }">
-                <el-input-number v-model="row.netRate" :min="0" :max="100" :precision="2" controls-position="right" />
+                <CommonNumberInput v-model="row.netRate" :min="0" :max="100" :precision="2" />
               </template>
             </el-table-column>
             <el-table-column label="毛料量" width="90">
               <template #default="{ row }">
-                <el-input-number v-model="row.grossAmount" :min="0" :precision="4" controls-position="right" />
+                <CommonNumberInput v-model="row.grossAmount" :min="0" :precision="4" />
               </template>
             </el-table-column>
             <el-table-column label="消耗单价（含税）" width="120">
               <template #default="{ row }">
-                <el-input-number v-model="row.taxPrice" :min="0" :precision="4" controls-position="right" />
+                <CommonNumberInput v-model="row.taxPrice" :min="0" :precision="4" />
               </template>
             </el-table-column>
             <el-table-column label="消耗金额(含税)" width="110">
               <template #default="{ row }">
-                <el-input-number v-model="row.taxAmount" :min="0" :precision="2" controls-position="right" />
+                <CommonNumberInput v-model="row.taxAmount" :min="0" :precision="2" />
               </template>
             </el-table-column>
             <el-table-column label="是否主料" width="90">
@@ -678,12 +678,12 @@ watch(() => sessionStore.currentOrgId, () => {
             </el-table-column>
             <el-table-column label="基准单位毛料量" width="126">
               <template #default="{ row }">
-                <el-input-number v-model="row.baseGrossAmount" :min="0" :precision="4" controls-position="right" />
+                <CommonNumberInput v-model="row.baseGrossAmount" :min="0" :precision="4" />
               </template>
             </el-table-column>
             <el-table-column label="基准单位消耗单价（含税）" width="160">
               <template #default="{ row }">
-                <el-input-number v-model="row.baseTaxPrice" :min="0" :precision="4" controls-position="right" />
+                <CommonNumberInput v-model="row.baseTaxPrice" :min="0" :precision="4" />
               </template>
             </el-table-column>
             <el-table-column label="替代料" width="100">

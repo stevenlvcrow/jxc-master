@@ -1,10 +1,11 @@
 package com.boboboom.jxc.identity.infrastructure.persistence.dataobject;
 
-import com.baomidou.mybatisplus.annotation.TableName;
-
 import java.time.LocalDateTime;
 
-@TableName("dev.sys_login_log")
+import com.baomidou.mybatisplus.annotation.TableName;
+
+/** 身份与权限数据对象，映射数据库表记录。 */
+@TableName("sys_login_log")
 public class LoginLogDO extends BaseIdDO {
 
     private Long userId;
@@ -17,76 +18,94 @@ public class LoginLogDO extends BaseIdDO {
     private Long selectedScopeId;
     private LocalDateTime loginAt;
 
+    /** 获取UserId。 */
     public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(Long userId) {
-        this.userId = userId;
+    /** 设置UserId。 */
+    public void setUserId(Long userIdValue) {
+        this.userId = userIdValue;
     }
 
+    /** 获取Phone。 */
     public String getPhone() {
         return phone;
     }
 
-    public void setPhone(String phone) {
-        this.phone = phone;
+    /** 设置Phone。 */
+    public void setPhone(String phoneValue) {
+        this.phone = phoneValue;
     }
 
+    /** 获取LoginResult。 */
     public String getLoginResult() {
         return loginResult;
     }
 
-    public void setLoginResult(String loginResult) {
-        this.loginResult = loginResult;
+    /** 设置LoginResult。 */
+    public void setLoginResult(String loginResultValue) {
+        this.loginResult = loginResultValue;
     }
 
+    /** 获取FailureReason。 */
     public String getFailureReason() {
         return failureReason;
     }
 
-    public void setFailureReason(String failureReason) {
-        this.failureReason = failureReason;
+    /** 设置FailureReason。 */
+    public void setFailureReason(String failureReasonValue) {
+        this.failureReason = failureReasonValue;
     }
 
+    /** 获取ClientIp。 */
     public String getClientIp() {
         return clientIp;
     }
 
-    public void setClientIp(String clientIp) {
-        this.clientIp = clientIp;
+    /** 设置ClientIp。 */
+    public void setClientIp(String clientIpValue) {
+        this.clientIp = clientIpValue;
     }
 
+    /** 获取UserAgent。 */
     public String getUserAgent() {
         return userAgent;
     }
 
-    public void setUserAgent(String userAgent) {
-        this.userAgent = userAgent;
+    /** 设置UserAgent。 */
+    public void setUserAgent(String userAgentValue) {
+        this.userAgent = userAgentValue;
     }
 
+    /** 获取SelectedScope。 */
     public String getSelectedScope() {
         return selectedScope;
     }
 
-    public void setSelectedScope(String selectedScope) {
-        this.selectedScope = selectedScope;
+    /** 设置SelectedScope。 */
+    public void setSelectedScope(String selectedScopeValue) {
+        this.selectedScope = selectedScopeValue;
     }
 
+    /** 获取SelectedScopeId。 */
     public Long getSelectedScopeId() {
         return selectedScopeId;
     }
 
-    public void setSelectedScopeId(Long selectedScopeId) {
-        this.selectedScopeId = selectedScopeId;
+    /** 设置SelectedScopeId。 */
+    public void setSelectedScopeId(Long selectedScopeIdValue) {
+        this.selectedScopeId = selectedScopeIdValue;
     }
 
+    /** 获取LoginAt。 */
     public LocalDateTime getLoginAt() {
         return loginAt;
     }
 
-    public void setLoginAt(LocalDateTime loginAt) {
-        this.loginAt = loginAt;
+    /** 设置LoginAt。 */
+    public void setLoginAt(LocalDateTime loginAtValue) {
+        this.loginAt = loginAtValue;
     }
 }
 

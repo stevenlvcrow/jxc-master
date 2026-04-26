@@ -1,29 +1,13 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.inventory.domain.repository.InventoryBalanceRepository;
-import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundLineRepository;
-import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
-import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
-import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
-import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundBatchRequest;
-import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundCreateRequest;
-import com.boboboom.jxc.workflow.application.service.PurchaseInboundWorkflowService;
-import jakarta.validation.Valid;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -34,12 +18,35 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
+import com.boboboom.jxc.inventory.domain.repository.InventoryBalanceRepository;
+import com.boboboom.jxc.inventory.domain.repository.InventoryTransactionRepository;
+import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundLineRepository;
+import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
+import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundBatchRequest;
+import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundCreateRequest;
+
+/** 采购入库业务服务，负责采购入库单保存、审核、反审核和库存入账。 */
 @Service
 public class PurchaseInboundApplicationService {
 
-    private static final String STATUS_DRAFT = "草稿";
-    private static final String STATUS_SUBMITTED = "已提交";
-    private static final String STATUS_APPROVED = "已审核";
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
+    private static final int DOCUMENT_CODE_RANDOM_MIN = 1000;
+    private static final int DOCUMENT_CODE_RANDOM_MAX = 10000;
+    private static final int DOCUMENT_CODE_MAX_ATTEMPTS = 10;
+    private static final int INVENTORY_QUANTITY_SCALE = 4;
+
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
     private final InventoryBalanceRepository inventoryBalanceRepository;
@@ -49,29 +56,40 @@ public class PurchaseInboundApplicationService {
     private final PurchaseInboundPermissionService purchaseInboundPermissionService;
     private final PurchaseInboundNotificationService purchaseInboundNotificationService;
     private final PurchaseInboundUnapproveService purchaseInboundUnapproveService;
-    private final PurchaseInboundWorkflowService purchaseInboundWorkflowService;
+    private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
+    private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final InventoryItemCategoryValidator inventoryItemCategoryValidator;
 
-    public PurchaseInboundApplicationService(InventoryBalanceRepository inventoryBalanceRepository,
-                                             PurchaseInboundRepository purchaseInboundRepository,
-                                             PurchaseInboundLineRepository purchaseInboundLineRepository,
-                                             InventoryStockMutationService inventoryStockMutationService,
-                                             PurchaseInboundPermissionService purchaseInboundPermissionService,
-                                             PurchaseInboundNotificationService purchaseInboundNotificationService,
-                                             PurchaseInboundUnapproveService purchaseInboundUnapproveService,
-                                             PurchaseInboundWorkflowService purchaseInboundWorkflowService,
-                                             OrgScopeService orgScopeService) {
-        this.inventoryBalanceRepository = inventoryBalanceRepository;
-        this.purchaseInboundRepository = purchaseInboundRepository;
-        this.purchaseInboundLineRepository = purchaseInboundLineRepository;
-        this.inventoryStockMutationService = inventoryStockMutationService;
-        this.purchaseInboundPermissionService = purchaseInboundPermissionService;
-        this.purchaseInboundNotificationService = purchaseInboundNotificationService;
-        this.purchaseInboundUnapproveService = purchaseInboundUnapproveService;
-        this.purchaseInboundWorkflowService = purchaseInboundWorkflowService;
-        this.orgScopeService = orgScopeService;
+    /** 采购入库业务服务，负责采购入库单保存、审核、反审核和库存入账。 */
+    public PurchaseInboundApplicationService(InventoryBalanceRepository inventoryBalanceRepositoryValue,
+                                             PurchaseInboundRepository purchaseInboundRepositoryValue,
+                                             PurchaseInboundLineRepository purchaseInboundLineRepositoryValue,
+                                             InventoryStockMutationService inventoryStockMutationServiceValue,
+                                             PurchaseInboundPermissionService purchaseInboundPermissionServiceValue,
+                                             PurchaseInboundNotificationService purchaseInboundNotificationServiceValue,
+                                              PurchaseInboundUnapproveService purchaseInboundUnapproveServiceValue,
+                                              InventoryDocumentWorkflowService inventoryDocumentWorkflowServiceValue,
+                                              OrgScopeService orgScopeServiceValue,
+                                              DictionaryLookupService dictionaryLookupServiceValue,
+                                              InventoryTransactionRepository inventoryTransactionRepositoryValue,
+                                              InventoryItemCategoryValidator inventoryItemCategoryValidatorValue) {
+        this.inventoryBalanceRepository = inventoryBalanceRepositoryValue;
+        this.purchaseInboundRepository = purchaseInboundRepositoryValue;
+        this.purchaseInboundLineRepository = purchaseInboundLineRepositoryValue;
+        this.inventoryStockMutationService = inventoryStockMutationServiceValue;
+        this.purchaseInboundPermissionService = purchaseInboundPermissionServiceValue;
+        this.purchaseInboundNotificationService = purchaseInboundNotificationServiceValue;
+        this.purchaseInboundUnapproveService = purchaseInboundUnapproveServiceValue;
+        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowServiceValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
+        this.inventoryTransactionRepository = inventoryTransactionRepositoryValue;
+        this.inventoryItemCategoryValidator = inventoryItemCategoryValidatorValue;
     }
 
+    /** 分页查询采购入库单列表。 */
     public PageData<PurchaseInboundRow> listPurchaseInbound(Integer pageNo,
                                                             Integer pageSize,
                                                             String timeType,
@@ -117,6 +135,7 @@ public class PurchaseInboundApplicationService {
         return paginatePurchaseInboundRows(filtered, query.pageNo(), query.pageSize());
     }
 
+    /** 查询采购入库页面操作权限。 */
     public PurchaseInboundPermissionView purchaseInboundPermissions(String orgId) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
@@ -136,6 +155,7 @@ public class PurchaseInboundApplicationService {
         );
     }
 
+    /** 创建采购入库单。 */
     @Transactional
     public IdPayload createPurchaseInbound(String orgId, PurchaseInboundCreateRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
@@ -144,6 +164,7 @@ public class PurchaseInboundApplicationService {
         return new IdPayload(header.getId(), header.getDocumentCode());
     }
 
+    /** 查询采购入库单详情。 */
     public PurchaseInboundDetail detailPurchaseInbound(Long id, String orgId) {
         InventoryScope scope = resolveInventoryScope(orgId);
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
@@ -152,7 +173,7 @@ public class PurchaseInboundApplicationService {
         return new PurchaseInboundDetail(
                 header.getId(),
                 header.getDocumentCode(),
-                defaultIfBlank(header.getStatus(), STATUS_DRAFT),
+                defaultIfBlank(header.getStatus(), draftStatus()),
                 header.getInboundDate() == null ? "" : header.getInboundDate().toString(),
                 defaultIfBlank(header.getWarehouseName(), ""),
                 defaultIfBlank(header.getSupplierName(), ""),
@@ -172,14 +193,21 @@ public class PurchaseInboundApplicationService {
                         .map(line -> new PurchaseInboundDetailLine(
                                 line.getItemCode(),
                                 line.getItemName(),
+                                defaultIfBlank(line.getSpec(), ""),
+                                defaultIfBlank(line.getCategory(), ""),
                                 line.getQuantity() == null ? BigDecimal.ZERO : line.getQuantity(),
                                 line.getUnitPrice() == null ? BigDecimal.ZERO : line.getUnitPrice(),
-                                line.getTaxRate() == null ? BigDecimal.ZERO : line.getTaxRate()
+                                line.getTaxRate() == null ? BigDecimal.ZERO : line.getTaxRate(),
+                                defaultIfBlank(line.getBatchNo(), ""),
+                                defaultIfBlank(line.getManufacturer(), ""),
+                                line.getProductionDate() == null ? "" : line.getProductionDate().toString(),
+                                line.getExpiryDate() == null ? "" : line.getExpiryDate().toString()
                         ))
                         .toList()
         );
     }
 
+    /** 更新采购入库单。 */
     @Transactional
     public void updatePurchaseInbound(Long id, String orgId, PurchaseInboundCreateRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
@@ -187,40 +215,70 @@ public class PurchaseInboundApplicationService {
         savePurchaseInbound(scope, id, request, false, "UPDATE");
     }
 
+    /** 删除采购入库单。 */
     @Transactional
-    public void deletePurchaseInbound(Long id, String orgId) {
+    public PurchaseInboundDeleteResult deletePurchaseInbound(Long id, String orgId) {
         InventoryScope scope = resolveInventoryScope(orgId);
         ensurePurchaseInboundOperationPermission(scope, "DELETE");
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         PurchaseInboundDO header = requireHeader(scope, id, operatorId);
-        if (purchaseInboundWorkflowService.shouldTriggerAction(scope.scopeType(), scope.scopeId(), scope.groupId(), "DELETE")) {
-            if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (canDeleteDirectly(header, operatorId)) {
+            deletePurchaseInboundInternal(header);
+            return PurchaseInboundDeleteResult.deleted(header.getId());
+        }
+        if (inventoryDocumentWorkflowService.shouldTriggerAction(
+                InventoryDocumentType.PURCHASE_INBOUND,
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                "DELETE"
+        )) {
+            if (Objects.equals(header.getStatus(), approvedStatus())) {
                 throw new BusinessException("已审核单据请先反审核后再删除");
             }
             saveDeleteWorkflow(scope, header, operatorId);
-            return;
+            return PurchaseInboundDeleteResult.submitted(header.getId());
         }
         deletePurchaseInboundInternal(header);
+        return PurchaseInboundDeleteResult.deleted(header.getId());
     }
 
+    /** 批量删除采购入库单。 */
     @Transactional
-    public void batchDeletePurchaseInbound(String orgId, PurchaseInboundBatchRequest request) {
+    public PurchaseInboundBatchDeleteResult batchDeletePurchaseInbound(String orgId, PurchaseInboundBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
         ensurePurchaseInboundOperationPermission(scope, "DELETE");
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         List<PurchaseInboundDO> headers = requireHeaders(scope, request.ids(), operatorId);
+        int deletedCount = 0;
+        int submittedCount = 0;
         for (PurchaseInboundDO header : headers) {
-            if (purchaseInboundWorkflowService.shouldTriggerAction(scope.scopeType(), scope.scopeId(), scope.groupId(), "DELETE")) {
-                if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+            if (canDeleteDirectly(header, operatorId)) {
+                deletePurchaseInboundInternal(header);
+                deletedCount++;
+                continue;
+            }
+            if (inventoryDocumentWorkflowService.shouldTriggerAction(
+                    InventoryDocumentType.PURCHASE_INBOUND,
+                    scope.scopeType(),
+                    scope.scopeId(),
+                    scope.groupId(),
+                    "DELETE"
+            )) {
+                if (Objects.equals(header.getStatus(), approvedStatus())) {
                     throw new BusinessException("已审核单据请先反审核后再删除");
                 }
                 saveDeleteWorkflow(scope, header, operatorId);
+                submittedCount++;
                 continue;
             }
             deletePurchaseInboundInternal(header);
+            deletedCount++;
         }
+        return PurchaseInboundBatchDeleteResult.of(deletedCount, submittedCount);
     }
 
+    /** 批量审核通过单据。 */
     @Transactional
     public void batchApprove(String orgId, PurchaseInboundBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
@@ -231,6 +289,7 @@ public class PurchaseInboundApplicationService {
         }
     }
 
+    /** 批量撤销单据审核。 */
     @Transactional
     public void batchUnapprove(String orgId, PurchaseInboundBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
@@ -253,29 +312,55 @@ public class PurchaseInboundApplicationService {
         }
     }
 
-    public PageData<InventoryBalanceRow> listBalances(Integer pageNum, Integer pageSize, String warehouse, String itemName, String orgId) {
+    /** 分页查询库存余额列表。 */
+    public PageData<InventoryBalanceRow> listBalances(Integer pageNum,
+                                                      Integer pageSize,
+                                                      String warehouse,
+                                                      String itemName,
+                                                      String checkDate,
+                                                      String orgId) {
         InventoryScope scope = resolveInventoryScope(orgId);
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         String warehouseValue = trimNullable(warehouse);
         String itemKeyword = toLower(trimNullable(itemName));
-        List<InventoryBalanceRow> filtered = inventoryBalanceRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId())
+        LocalDate snapshotDate = parseDateNullable(checkDate, "盘点日期格式不正确");
+        List<InventoryBalanceRow> source = snapshotDate == null
+                ? inventoryBalanceRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId())
+                    .stream()
+                    .map(this::toBalanceRow)
+                    .toList()
+                : findHistoricalBalances(scope.scopeType(), scope.scopeId(), warehouseValue, snapshotDate.atTime(LocalTime.MAX));
+        List<InventoryBalanceRow> filtered = source
                 .stream()
-                .filter(row -> !StringUtils.hasText(warehouseValue) || Objects.equals(row.getWarehouseName(), warehouseValue))
+                .filter(row -> !StringUtils.hasText(warehouseValue) || Objects.equals(row.warehouse(), warehouseValue))
                 .filter(row -> !StringUtils.hasText(itemKeyword)
-                        || toLower(row.getItemName()).contains(itemKeyword)
-                        || toLower(row.getItemCode()).contains(itemKeyword))
-                .map(row -> new InventoryBalanceRow(
-                        row.getWarehouseName(),
-                        row.getItemCode(),
-                        row.getItemName(),
-                        row.getQuantity() == null ? "0" : row.getQuantity().stripTrailingZeros().toPlainString(),
-                        formatDateTime(row.getUpdatedAt())
-                ))
+                        || toLower(row.itemName()).contains(itemKeyword)
+                        || toLower(row.itemCode()).contains(itemKeyword))
                 .toList();
         int fromIndex = Math.min((safePageNum - 1) * safePageSize, filtered.size());
         int toIndex = Math.min(fromIndex + safePageSize, filtered.size());
         return new PageData<>(filtered.subList(fromIndex, toIndex), filtered.size(), safePageNum, safePageSize);
+    }
+
+    private InventoryBalanceRow toBalanceRow(com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO row) {
+        return new InventoryBalanceRow(
+                row.getWarehouseName(),
+                row.getItemCode(),
+                row.getItemName(),
+                row.getQuantity() == null ? "0" : row.getQuantity().stripTrailingZeros().toPlainString(),
+                formatDateTime(row.getUpdatedAt())
+        );
+    }
+
+    private List<InventoryBalanceRow> findHistoricalBalances(String scopeType,
+                                                             Long scopeId,
+                                                             String warehouse,
+                                                             LocalDateTime cutoff) {
+        return inventoryTransactionRepository.findLatestBalancesBefore(scopeType, scopeId, warehouse, cutoff)
+                .stream()
+                .map(this::toBalanceRow)
+                .toList();
     }
 
     private List<PurchaseInboundDO> requireHeaders(InventoryScope scope, List<Long> ids) {
@@ -332,13 +417,19 @@ public class PurchaseInboundApplicationService {
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         PurchaseInboundDO header = buildPurchaseInboundHeader(scope, id, request, createMode, operatorId);
         persistPurchaseInbound(scope, header, request, createMode);
-        boolean workflowApplied = purchaseInboundWorkflowService.syncOnAction(scope.scopeType(), scope.scopeId(), scope.groupId(), header, operatorId, action);
+        boolean workflowApplied = inventoryDocumentWorkflowService.syncPurchaseInboundOnAction(
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                header,
+                operatorId,
+                action
+        );
         if (!workflowApplied) {
             header.setPendingOperation("NONE");
             purchaseInboundRepository.update(header);
             return header;
         }
-        purchaseInboundNotificationService.recordSubmit(scope.scopeType(), scope.scopeId(), scope.groupId(), header);
         return header;
     }
 
@@ -350,7 +441,7 @@ public class PurchaseInboundApplicationService {
         PurchaseInboundDO header = createMode
                 ? new PurchaseInboundDO()
                 : requireHeader(scope, id, operatorId);
-        if (!createMode && Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (!createMode && Objects.equals(header.getStatus(), approvedStatus())) {
             throw new BusinessException("已审核单据不允许编辑，请先反审核");
         }
         initializeCreatedHeader(scope, header, createMode, operatorId);
@@ -395,15 +486,26 @@ public class PurchaseInboundApplicationService {
         header.setSalesmanName(trimNullable(request.salesmanName()));
         header.setUpstreamCode(trimNullable(request.upstreamCode()));
         header.setRemark(trimNullable(request.remark()));
-        header.setStatus(createMode || !StringUtils.hasText(header.getStatus()) ? STATUS_SUBMITTED : header.getStatus());
+        header.setStatus(createMode || !StringUtils.hasText(header.getStatus()) ? submittedStatus() : header.getStatus());
     }
 
     private void persistPurchaseInbound(InventoryScope scope,
                                         PurchaseInboundDO header,
                                         PurchaseInboundCreateRequest request,
                                         boolean createMode) {
+        validateItemCategories(scope, request.items());
         persistPurchaseInboundHeader(header, createMode);
         replacePurchaseInboundLines(header, request.items());
+    }
+
+    private void validateItemCategories(InventoryScope scope, List<PurchaseInboundCreateRequest.LineItem> items) {
+        inventoryItemCategoryValidator.validateLines(
+                scope.scopeType(),
+                scope.scopeId(),
+                items.stream()
+                        .map(item -> new InventoryItemCategoryValidator.LineCategory(item.itemCode(), item.category()))
+                        .toList()
+        );
     }
 
     private void persistPurchaseInboundHeader(PurchaseInboundDO header, boolean createMode) {
@@ -428,9 +530,15 @@ public class PurchaseInboundApplicationService {
         line.setInboundId(headerId);
         line.setItemCode(requiredTrim(item.itemCode(), "物品编码不能为空"));
         line.setItemName(requiredTrim(item.itemName(), "物品名称不能为空"));
+        line.setSpec(trimNullable(item.spec()));
+        line.setCategory(trimNullable(item.category()));
         line.setQuantity(normalizePositive(item.quantity(), "数量必须大于0"));
         line.setUnitPrice(normalizeNonNegative(item.unitPrice(), "单价不能小于0"));
         line.setTaxRate(normalizeNonNegative(item.taxRate() == null ? BigDecimal.ZERO : item.taxRate(), "税率不能小于0"));
+        line.setBatchNo(trimNullable(item.batchNo()));
+        line.setManufacturer(trimNullable(item.manufacturer()));
+        line.setProductionDate(parseDateNullable(item.productionDate(), "生产日期格式不正确"));
+        line.setExpiryDate(parseDateNullable(item.expiryDate(), "到期日期格式不正确"));
         return line;
     }
 
@@ -470,7 +578,7 @@ public class PurchaseInboundApplicationService {
                                                     String remark) {
         return new PurchaseInboundListQuery(
                 pageNo == null || pageNo < 1 ? 1 : pageNo,
-                pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200),
+                pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE),
                 trimNullable(timeType),
                 parseDateNullable(startDate, "开始日期格式不正确"),
                 parseDateNullable(endDate, "结束日期格式不正确"),
@@ -492,8 +600,12 @@ public class PurchaseInboundApplicationService {
 
     private List<PurchaseInboundDO> loadVisibleHeaders(InventoryScope scope, PurchaseInboundListAccess access, Long currentUserId) {
         return purchaseInboundRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
-                .filter(header -> access.viewAll() || access.canReview() || Objects.equals(header.getCreatedBy(), currentUserId))
+                .filter(header -> access.viewAll() || access.canReview() || belongsToOperator(header, currentUserId))
                 .toList();
+    }
+
+    private boolean belongsToOperator(PurchaseInboundDO header, Long operatorId) {
+        return Objects.equals(header.getCreatedBy(), operatorId) || Objects.equals(header.getSalesmanUserId(), operatorId);
     }
 
     private PageData<PurchaseInboundRow> emptyPurchaseInboundPage(PurchaseInboundListQuery query) {
@@ -502,19 +614,76 @@ public class PurchaseInboundApplicationService {
 
     private boolean matchListQuery(PurchaseInboundDO header, List<PurchaseInboundLineDO> lines, PurchaseInboundListQuery query) {
         return matchDate(header, query.timeType(), query.startDate(), query.endDate())
-                && (!StringUtils.hasText(query.warehouse()) || Objects.equals(header.getWarehouseName(), query.warehouse()))
-                && (!StringUtils.hasText(query.documentCode()) || toLower(header.getDocumentCode()).contains(query.documentCode()))
-                && (!StringUtils.hasText(query.supplier()) || Objects.equals(header.getSupplierName(), query.supplier()))
-                && (!StringUtils.hasText(query.documentStatus()) || Objects.equals(header.getStatus(), query.documentStatus()))
-                && (!StringUtils.hasText(query.reviewStatus()) || Objects.equals(deriveReviewStatus(header), query.reviewStatus()))
-                && (!StringUtils.hasText(query.reconciliationStatus()) || Objects.equals(deriveReconciliationStatus(), query.reconciliationStatus()))
-                && (!StringUtils.hasText(query.splitStatus()) || Objects.equals(deriveSplitStatus(), query.splitStatus()))
-                && (!StringUtils.hasText(query.upstreamCode()) || toLower(header.getUpstreamCode()).contains(query.upstreamCode()))
-                && (!StringUtils.hasText(query.invoiceStatus()) || Objects.equals(deriveInvoiceStatus(), query.invoiceStatus()))
-                && (!StringUtils.hasText(query.inspectionCount()) || Objects.equals(deriveInspectionCount(), query.inspectionCount()))
-                && (!StringUtils.hasText(query.printStatus()) || Objects.equals(derivePrintStatus(), query.printStatus()))
-                && (!StringUtils.hasText(query.remark()) || toLower(header.getRemark()).contains(query.remark()))
+                && matchListHeaderQuery(header, query)
+                && matchListDerivedQuery(header, query)
                 && matchItem(lines, query.itemName());
+    }
+
+    private boolean matchListHeaderQuery(PurchaseInboundDO header, PurchaseInboundListQuery query) {
+        return matchListWarehouse(header, query.warehouse())
+                && matchListDocumentCode(header, query.documentCode())
+                && matchListSupplier(header, query.supplier())
+                && matchListDocumentStatus(header, query.documentStatus())
+                && matchListUpstreamCode(header, query.upstreamCode())
+                && matchListRemark(header, query.remark());
+    }
+
+    private boolean matchListDerivedQuery(PurchaseInboundDO header, PurchaseInboundListQuery query) {
+        return matchListReviewStatus(header, query.reviewStatus())
+                && matchListReconciliationStatus(query.reconciliationStatus())
+                && matchListSplitStatus(query.splitStatus())
+                && matchListInvoiceStatus(query.invoiceStatus())
+                && matchListInspectionCount(query.inspectionCount())
+                && matchListPrintStatus(query.printStatus());
+    }
+
+    private boolean matchListWarehouse(PurchaseInboundDO header, String warehouse) {
+        return !StringUtils.hasText(warehouse) || Objects.equals(header.getWarehouseName(), warehouse);
+    }
+
+    private boolean matchListDocumentCode(PurchaseInboundDO header, String documentCode) {
+        return !StringUtils.hasText(documentCode) || toLower(header.getDocumentCode()).contains(documentCode);
+    }
+
+    private boolean matchListSupplier(PurchaseInboundDO header, String supplier) {
+        return !StringUtils.hasText(supplier) || Objects.equals(header.getSupplierName(), supplier);
+    }
+
+    private boolean matchListDocumentStatus(PurchaseInboundDO header, String documentStatus) {
+        return !StringUtils.hasText(documentStatus) || Objects.equals(header.getStatus(), documentStatus);
+    }
+
+    private boolean matchListReviewStatus(PurchaseInboundDO header, String reviewStatus) {
+        return !StringUtils.hasText(reviewStatus) || Objects.equals(deriveReviewStatus(header), reviewStatus);
+    }
+
+    private boolean matchListReconciliationStatus(String reconciliationStatus) {
+        return !StringUtils.hasText(reconciliationStatus)
+                || Objects.equals(deriveReconciliationStatus(), reconciliationStatus);
+    }
+
+    private boolean matchListSplitStatus(String splitStatus) {
+        return !StringUtils.hasText(splitStatus) || Objects.equals(deriveSplitStatus(), splitStatus);
+    }
+
+    private boolean matchListUpstreamCode(PurchaseInboundDO header, String upstreamCode) {
+        return !StringUtils.hasText(upstreamCode) || toLower(header.getUpstreamCode()).contains(upstreamCode);
+    }
+
+    private boolean matchListInvoiceStatus(String invoiceStatus) {
+        return !StringUtils.hasText(invoiceStatus) || Objects.equals(deriveInvoiceStatus(), invoiceStatus);
+    }
+
+    private boolean matchListInspectionCount(String inspectionCount) {
+        return !StringUtils.hasText(inspectionCount) || Objects.equals(deriveInspectionCount(), inspectionCount);
+    }
+
+    private boolean matchListPrintStatus(String printStatus) {
+        return !StringUtils.hasText(printStatus) || Objects.equals(derivePrintStatus(), printStatus);
+    }
+
+    private boolean matchListRemark(PurchaseInboundDO header, String remark) {
+        return !StringUtils.hasText(remark) || toLower(header.getRemark()).contains(remark);
     }
 
     private PurchaseInboundRow toPurchaseInboundRow(PurchaseInboundDO header,
@@ -532,7 +701,7 @@ public class PurchaseInboundApplicationService {
                 defaultIfBlank(header.getWarehouseName(), "-"),
                 defaultIfBlank(header.getSupplierName(), "-"),
                 formatInboundAmount(lines),
-                defaultIfBlank(header.getStatus(), STATUS_DRAFT),
+                defaultIfBlank(header.getStatus(), draftStatus()),
                 deriveReviewStatus(header),
                 deriveReconciliationStatus(),
                 deriveInvoiceStatus(),
@@ -554,7 +723,11 @@ public class PurchaseInboundApplicationService {
                     BigDecimal taxRate = line.getTaxRate() == null ? BigDecimal.ZERO : line.getTaxRate();
                     return unitPrice
                             .multiply(quantity)
-                            .multiply(BigDecimal.ONE.add(taxRate.divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP)));
+                            .multiply(BigDecimal.ONE.add(taxRate.divide(
+                                    new BigDecimal("100"),
+                                    INVENTORY_QUANTITY_SCALE,
+                                    RoundingMode.HALF_UP
+                            )));
                 })
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
@@ -580,18 +753,19 @@ public class PurchaseInboundApplicationService {
                                PurchaseInboundDO header,
                                List<PurchaseInboundLineDO> lines,
                                BatchApproveContext context) {
-        if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (Objects.equals(header.getStatus(), approvedStatus())) {
             return;
         }
-        String approverRole = purchaseInboundWorkflowService.resolveApprovalRoleLabel(
+        String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
+                InventoryDocumentType.PURCHASE_INBOUND,
                 scope.scopeType(),
                 scope.scopeId(),
                 scope.groupId(),
                 context.operatorId(),
                 header.getWorkflowTaskName()
         );
-        PurchaseInboundWorkflowService.ApprovalResult workflowResult =
-                purchaseInboundWorkflowService.completeCurrentTask(header, context.operatorId());
+        InventoryDocumentWorkflowService.ApprovalResult workflowResult =
+                inventoryDocumentWorkflowService.completePurchaseInboundCurrentTask(header, context.operatorId());
         if (!workflowResult.workflowApplied()) {
             approveWithoutWorkflow(scope, header, lines, context, approverRole);
             return;
@@ -624,7 +798,7 @@ public class PurchaseInboundApplicationService {
                                      List<PurchaseInboundLineDO> lines,
                                      BatchApproveContext context,
                                      String approverRole,
-                                     PurchaseInboundWorkflowService.ApprovalResult workflowResult) {
+                                     InventoryDocumentWorkflowService.ApprovalResult workflowResult) {
         if (workflowResult.completed()) {
             if (deletePendingHeaderIfNecessary(header)) {
                 return;
@@ -642,6 +816,14 @@ public class PurchaseInboundApplicationService {
                 approverRole,
                 LocalDateTime.now()
         );
+        if (!workflowResult.completed()) {
+            purchaseInboundNotificationService.recordSubmit(
+                    scope.scopeType(),
+                    scope.scopeId(),
+                    scope.groupId(),
+                    header
+            );
+        }
     }
 
     private boolean deletePendingHeaderIfNecessary(PurchaseInboundDO header) {
@@ -656,6 +838,7 @@ public class PurchaseInboundApplicationService {
                                     PurchaseInboundDO header,
                                     List<PurchaseInboundLineDO> lines,
                                     Long operatorId) {
+        validatePersistedItemCategories(scope, lines);
         for (PurchaseInboundLineDO line : lines) {
             inventoryStockMutationService.applyDelta(
                     scope.scopeType(),
@@ -666,19 +849,37 @@ public class PurchaseInboundApplicationService {
                     line.getItemCode(),
                     line.getItemName(),
                     line.getQuantity(),
+                    line.getQuantity().multiply(line.getUnitPrice()),
+                    header.getInboundDate(),
+                    new InventoryStockMutationService.BatchInfo(
+                            line.getBatchNo(),
+                            line.getManufacturer(),
+                            line.getProductionDate(),
+                            line.getExpiryDate()
+                    ),
                     "PURCHASE_INBOUND_APPROVE",
                     operatorId
             );
         }
-        header.setStatus(STATUS_APPROVED);
+        header.setStatus(approvedStatus());
         header.setApprovedBy(operatorId);
         header.setApprovedAt(LocalDateTime.now());
         header.setRejectionReason(null);
         header.setPendingOperation("NONE");
     }
 
+    private void validatePersistedItemCategories(InventoryScope scope, List<PurchaseInboundLineDO> lines) {
+        inventoryItemCategoryValidator.validateLines(
+                scope.scopeType(),
+                scope.scopeId(),
+                lines.stream()
+                        .map(line -> new InventoryItemCategoryValidator.LineCategory(line.getItemCode(), line.getCategory()))
+                        .toList()
+        );
+    }
+
     private void markHeaderSubmitted(PurchaseInboundDO header) {
-        header.setStatus(STATUS_SUBMITTED);
+        header.setStatus(submittedStatus());
         header.setApprovedBy(null);
         header.setApprovedAt(null);
     }
@@ -705,7 +906,7 @@ public class PurchaseInboundApplicationService {
     }
 
     private String deriveReviewStatus(PurchaseInboundDO header) {
-        return Objects.equals(header.getStatus(), STATUS_APPROVED) ? "已复审" : "未复审";
+        return Objects.equals(header.getStatus(), approvedStatus()) ? "已审核" : "未审核";
     }
 
     private String deriveReconciliationStatus() {
@@ -730,8 +931,8 @@ public class PurchaseInboundApplicationService {
 
     private String generateDocumentCode(InventoryScope scope) {
         String datePart = LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE);
-        for (int i = 0; i < 10; i++) {
-            int rand = ThreadLocalRandom.current().nextInt(1000, 10000);
+        for (int i = 0; i < DOCUMENT_CODE_MAX_ATTEMPTS; i++) {
+            int rand = ThreadLocalRandom.current().nextInt(DOCUMENT_CODE_RANDOM_MIN, DOCUMENT_CODE_RANDOM_MAX);
             String code = "RK-" + datePart + "-" + rand;
             Long count = purchaseInboundRepository.countByScopeAndDocumentCode(scope.scopeType(), scope.scopeId(), code);
             if (count == null || count == 0L) {
@@ -792,14 +993,14 @@ public class PurchaseInboundApplicationService {
         if (value == null || value.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessException(message);
         }
-        return value.setScale(4, RoundingMode.HALF_UP);
+        return value.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
     }
 
     private BigDecimal normalizeNonNegative(BigDecimal value, String message) {
         if (value == null || value.compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException(message);
         }
-        return value.setScale(4, RoundingMode.HALF_UP);
+        return value.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
     }
 
     private String requiredTrim(String value, String message) {
@@ -821,8 +1022,25 @@ public class PurchaseInboundApplicationService {
         return StringUtils.hasText(value) ? value : fallback;
     }
 
+    private String draftStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.DRAFT);
+    }
+
+    private String submittedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.SUBMITTED);
+    }
+
+    private String approvedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.APPROVED);
+    }
+
     private String toLower(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean canDeleteDirectly(PurchaseInboundDO header, Long operatorId) {
+        return Objects.equals(header.getCreatedBy(), operatorId)
+                && !Objects.equals(header.getStatus(), approvedStatus());
     }
 
     private String formatDateTime(LocalDateTime value) {
@@ -833,28 +1051,70 @@ public class PurchaseInboundApplicationService {
     }
 
     private void deletePurchaseInboundInternal(PurchaseInboundDO header) {
-        if (Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (Objects.equals(header.getStatus(), approvedStatus())) {
             throw new BusinessException("已审核单据请先反审核后再删除");
         }
         if (StringUtils.hasText(header.getWorkflowInstanceId())) {
-            purchaseInboundWorkflowService.cancelWorkflowInstanceIfRunning(header);
+            inventoryDocumentWorkflowService.cancelPurchaseInboundWorkflowInstanceIfRunning(header);
         }
         purchaseInboundLineRepository.deleteByInboundId(header.getId());
-        purchaseInboundRepository.deleteById(header.getId());
+        if (purchaseInboundRepository.deleteById(header.getId()) != 1) {
+            throw new BusinessException("采购入库单删除失败，请刷新后重试");
+        }
     }
 
     private void saveDeleteWorkflow(InventoryScope scope, PurchaseInboundDO header, Long operatorId) {
         header.setPendingOperation("DELETE");
-        purchaseInboundWorkflowService.syncOnAction(scope.scopeType(), scope.scopeId(), scope.groupId(), header, operatorId, "DELETE");
-        header.setStatus(STATUS_SUBMITTED);
+        inventoryDocumentWorkflowService.syncPurchaseInboundOnAction(
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                header,
+                operatorId,
+                "DELETE"
+        );
+        header.setStatus(submittedStatus());
         header.setApprovedBy(null);
         header.setApprovedAt(null);
         purchaseInboundRepository.update(header);
     }
 
+    /** 库存载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id, String documentCode) {
     }
 
+    /** 采购入库删除结果，区分真实删除和提交删除审批。 */
+    public record PurchaseInboundDeleteResult(String status, String message, Long id) {
+
+        private static PurchaseInboundDeleteResult deleted(Long id) {
+            return new PurchaseInboundDeleteResult("DELETED", "删除成功", id);
+        }
+
+        private static PurchaseInboundDeleteResult submitted(Long id) {
+            return new PurchaseInboundDeleteResult("SUBMITTED", "删除审批已提交，审批通过后才会删除", id);
+        }
+    }
+
+    /** 采购入库批量删除结果，区分真实删除和提交删除审批数量。 */
+    public record PurchaseInboundBatchDeleteResult(String status, String message, int deletedCount, int submittedCount) {
+
+        private static PurchaseInboundBatchDeleteResult of(int deletedCount, int submittedCount) {
+            if (submittedCount == 0) {
+                return new PurchaseInboundBatchDeleteResult("DELETED", "批量删除成功", deletedCount, submittedCount);
+            }
+            if (deletedCount == 0) {
+                return new PurchaseInboundBatchDeleteResult("SUBMITTED", "删除审批已提交，审批通过后才会删除", deletedCount, submittedCount);
+            }
+            return new PurchaseInboundBatchDeleteResult(
+                    "PARTIAL_SUBMITTED",
+                    "已删除" + deletedCount + "条，另有" + submittedCount + "条已提交删除审批",
+                    deletedCount,
+                    submittedCount
+            );
+        }
+    }
+
+    /** 库存数据模型，承载采购入库明细数据。 */
     public record PurchaseInboundDetail(Long id,
                                         String documentCode,
                                         String status,
@@ -876,13 +1136,21 @@ public class PurchaseInboundApplicationService {
                                         List<PurchaseInboundDetailLine> items) {
     }
 
+    /** 库存数据模型，承载采购入库明细明细行数据。 */
     public record PurchaseInboundDetailLine(String itemCode,
                                             String itemName,
-                                            BigDecimal quantity,
-                                            BigDecimal unitPrice,
-                                            BigDecimal taxRate) {
+                                            String spec,
+                                            String category,
+                                        BigDecimal quantity,
+                                        BigDecimal unitPrice,
+                                        BigDecimal taxRate,
+                                        String batchNo,
+                                        String manufacturer,
+                                        String productionDate,
+                                        String expiryDate) {
     }
 
+    /** 库存行数据模型，承载列表或报表明细。 */
     public record PurchaseInboundRow(Long id,
                                      String documentCode,
                                      String inboundDate,
@@ -903,6 +1171,7 @@ public class PurchaseInboundApplicationService {
                                      String workflowTaskName) {
     }
 
+    /** 库存行数据模型，承载列表或报表明细。 */
     public record InventoryBalanceRow(String warehouse,
                                       String itemCode,
                                       String itemName,
@@ -910,9 +1179,11 @@ public class PurchaseInboundApplicationService {
                                       String updatedAt) {
     }
 
+    /** 库存分页数据模型，承载列表数据和分页信息。 */
     public record PageData<T>(List<T> list, long total, int pageNo, int pageSize) {
     }
 
+    /** 库存视图模型，承载页面展示数据。 */
     public record PurchaseInboundPermissionView(boolean canCreate,
                                                 boolean canUpdate,
                                                 boolean canDelete,

@@ -1,11 +1,7 @@
 package com.boboboom.jxc.config;
 
-import com.boboboom.jxc.identity.application.auth.LoginSession;
-import com.boboboom.jxc.identity.application.auth.TokenService;
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.AuthorityUtils;
@@ -14,17 +10,27 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
+import com.boboboom.jxc.identity.application.auth.LoginSession;
+import com.boboboom.jxc.identity.application.auth.TokenService;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+/** 令牌认证过滤器，负责从请求中解析登录令牌并写入安全上下文。 */
 @Component
 public class TokenAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final String BEARER_PREFIX = "Bearer ";
 
     public static final String AUTH_FAILURE_MESSAGE_ATTR = TokenAuthenticationFilter.class.getName() + ".AUTH_FAILURE_MESSAGE";
 
     private final TokenService tokenService;
 
-    public TokenAuthenticationFilter(TokenService tokenService) {
-        this.tokenService = tokenService;
+    /** 令牌认证过滤器，负责从请求中解析登录令牌并写入安全上下文。 */
+    public TokenAuthenticationFilter(TokenService tokenServiceValue) {
+        this.tokenService = tokenServiceValue;
     }
 
     @Override
@@ -57,8 +63,8 @@ public class TokenAuthenticationFilter extends OncePerRequestFilter {
 
     private String resolveToken(HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            return authHeader.substring(7);
+        if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
+            return authHeader.substring(BEARER_PREFIX.length());
         }
         return request.getHeader("X-Auth-Token");
     }

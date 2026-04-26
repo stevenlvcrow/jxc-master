@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import type { UploadUserFile } from 'element-plus';
-import type { ComponentPublicInstance } from 'vue';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, type UploadUserFile } from 'element-plus';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, type ComponentPublicInstance } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   type CreateSupplierPayload,
@@ -16,6 +14,7 @@ import { useSessionStore } from '@/stores/session';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
 import CommonCodeField from '@/components/CommonCodeField.vue';
 import CommonMnemonicField from '@/components/CommonMnemonicField.vue';
+import CommonNumberInput from '@/components/CommonNumberInput.vue';
 
 type SectionKey = 'basic' | 'params' | 'supply' | 'qualification' | 'contract' | 'finance' | 'invoice';
 
@@ -263,7 +262,7 @@ onMounted(async () => {
     try {
       await loadSupplierDetail(supplierId.value);
     } catch {
-      router.push('/archive/3/1');
+      router.push('/archive/suppliers');
     }
   }
 });
@@ -273,7 +272,7 @@ onBeforeUnmount(() => {
 });
 
 const goBack = () => {
-  router.push('/archive/3/1');
+  router.push('/archive/suppliers');
 };
 
 const saveDraft = () => {
@@ -524,7 +523,7 @@ const saveSupplier = async () => {
       await createSupplierApi(payload, resolveSupplierOrgId());
     }
     ElMessage.success(isEditMode.value ? '供应商更新成功' : '供应商保存成功');
-    router.push('/archive/3/1');
+    router.push('/archive/suppliers');
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
     const fieldPath = resolveFirstValidationField(message);
@@ -580,13 +579,14 @@ const saveSupplier = async () => {
                 :data="supplierCategoryTree"
                 node-key="id"
                 :props="{ label: 'label', children: 'children', value: 'label' }"
+                default-expand-all
                 check-strictly
                 clearable
                 placeholder="请选择供货商类别"
               />
             </el-form-item>
             <el-form-item label="税率(%)" data-field="taxRate">
-              <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" :step="0.5" />
+              <CommonNumberInput v-model="form.taxRate" :min="0" :max="100" :precision="2" />
             </el-form-item>
             <el-form-item label="启用状态" data-field="status">
               <el-switch v-model="form.enabled" active-text="启用" inactive-text="停用" />
@@ -604,7 +604,7 @@ const saveSupplier = async () => {
               <el-input v-model="form.contactAddress" placeholder="请输入联系地址" />
             </el-form-item>
             <el-form-item label="备注" class="supplier-form-full" data-field="remark">
-              <el-input v-model="form.remark" type="textarea" :rows="3" placeholder="请输入备注" />
+              <el-input v-model="form.remark" placeholder="请输入备注" />
             </el-form-item>
           </div>
         </div>

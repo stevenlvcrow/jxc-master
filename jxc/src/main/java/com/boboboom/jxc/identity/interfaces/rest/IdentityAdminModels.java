@@ -24,21 +24,6 @@ record GroupAdminView(Long id,
                       LocalDateTime createdAt) {
 }
 
-record BindGroupAdminResult(Long groupId,
-                            String groupName,
-                            Long userId,
-                            String phone,
-                            String realName) {
-}
-
-record GroupAdminCandidateView(Long userId,
-                               String realName,
-                               String phone,
-                               Long storeId,
-                               String storeCode,
-                               String storeName) {
-}
-
 record StoreAdminView(Long id,
                       Long groupId,
                       String storeCode,
@@ -57,12 +42,24 @@ record UserAdminView(Long id,
                      String phone,
                      String status,
                      LocalDateTime createdAt,
+                     List<UserGroupScopeView> groups,
                      List<RoleAssignmentView> roles) {
+}
+
+record UserGroupScopeView(Long groupId,
+                          String groupName) {
 }
 
 record SalesmanCandidateView(Long userId,
                              String realName,
                              String phone) {
+}
+
+record UserOptionView(Long userId,
+                      String username,
+                      String realName,
+                      String phone,
+                      String status) {
 }
 
 record RoleAdminView(Long id,
@@ -85,9 +82,24 @@ record MenuAdminView(Long id,
                      Long parentId,
                      String menuType,
                      String routePath,
+                     String componentKey,
                      String permissionCode,
                      String status,
                      Integer sortNo) {
+}
+
+record MenuMaintenanceView(Long id,
+                           String menuCode,
+                           String menuName,
+                           Long parentId,
+                           String menuType,
+                           String routePath,
+                           String componentKey,
+                           String permissionCode,
+                           String icon,
+                           Integer sortNo,
+                           Boolean visible,
+                           String status) {
 }
 
 record WarehouseAdminView(Long id,

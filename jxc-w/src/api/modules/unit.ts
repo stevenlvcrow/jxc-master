@@ -1,7 +1,14 @@
 import { apiClient } from '@/api/http-client';
 
-export type UnitType = 'STANDARD' | 'AUXILIARY';
-export type UnitStatus = 'ENABLED' | 'DISABLED';
+export type UnitType = string;
+export type UnitStatus = string;
+
+export type UnitPage = {
+  list: UnitItem[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
+};
 
 export type UnitItem = {
   id: number;
@@ -14,6 +21,8 @@ export type UnitItem = {
 };
 
 export type UnitQuery = {
+  pageNum?: number;
+  pageSize?: number;
   keyword?: string;
   status?: UnitStatus | 'ALL';
   unitType?: UnitType | 'ALL';
@@ -28,7 +37,7 @@ export type UnitUpsertPayload = {
 };
 
 export const fetchUnitsApi = (params: UnitQuery, orgId?: string) =>
-  apiClient.get<UnitItem[]>('/api/identity/admin/units', {
+  apiClient.get<UnitPage>('/api/identity/admin/units', {
     params: {
       ...params,
       orgId,

@@ -1,4 +1,5 @@
-import type { GenericInventoryDocumentType } from '@/api/modules/inventory';
+import type { GenericInventoryDocumentRow, GenericInventoryDocumentType } from '@/api/modules/inventory';
+import type { WarehouseType } from '@/api/modules/warehouse';
 
 export type InventoryDocumentFieldKind = 'warehouse' | 'text' | 'select';
 
@@ -7,7 +8,32 @@ export type InventoryDocumentFieldMeta = {
   label: string;
   kind: InventoryDocumentFieldKind;
   options?: string[];
+  warehouseTypes?: WarehouseType[];
 };
+
+export type InventoryDocumentQueryOption = {
+  label: string;
+  value: string;
+};
+
+export type InventoryDocumentListColumn = {
+  key: string;
+  label: string;
+  prop?: keyof GenericInventoryDocumentRow;
+  minWidth?: number;
+  width?: number;
+  fixed?: 'left' | 'right';
+  type?: 'index' | 'operation';
+  formatter?: (row: GenericInventoryDocumentRow, context: { warehouseCodeByName: Record<string, string> }) => string;
+};
+
+export type InventoryDocumentListQueryField =
+  | 'dateRange'
+  | 'documentCode'
+  | 'primaryName'
+  | 'itemName'
+  | 'status'
+  | 'remark';
 
 export type InventoryDocumentMeta = {
   type: GenericInventoryDocumentType;
@@ -24,7 +50,23 @@ export type InventoryDocumentMeta = {
   reasonField?: InventoryDocumentFieldMeta;
   extraFields?: InventoryDocumentFieldMeta[];
   showAvailableQty?: boolean;
+  showAttachment?: boolean;
   workflowEnabled?: boolean;
+  noticeLines?: string[];
+  listTableHeight?: number;
+  listPrimaryQueryKind?: 'input' | 'select';
+  listStatusOptions?: InventoryDocumentQueryOption[];
+  listStatusLabelMap?: Record<string, string>;
+  showToolbar?: boolean;
+  listQueryFields?: InventoryDocumentListQueryField[];
+  listColumns?: InventoryDocumentListColumn[];
+  showSummary?: boolean;
+  summaryFields?: Array<keyof GenericInventoryDocumentRow>;
+  summaryLabel?: string;
+  showDocumentCode?: boolean;
+  remarkInputType?: 'input';
+  showUpstreamCode?: boolean;
+  itemTableStyle?: 'default' | 'purchase-inbound' | 'purchase-return-outbound';
 };
 
 export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
@@ -37,8 +79,12 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     editRouteName: 'PurchaseReturnOutboundEdit',
     dateLabel: '出库日期',
     primaryField: { key: 'primaryName', label: '仓库', kind: 'warehouse' },
-    counterpartyField: { key: 'counterpartyName', label: '供应商', kind: 'text' },
+    counterpartyField: { key: 'counterpartyName', label: '供应商', kind: 'select' },
     reasonField: { key: 'reason', label: '退货原因', kind: 'select', options: ['质量问题退货', '数量差异退货', '临期退货', '采购协商退货'] },
+    showAvailableQty: true,
+    showAttachment: true,
+    itemTableStyle: 'purchase-return-outbound',
+    remarkInputType: 'input',
   },
   departmentPicking: {
     type: 'department-picking',
@@ -48,8 +94,13 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     viewRouteName: 'DepartmentPickingView',
     editRouteName: 'DepartmentPickingEdit',
     dateLabel: '领料日期',
-    primaryField: { key: 'primaryName', label: '出库仓库', kind: 'warehouse' },
-    counterpartyField: { key: 'counterpartyName', label: '领料部门', kind: 'text' },
+    primaryField: { key: 'primaryName', label: '出库仓库', kind: 'warehouse', warehouseTypes: ['普通仓库'] },
+    counterpartyField: {
+      key: 'counterpartyName',
+      label: '领料部门',
+      kind: 'warehouse',
+      warehouseTypes: ['行政部门', '出品及生产部门'],
+    },
   },
   departmentReturn: {
     type: 'department-return',
@@ -59,8 +110,13 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     viewRouteName: 'DepartmentReturnView',
     editRouteName: 'DepartmentReturnEdit',
     dateLabel: '退料日期',
-    primaryField: { key: 'primaryName', label: '入库仓库', kind: 'warehouse' },
-    counterpartyField: { key: 'counterpartyName', label: '退料部门', kind: 'text' },
+    primaryField: { key: 'primaryName', label: '入库仓库', kind: 'warehouse', warehouseTypes: ['普通仓库'] },
+    counterpartyField: {
+      key: 'counterpartyName',
+      label: '退料部门',
+      kind: 'warehouse',
+      warehouseTypes: ['行政部门', '出品及生产部门'],
+    },
   },
   stockTransfer: {
     type: 'stock-transfer',
@@ -70,8 +126,18 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     viewRouteName: 'StockTransferView',
     editRouteName: 'StockTransferEdit',
     dateLabel: '移库日期',
-    primaryField: { key: 'primaryName', label: '调出仓库', kind: 'warehouse' },
-    secondaryField: { key: 'secondaryName', label: '调入仓库', kind: 'warehouse' },
+    primaryField: {
+      key: 'primaryName',
+      label: '调出仓库',
+      kind: 'warehouse',
+      warehouseTypes: ['行政部门', '出品及生产部门'],
+    },
+    secondaryField: {
+      key: 'secondaryName',
+      label: '调入仓库',
+      kind: 'warehouse',
+      warehouseTypes: ['行政部门', '出品及生产部门'],
+    },
     reasonField: { key: 'reason', label: '移库类型', kind: 'select', options: ['直接移库', '退库移库', '紧急调拨'] },
   },
   stockTransferInbound: {
@@ -94,8 +160,18 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     viewRouteName: 'DepartmentTransferView',
     editRouteName: 'DepartmentTransferEdit',
     dateLabel: '调拨日期',
-    primaryField: { key: 'primaryName', label: '调出部门', kind: 'text' },
-    secondaryField: { key: 'secondaryName', label: '调入部门', kind: 'text' },
+    primaryField: {
+      key: 'primaryName',
+      label: '调出仓库',
+      kind: 'warehouse',
+      warehouseTypes: ['行政部门', '出品及生产部门'],
+    },
+    secondaryField: {
+      key: 'secondaryName',
+      label: '调入仓库',
+      kind: 'warehouse',
+      warehouseTypes: ['行政部门', '出品及生产部门'],
+    },
   },
   damageOutbound: {
     type: 'damage-outbound',
@@ -138,8 +214,17 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     viewRouteName: 'ProductionInboundView',
     editRouteName: 'ProductionInboundEdit',
     dateLabel: '入库日期',
-    primaryField: { key: 'primaryName', label: '仓库', kind: 'warehouse' },
-    counterpartyField: { key: 'counterpartyName', label: '加工车间', kind: 'select', options: ['中央加工间', '热厨加工间', '冷厨加工间'] },
+    primaryField: {
+      key: 'primaryName',
+      label: '仓库',
+      kind: 'warehouse',
+      warehouseTypes: ['出品及生产部门', '普通仓库'],
+    },
+    counterpartyField: {
+      key: 'counterpartyName',
+      label: '加工间',
+      kind: 'warehouse',
+    },
   },
   customerSalesOutbound: {
     type: 'customer-sales-outbound',
@@ -170,15 +255,20 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     counterpartyField: { key: 'counterpartyName', label: '客户名称', kind: 'text' },
     reasonField: { key: 'reason', label: '退货原因', kind: 'select', options: ['质量问题', '配送异常', '错发退货', '其他退货'] },
   },
-  warehouseOpeningBalance: {
-    type: 'warehouse-opening-balance',
-    title: '仓库期初',
-    listRouteName: 'WarehouseOpeningBalance',
-    createRouteName: 'WarehouseOpeningBalanceCreate',
-    viewRouteName: 'WarehouseOpeningBalanceView',
-    editRouteName: 'WarehouseOpeningBalanceEdit',
-    dateLabel: '期初日期',
-    primaryField: { key: 'primaryName', label: '仓库', kind: 'warehouse' },
+  dishConsumptionOutbound: {
+    type: 'dish-consumption-outbound',
+    title: '菜品消耗出库',
+    listRouteName: 'DishConsumptionOutbound',
+    createRouteName: 'DishConsumptionOutboundCreate',
+    viewRouteName: 'DishConsumptionOutboundView',
+    editRouteName: 'DishConsumptionOutboundEdit',
+    dateLabel: '消耗日期',
+    primaryField: { key: 'primaryName', label: '扣减仓库', kind: 'warehouse' },
+    counterpartyField: { key: 'counterpartyName', label: '来源单据', kind: 'text' },
+    reasonField: { key: 'reason', label: '触发来源', kind: 'text' },
+    showAvailableQty: true,
+    showUpstreamCode: true,
+    itemTableStyle: 'purchase-return-outbound',
   },
   storeTransfer: {
     type: 'store-transfer',
@@ -190,6 +280,11 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
     dateLabel: '调拨日期',
     primaryField: { key: 'primaryName', label: '调出门店', kind: 'text' },
     secondaryField: { key: 'secondaryName', label: '调入门店', kind: 'text' },
+    extraFields: [
+      { key: 'sourceWarehouse', label: '调出仓库', kind: 'warehouse' },
+      { key: 'targetWarehouse', label: '调入仓库', kind: 'text' },
+    ],
+    showAvailableQty: true,
   },
   stockTransferOutbound: {
     type: 'stock-transfer-outbound',
@@ -206,6 +301,10 @@ export const inventoryDocumentMetaMap: Record<string, InventoryDocumentMeta> = {
 };
 
 export const workflowBusinessOptions = [
+  { processCode: 'PURCHASE_APPLICATION', businessName: '采购单申请流程' },
+  { processCode: 'PURCHASE_ORDER', businessName: '采购订单流程' },
+  { processCode: 'PURCHASE_RECEIPT', businessName: '采购收货单流程' },
+  { processCode: 'PURCHASE_RETURN', businessName: '采购退货单流程' },
   { processCode: 'PURCHASE_INBOUND', businessName: '采购入库流程' },
   { processCode: 'PURCHASE_RETURN_OUTBOUND', businessName: '采购退货出库流程' },
   { processCode: 'DEPARTMENT_PICKING', businessName: '部门领料流程' },
@@ -219,4 +318,10 @@ export const workflowBusinessOptions = [
   { processCode: 'PRODUCTION_INBOUND', businessName: '生产入库流程' },
   { processCode: 'CUSTOMER_SALES_OUTBOUND', businessName: '客户销售出库流程' },
   { processCode: 'CUSTOMER_RETURN_INBOUND', businessName: '客户退货入库流程' },
+  { processCode: 'DISH_CONSUMPTION_OUTBOUND', businessName: '菜品消耗出库流程' },
+  { processCode: 'PERIOD_OPENING_BALANCE', businessName: '期初库存流程' },
+  { processCode: 'STORE_TRANSFER', businessName: '店间调拨流程' },
+  { processCode: 'STOCK_TRANSFER_OUTBOUND', businessName: '移库出库流程' },
+  { processCode: 'INVENTORY_CHECK', businessName: '盘点单流程' },
+  { processCode: 'MULTI_INVENTORY_CHECK', businessName: '多人盘点单流程' },
 ];

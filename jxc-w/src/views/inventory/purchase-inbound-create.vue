@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonNumberInput from '@/components/CommonNumberInput.vue';
 import CommonSelectorDialog, {
   type SelectorColumn,
   type SelectorTreeNode,
 } from '@/components/CommonSelectorDialog.vue';
 import {
+  batchApprovePurchaseInboundApi,
+  batchUnapprovePurchaseInboundApi,
   createPurchaseInboundApi,
   fetchPurchaseInboundDetailApi,
+  fetchPurchaseInboundPermissionApi,
   updatePurchaseInboundApi,
   type PurchaseInboundDetail,
 } from '@/api/modules/inventory';
@@ -23,8 +27,9 @@ import { fetchCurrentUserRolesApi } from '@/api/modules/auth';
 import { fetchSuppliersApi, type SupplierListRow } from '@/api/modules/supplier';
 import { fetchStoreSalesmenApi, type SalesmanCandidateItem } from '@/api/modules/system-admin';
 import { fetchStoreWarehousesApi, type WarehouseRow as ApiWarehouseRow } from '@/api/modules/warehouse';
-import { fetchPurchaseInboundPermissionApi } from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 
 type SupplierOption = {
   id: number;
@@ -75,6 +80,22 @@ type WarehouseOption = {
 const router = useRouter();
 const route = useRoute();
 const sessionStore = useSessionStore();
+const { storeOrgId, storeId } = useRequiredOrgScope();
+const ITEM_STATUS_DICT = 'item.status';
+const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
+const { optionsOf } = useDictionaryOptions([ITEM_STATUS_DICT, INVENTORY_DOCUMENT_STATUS_DICT]);
+const itemStatusOptions = optionsOf(ITEM_STATUS_DICT, { enabled: true, label: '全部', value: '' });
+const inventoryDocumentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const normalizedItemStatusOptions = computed(() => itemStatusOptions.value.map((item) => ({
+  label: item.itemLabel,
+  value: item.itemCode,
+})));
+const submittedStatus = computed(() => (
+  inventoryDocumentStatusOptions.value.find((item) => item.itemKey === 'SUBMITTED')?.itemCode ?? '已提交'
+));
+const approvedStatus = computed(() => (
+  inventoryDocumentStatusOptions.value.find((item) => item.itemKey === 'APPROVED')?.itemCode ?? '已审核'
+));
 const activeNav = ref('basic');
 const basicSectionRef = ref<HTMLElement | null>(null);
 const itemSectionRef = ref<HTMLElement | null>(null);
@@ -96,8 +117,19 @@ const isEditMode = computed(() => route.name === 'PurchaseInboundEdit');
 const detailStatus = ref('');
 const canCreate = ref(false);
 const canUpdate = ref(false);
+const canApprove = ref(false);
+const canUnapprove = ref(false);
+const isApprovalMode = computed(() => String(route.query.approvalMode ?? '').trim() === '1' && inboundId.value != null);
+const showApprovalActions = computed(() =>
+  isApprovalMode.value
+    && detailStatus.value === submittedStatus.value
+    && (canApprove.value || canUnapprove.value),
+);
 const isReadonlyMode = computed(() => {
-  if (isViewMode.value || detailStatus.value === '已审核') {
+  if (isApprovalMode.value) {
+    return true;
+  }
+  if (isViewMode.value || detailStatus.value === approvedStatus.value) {
     return true;
   }
   if (isCreateMode.value) {
@@ -111,7 +143,6 @@ const isReadonlyMode = computed(() => {
 
 const supplierOptions = ref<SupplierOption[]>([]);
 const warehouseOptions = ref<WarehouseOption[]>([]);
-const purchaseUnitOptions = ['斤', '箱', '袋', '个', '瓶'];
 const salesmanOptions = ref<SalesmanOption[]>([]);
 const salesmanSelectOptions = computed(() => {
   const options = [...salesmanOptions.value];
@@ -127,7 +158,7 @@ const salesmanSelectOptions = computed(() => {
 });
 const itemSelectorVisible = ref(false);
 const itemSelectorKeyword = ref('');
-const itemSelectorStatus = ref('启用');
+const itemSelectorStatus = ref('');
 const activeItemTreeId = ref<string>('all');
 const itemSelectorCurrentPage = ref(1);
 const itemSelectorPageSize = ref(10);
@@ -138,14 +169,6 @@ const selectedItemCandidates = ref<Array<Record<string, unknown>>>([]);
 const itemTreeData = ref<SelectorTreeNode[]>([]);
 const itemCandidateSource = ref<ItemCandidate[]>([]);
 const formLoading = ref(false);
-
-const resolvePurchaseInboundOrgId = () => {
-  const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!currentOrgId || !currentOrgId.startsWith('store-')) {
-    return undefined;
-  }
-  return currentOrgId;
-};
 
 const itemTableColumns: SelectorColumn[] = [
   { prop: 'code', label: '物品编码', minWidth: 130 },
@@ -186,6 +209,8 @@ const rows = ref<ItemRow[]>([
 
 const batchWarehouseDialogVisible = ref(false);
 const batchWarehouse = ref('');
+const actionPrimaryText = computed(() => (showApprovalActions.value ? '审核通过' : '保存'));
+const actionSecondaryText = computed(() => (showApprovalActions.value ? '审核不通过' : '保存草稿'));
 
 const createEmptyRow = (id: number): ItemRow => ({
   id,
@@ -215,7 +240,20 @@ const resetForm = () => {
   rows.value = [createEmptyRow(1)];
 };
 
-const applyDetail = (detail: PurchaseInboundDetail) => {
+const resolvePurchaseUnitByItemCode = async (itemCode: string) => {
+  const orgId = resolveOrgId();
+  if (!orgId || !itemCode.trim()) {
+    return '';
+  }
+  const page = await fetchItemsApi({
+    pageNo: 1,
+    pageSize: 10,
+    keyword: itemCode.trim(),
+  }, orgId);
+  return page.list.find((item) => item.code === itemCode)?.purchaseUnit ?? '';
+};
+
+const applyDetail = async (detail: PurchaseInboundDetail) => {
   detailStatus.value = detail.status ?? '';
   form.inboundDate = detail.inboundDate ?? '';
   form.remark = detail.remark ?? '';
@@ -226,7 +264,7 @@ const applyDetail = (detail: PurchaseInboundDetail) => {
   form.supplierId = supplierOptions.value.find((item) =>
     item.name === detail.supplier || `${item.name} / ${item.code}` === detail.supplier,
   )?.id ?? 0;
-  rows.value = (detail.items?.length ? detail.items : [null]).map((item, index) => {
+  const detailRows = await Promise.all((detail.items?.length ? detail.items : [null]).map(async (item, index) => {
     if (!item) {
       return createEmptyRow(index + 1);
     }
@@ -234,48 +272,21 @@ const applyDetail = (detail: PurchaseInboundDetail) => {
       id: index + 1,
       itemCode: item.itemCode,
       itemName: item.itemName,
-      spec: '',
-      category: '',
+      spec: item.spec ?? '',
+      category: item.category ?? '',
       warehouse: detail.warehouse ?? '',
-      purchaseUnit: '',
+      purchaseUnit: await resolvePurchaseUnitByItemCode(item.itemCode),
       quantity: item.quantity ?? null,
       inboundPrice: item.unitPrice ?? null,
       amount: null,
       gift: false,
       remark: '',
     } as ItemRow;
-  });
+  }));
+  rows.value = detailRows;
 };
 
-const resolveOrgId = () => {
-  return resolvePurchaseInboundOrgId();
-};
-
-const resolveWarehouseStoreId = () => {
-  const currentOrgId = (sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!currentOrgId) {
-    return undefined;
-  }
-  if (currentOrgId.startsWith('store-')) {
-    const storeId = Number(currentOrgId.slice('store-'.length));
-    return Number.isNaN(storeId) ? undefined : storeId;
-  }
-  const currentOrg = sessionStore.currentOrg;
-  if (currentOrg?.type === 'group') {
-    const firstStore = currentOrg.children?.[0];
-    if (!firstStore) {
-      return undefined;
-    }
-    const storeId = Number(String(firstStore.id).slice('store-'.length));
-    return Number.isNaN(storeId) ? undefined : storeId;
-  }
-  const firstStore = sessionStore.flatOrgs.find((item) => item.type === 'store');
-  if (!firstStore) {
-    return undefined;
-  }
-  const storeId = Number(String(firstStore.id).slice('store-'.length));
-  return Number.isNaN(storeId) ? undefined : storeId;
-};
+const resolveOrgId = () => storeOrgId.value;
 
 const loadSupplierOptions = async () => {
   const orgId = resolveOrgId();
@@ -298,12 +309,11 @@ const loadSupplierOptions = async () => {
 };
 
 const loadWarehouseOptions = async () => {
-  const storeId = resolveWarehouseStoreId();
-  if (!storeId) {
+  if (!storeId.value) {
     warehouseOptions.value = [];
     return;
   }
-  const rows = await fetchStoreWarehousesApi(storeId, { status: 'ENABLED' });
+  const rows = await fetchStoreWarehousesApi(storeId.value, { status: 'ENABLED' });
   warehouseOptions.value = rows
     .map((item: ApiWarehouseRow) => ({
       id: item.id,
@@ -386,10 +396,10 @@ const loadSalesmanOptions = async () => {
   }));
   const normalizedOptions = Array.from(new Map(options.map((item) => [item.userId, item])).values());
   salesmanOptions.value = isSalesman
-    ? normalizedOptions.filter((item) => item.phone === sessionStore.loginAccount)
+    ? normalizedOptions.filter((item) => item.phone === sessionStore.userPhone)
     : normalizedOptions;
   if (isCreateMode.value && !isReadonlyMode.value && form.salesmanUserId == null) {
-    const selfCandidate = salesmanOptions.value.find((item) => item.phone && item.phone === sessionStore.loginAccount);
+    const selfCandidate = salesmanOptions.value.find((item) => item.phone && item.phone === sessionStore.userPhone);
     if (selfCandidate) {
       form.salesmanUserId = selfCandidate.userId;
       form.salesmanName = selfCandidate.realName;
@@ -407,15 +417,21 @@ const loadPermission = async () => {
   if (!orgId) {
     canCreate.value = false;
     canUpdate.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
     return;
   }
   try {
     const result = await fetchPurchaseInboundPermissionApi(orgId);
     canCreate.value = Boolean(result.canCreate);
     canUpdate.value = Boolean(result.canUpdate);
+    canApprove.value = Boolean(result.canApprove);
+    canUnapprove.value = Boolean(result.canUnapprove);
   } catch {
     canCreate.value = false;
     canUpdate.value = false;
+    canApprove.value = false;
+    canUnapprove.value = false;
   }
 };
 
@@ -432,7 +448,7 @@ const loadDetail = async () => {
   formLoading.value = true;
   try {
     const detail = await fetchPurchaseInboundDetailApi(inboundId.value, orgId);
-    applyDetail(detail);
+    await applyDetail(detail);
   } finally {
     formLoading.value = false;
   }
@@ -451,7 +467,7 @@ const loadPageData = async () => {
 };
 
 const handleBack = () => {
-  router.push('/inventory/1/2');
+  router.push('/inventory/purchase-inbounds');
 };
 
 const scrollToSection = (key: string) => {
@@ -592,85 +608,10 @@ const handleToolbarAction = async (action: string) => {
     ElMessage.info('当前单据为查看状态，不能编辑');
     return;
   }
-  if (action === '添加物品') {
-    addRow();
-    return;
-  }
-  if (action === '通过模板新建') {
-    const orgId = resolveOrgId();
-    if (!orgId) {
-      ElMessage.warning('请选择门店后再操作');
-      return;
-    }
-    const page = await fetchItemsApi({
-      pageNo: 1,
-      pageSize: 2,
-    }, orgId);
-    const templateItems = page.list.map(mapItemCandidate);
-    rows.value = [
-      {
-        id: rowSeed.value++,
-        itemCode: templateItems[0]?.code ?? '',
-        itemName: templateItems[0]?.name ?? '',
-        spec: templateItems[0]?.spec ?? '',
-        category: templateItems[0]?.category ?? '',
-        warehouse: '中央成品仓',
-        purchaseUnit: templateItems[0]?.purchaseUnit ?? '袋',
-        quantity: 10,
-        inboundPrice: 46.5,
-        amount: 465,
-        gift: false,
-        remark: '',
-      },
-      {
-        id: rowSeed.value++,
-        itemCode: templateItems[1]?.code ?? '',
-        itemName: templateItems[1]?.name ?? '',
-        spec: templateItems[1]?.spec ?? '',
-        category: templateItems[1]?.category ?? '',
-        warehouse: '南区包材仓',
-        purchaseUnit: templateItems[1]?.purchaseUnit ?? '箱',
-        quantity: 6,
-        inboundPrice: 68,
-        amount: 408,
-        gift: false,
-        remark: '',
-      },
-    ];
-    ElMessage.success('已通过模板填充示例物品');
-    return;
-  }
   if (action === '批量选择仓库') {
     batchWarehouse.value = '';
     batchWarehouseDialogVisible.value = true;
     return;
-  }
-  if (action === '批量导入物品') {
-    const orgId = resolveOrgId();
-    if (!orgId) {
-      ElMessage.warning('请选择门店后再操作');
-      return;
-    }
-    const page = await fetchItemsApi({
-      pageNo: 1,
-      pageSize: 2,
-    }, orgId);
-    const imported = page.list.map((item) => ({
-      id: rowSeed.value++,
-      itemCode: item.code,
-      itemName: item.name,
-      spec: item.spec,
-      category: item.category,
-      warehouse: '',
-      purchaseUnit: item.purchaseUnit,
-      quantity: null,
-      inboundPrice: null,
-      amount: null,
-      gift: false,
-      remark: '',
-    }));
-    rows.value.push(...imported);
-    ElMessage.success(`已导入 ${imported.length} 条物品`);
   }
 };
 
@@ -729,7 +670,11 @@ const validateForm = () => {
 };
 
 const handleSaveDraft = () => {
-  ElMessage.info('当前版本仅支持直接保存入库单，草稿功能待接入');
+  if (showApprovalActions.value) {
+    void handleRejectAction();
+    return;
+  }
+  void handleSave();
 };
 
 const handleSave = async () => {
@@ -759,6 +704,8 @@ const handleSave = async () => {
     items: rows.value.map((row) => ({
       itemCode: row.itemCode,
       itemName: row.itemName,
+      spec: row.spec,
+      category: row.category,
       quantity: Number(row.quantity ?? 0),
       unitPrice: Number(row.inboundPrice ?? 0),
       taxRate: 13,
@@ -771,7 +718,54 @@ const handleSave = async () => {
     const created = await createPurchaseInboundApi(payload, orgId);
     ElMessage.success(`保存成功：${created.documentCode}`);
   }
-  router.push('/inventory/1/2');
+  router.push('/inventory/purchase-inbounds');
+};
+
+const handleApproveAction = async () => {
+  const orgId = resolveOrgId();
+  if (inboundId.value == null || !orgId) {
+    return;
+  }
+  if (!canApprove.value) {
+    ElMessage.warning('当前账号无审核权限');
+    return;
+  }
+  await batchApprovePurchaseInboundApi([inboundId.value], orgId);
+  ElMessage.success('审核通过成功');
+  router.push('/inventory/purchase-inbounds');
+};
+
+const handleRejectAction = async () => {
+  const orgId = resolveOrgId();
+  if (inboundId.value == null || !orgId) {
+    return;
+  }
+  if (!canUnapprove.value) {
+    ElMessage.warning('当前账号无审核权限');
+    return;
+  }
+  try {
+    const { value } = await ElMessageBox.prompt('请输入不通过原因', '审核不通过', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      inputType: 'textarea',
+      inputPlaceholder: '请输入不通过原因',
+      inputValidator: (input: string) => input.trim() ? true : '请填写不通过原因',
+    });
+    await batchUnapprovePurchaseInboundApi([inboundId.value], value.trim(), orgId);
+    ElMessage.success('审核不通过成功');
+    router.push('/inventory/purchase-inbounds');
+  } catch {
+    // 用户取消时不提示
+  }
+};
+
+const handlePrimaryAction = () => {
+  if (showApprovalActions.value) {
+    void handleApproveAction();
+    return;
+  }
+  void handleSave();
 };
 
 watch(
@@ -790,10 +784,14 @@ watch(
     <FixedActionBreadcrumb
       :navs="navs"
       :active-key="activeNav"
-      :show-actions="!isReadonlyMode"
+      :show-actions="showApprovalActions || !isReadonlyMode"
+      :primary-action-text="actionPrimaryText"
+      :secondary-action-text="actionSecondaryText"
+      :show-primary-action="showApprovalActions ? canApprove : true"
+      :show-secondary-action="showApprovalActions ? canUnapprove : false"
       @back="handleBack"
       @save-draft="handleSaveDraft"
-      @save="handleSave"
+      @save="handlePrimaryAction"
       @navigate="scrollToSection"
     />
 
@@ -860,10 +858,7 @@ watch(
       <div ref="itemSectionRef" class="form-section-block">
         <h3 class="form-section-title">物品信息</h3>
         <div class="table-toolbar">
-          <el-button type="primary" plain :disabled="isReadonlyMode" @click="handleToolbarAction('添加物品')">添加物品</el-button>
-          <el-button :disabled="isReadonlyMode" @click="handleToolbarAction('通过模板新建')">通过模板新建</el-button>
           <el-button :disabled="isReadonlyMode" @click="handleToolbarAction('批量选择仓库')">批量选择仓库</el-button>
-          <el-button :disabled="isReadonlyMode" @click="handleToolbarAction('批量导入物品')">批量导入物品</el-button>
         </div>
 
         <el-table :data="rows" border stripe class="erp-table purchase-inbound-item-table" :fit="false">
@@ -909,24 +904,22 @@ watch(
           </el-table-column>
           <el-table-column label="采购单位" min-width="120">
             <template #default="{ row }">
-              <el-select v-model="row.purchaseUnit" placeholder="请选择单位" :disabled="isReadonlyMode">
-                <el-option v-for="option in purchaseUnitOptions" :key="option" :label="option" :value="option" />
-              </el-select>
+              <span>{{ row.purchaseUnit || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column label="数量" min-width="110">
             <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="0" :precision="4" :step="1" controls-position="right" :disabled="isReadonlyMode" />
+              <CommonNumberInput v-model="row.quantity" :min="0" :precision="4" :disabled="isReadonlyMode" />
             </template>
           </el-table-column>
           <el-table-column label="入库单价" min-width="120">
             <template #default="{ row }">
-              <el-input-number v-model="row.inboundPrice" :min="0" :precision="4" :step="1" controls-position="right" :disabled="isReadonlyMode" />
+              <CommonNumberInput v-model="row.inboundPrice" :min="0" :precision="4" :disabled="isReadonlyMode" />
             </template>
           </el-table-column>
           <el-table-column label="金额" min-width="120">
             <template #default="{ row }">
-              <el-input-number v-model="row.amount" :min="0" :precision="2" :step="1" controls-position="right" :disabled="isReadonlyMode" />
+              <CommonNumberInput v-model="row.amount" :min="0" :precision="2" :disabled="isReadonlyMode" />
             </template>
           </el-table-column>
           <el-table-column label="是否赠品" min-width="96">
@@ -965,11 +958,7 @@ watch(
       keyword-label="物品"
       keyword-placeholder="支持按物品编码和名称查询..."
       status-label="启用状态"
-      :status-options="[
-        { label: '全部', value: '' },
-        { label: '启用', value: '启用' },
-        { label: '停用', value: '停用' },
-      ]"
+      :status-options="normalizedItemStatusOptions"
       :total="itemSelectorTotal"
       :current-page="itemSelectorCurrentPage"
       :page-size="itemSelectorPageSize"
@@ -1043,7 +1032,7 @@ watch(
   font-size: 11px;
 }
 
-.purchase-inbound-item-table :deep(.el-input-number) {
+.purchase-inbound-item-table :deep(.common-number-input) {
   width: 100%;
 }
 

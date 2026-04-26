@@ -4,7 +4,8 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.BaseAuditDO;
 
-@TableName("dev.item_profile")
+/** 物品与供应商数据对象，映射数据库表记录。 */
+@TableName("item_profile")
 public class ItemProfileDO extends BaseAuditDO {
 
     @TableField("scope_type")
@@ -20,51 +21,63 @@ public class ItemProfileDO extends BaseAuditDO {
     @TableField("is_draft")
     private Boolean draft;
 
+    /** 获取ScopeType。 */
     public String getScopeType() {
         return scopeType;
     }
 
-    public void setScopeType(String scopeType) {
-        this.scopeType = scopeType;
+    /** 设置ScopeType。 */
+    public void setScopeType(String scopeTypeValue) {
+        this.scopeType = scopeTypeValue;
     }
 
+    /** 获取ScopeId。 */
     public Long getScopeId() {
         return scopeId;
     }
 
-    public void setScopeId(Long scopeId) {
-        this.scopeId = scopeId;
+    /** 设置ScopeId。 */
+    public void setScopeId(Long scopeIdValue) {
+        this.scopeId = scopeIdValue;
     }
 
+    /** 获取ItemId。 */
     public String getItemId() {
         return itemId;
     }
 
-    public void setItemId(String itemId) {
-        this.itemId = itemId;
+    /** 设置ItemId。 */
+    public void setItemId(String itemIdValue) {
+        this.itemId = itemIdValue;
     }
 
+    /** 获取ItemCode。 */
     public String getItemCode() {
         return itemCode;
     }
 
-    public void setItemCode(String itemCode) {
-        this.itemCode = itemCode;
+    /** 设置ItemCode。 */
+    public void setItemCode(String itemCodeValue) {
+        this.itemCode = itemCodeValue;
     }
 
+    /** 获取DetailJson。 */
     public String getDetailJson() {
         return detailJson;
     }
 
-    public void setDetailJson(String detailJson) {
-        this.detailJson = detailJson;
+    /** 设置DetailJson。 */
+    public void setDetailJson(String detailJsonValue) {
+        this.detailJson = detailJsonValue;
     }
 
+    /** 获取Draft。 */
     public Boolean getDraft() {
         return draft;
     }
 
-    public void setDraft(Boolean draft) {
-        this.draft = draft;
+    /** 设置Draft。 */
+    public void setDraft(Boolean draftValue) {
+        this.draft = draftValue;
     }
 }

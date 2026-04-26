@@ -1,9 +1,20 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import { WarningFilled } from '@element-plus/icons-vue';
 import { useRouter } from 'vue-router';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import {
+  fetchItemsApi,
+  fetchItemCategoryTreeApi,
+  fetchItemTagsApi,
+  type ItemCategoryTreeNode,
+  type ItemTagRow,
+  type ItemVO,
+} from '@/api/modules/item';
+import { fetchUnitsApi, type UnitItem } from '@/api/modules/unit';
+import { useSessionStore } from '@/stores/session';
+import { resolveArchiveOrgId } from '@/views/items/org';
 
 type ItemCatalog = {
   itemCode: string;
@@ -11,6 +22,7 @@ type ItemCatalog = {
   spec: string;
   category: string;
   stockUnit: string;
+  tag: string;
 };
 
 type TemplateRow = {
@@ -25,9 +37,11 @@ type TemplateRow = {
 };
 
 const router = useRouter();
+const sessionStore = useSessionStore();
 const activeNav = ref('basic');
 const basicSectionRef = ref<HTMLElement | null>(null);
 const contentSectionRef = ref<HTMLElement | null>(null);
+const optionLoading = ref(false);
 
 const navs = [
   { key: 'basic', label: '基础信息' },
@@ -40,22 +54,10 @@ const form = reactive({
   remark: '',
 });
 
-const stockUnitOptions = ['个', '件', '斤', '袋', '瓶', '包', '箱', '克'];
-
-const itemCatalog: ItemCatalog[] = [
-  { itemCode: 'MDWP0001', itemName: '皮皮虾', spec: '', category: '海鲜', stockUnit: '克' },
-  { itemCode: 'MDWP0002', itemName: '海天蚝油', spec: '', category: '原材料', stockUnit: '瓶' },
-  { itemCode: 'MDWP0003', itemName: '咖啡豆', spec: '', category: '原材料', stockUnit: '袋' },
-  { itemCode: 'MDWP0004', itemName: '吸管', spec: '', category: '原材料', stockUnit: '包' },
-  { itemCode: 'MDWP0005', itemName: '杯托', spec: '', category: '原材料', stockUnit: '包' },
-  { itemCode: 'MDWP0006', itemName: '测试', spec: '123', category: '海鲜', stockUnit: '件' },
-  { itemCode: 'MDWP0007', itemName: '物品1', spec: '', category: '原材料', stockUnit: '斤' },
-  { itemCode: 'MDWP0008', itemName: '测试固定标签', spec: '标准', category: '蔬菜', stockUnit: '斤' },
-  { itemCode: 'MDWP0009', itemName: '玉米', spec: '', category: '蔬菜', stockUnit: '斤' },
-  { itemCode: 'MDWP0010', itemName: '鸭血', spec: '', category: '海鲜', stockUnit: '克' },
-  { itemCode: 'MDWP0011', itemName: '牛肉卷', spec: '500g', category: '原材料', stockUnit: '袋' },
-  { itemCode: 'MDWP0012', itemName: '小白菜', spec: '', category: '蔬菜', stockUnit: '斤' },
-];
+const itemCatalog = ref<ItemCatalog[]>([]);
+const stockUnitOptions = ref<Array<{ value: string; label: string }>>([]);
+const categoryOptions = ref<string[]>([]);
+const tagOptions = ref<Array<{ value: string; label: string }>>([]);
 
 const rowSeed = ref(2);
 const rows = ref<TemplateRow[]>([
@@ -77,7 +79,6 @@ const dialogQuery = reactive({
   tag: '',
   addedFilter: '全部' as '全部' | '已添加' | '未添加',
 });
-const categoryOptions = ['海鲜', '原材料', '菜品（系统创建）', '蔬菜'];
 const selectedCategories = ref<string[]>([]);
 const dialogCurrentPage = ref(1);
 const dialogPageSize = ref(100);
@@ -87,17 +88,18 @@ const existingCodeSet = computed(() => new Set(rows.value.map((row) => row.itemC
 
 const dialogFilteredRows = computed(() => {
   const keyword = dialogQuery.keyword.trim().toLowerCase();
-  return itemCatalog.filter((item) => {
+  return itemCatalog.value.filter((item) => {
     const matchKeyword = !keyword
       || item.itemCode.toLowerCase().includes(keyword)
       || item.itemName.toLowerCase().includes(keyword)
       || item.category.toLowerCase().includes(keyword);
+    const matchTag = !dialogQuery.tag || item.tag === dialogQuery.tag;
     const matchCategory = !selectedCategories.value.length || selectedCategories.value.includes(item.category);
     const added = existingCodeSet.value.has(item.itemCode);
     const matchAdded = dialogQuery.addedFilter === '全部'
       || (dialogQuery.addedFilter === '已添加' && added)
       || (dialogQuery.addedFilter === '未添加' && !added);
-    return matchKeyword && matchCategory && matchAdded;
+    return matchKeyword && matchTag && matchCategory && matchAdded;
   });
 });
 
@@ -106,7 +108,7 @@ const dialogPagedRows = computed(() => {
   return dialogFilteredRows.value.slice(start, start + dialogPageSize.value);
 });
 
-const selectedDialogItems = computed(() => itemCatalog.filter((item) => dialogSelectedCodes.value.includes(item.itemCode)));
+const selectedDialogItems = computed(() => itemCatalog.value.filter((item) => dialogSelectedCodes.value.includes(item.itemCode)));
 
 const handleDialogSelectionChange = (list: ItemCatalog[]) => {
   dialogSelectedCodes.value = list.map((item) => item.itemCode);
@@ -114,7 +116,7 @@ const handleDialogSelectionChange = (list: ItemCatalog[]) => {
 
 const querySearchItem = (queryString: string, cb: (items: Array<{ value: string; raw: ItemCatalog }>) => void) => {
   const keyword = queryString.trim().toLowerCase();
-  const result = itemCatalog
+  const result = itemCatalog.value
     .filter((item) => !keyword || item.itemCode.toLowerCase().includes(keyword) || item.itemName.toLowerCase().includes(keyword))
     .map((item) => ({
       value: `${item.itemCode} / ${item.itemName}`,
@@ -154,7 +156,7 @@ const handleBlurItemQuery = (row: TemplateRow) => {
     applyItemToRow(row, undefined);
     return;
   }
-  const matched = itemCatalog.find((item) => item.itemCode.toLowerCase() === keyword || item.itemName.toLowerCase() === keyword);
+  const matched = itemCatalog.value.find((item) => item.itemCode.toLowerCase() === keyword || item.itemName.toLowerCase() === keyword);
   applyItemToRow(row, matched);
 };
 
@@ -195,7 +197,7 @@ const confirmDialog = () => {
     ElMessage.warning('请至少选择一个物品');
     return;
   }
-  const appendRows = itemCatalog
+  const appendRows = itemCatalog.value
     .filter((item) => dialogSelectedCodes.value.includes(item.itemCode))
     .filter((item) => !existingCodeSet.value.has(item.itemCode))
     .map((item) => ({
@@ -218,24 +220,6 @@ const confirmDialog = () => {
   dialogVisible.value = false;
 };
 
-const handleImport = () => {
-  const imported = itemCatalog
-    .slice(0, 3)
-    .filter((item) => !existingCodeSet.value.has(item.itemCode))
-    .map((item) => ({
-      id: rowSeed.value++,
-      itemQuery: `${item.itemCode} / ${item.itemName}`,
-      itemCode: item.itemCode,
-      itemName: item.itemName,
-      spec: item.spec,
-      category: item.category,
-      stockUnit: item.stockUnit,
-      remark: '',
-    }));
-  rows.value.push(...imported);
-  ElMessage.success(`导入完成，新增 ${imported.length} 条`);
-};
-
 const scrollToSection = (key: string) => {
   activeNav.value = key;
   const target = key === 'basic' ? basicSectionRef.value : contentSectionRef.value;
@@ -243,25 +227,102 @@ const scrollToSection = (key: string) => {
 };
 
 const handleBack = () => {
-  router.push('/inventory/5/1');
+  router.push('/inventory/inventory-templates');
 };
 
-const handleSaveDraft = () => {
-  ElMessage.success('库存模板草稿已保存');
+const fetchAllPages = async <T,>(
+  loader: (pageNo: number, pageSizeValue: number) => Promise<{ list?: T[]; total?: number; pageSize?: number }>,
+  pageSizeValue = 200,
+) => {
+  const result: T[] = [];
+  let pageNo = 1;
+  let totalValue: number;
+  do {
+    const page = await loader(pageNo, pageSizeValue);
+    const list = Array.isArray(page.list) ? page.list : [];
+    result.push(...list);
+    totalValue = Number(page.total ?? result.length);
+    if (!list.length || Number(page.pageSize ?? 0) <= 0) {
+      break;
+    }
+    pageNo += 1;
+  } while (result.length < totalValue);
+  return result;
 };
 
-const handleSave = () => {
-  if (!form.templateName.trim()) {
-    ElMessage.warning('请输入模板名称');
-    return;
-  }
-  if (!rows.value.some((row) => row.itemCode)) {
-    ElMessage.warning('请添加至少一个物品');
-    return;
-  }
-  ElMessage.success('库存模板保存成功');
-  router.push('/inventory/5/1');
+const collectCategoryLabels = (nodes: ItemCategoryTreeNode[]) => {
+  const labels: string[] = [];
+  const walk = (list: ItemCategoryTreeNode[]) => {
+    list.forEach((node) => {
+      if (node.label) {
+        labels.push(node.label);
+      }
+      if (node.children?.length) {
+        walk(node.children);
+      }
+    });
+  };
+  walk(nodes);
+  return Array.from(new Set(labels));
 };
+
+const loadMasterData = async () => {
+  const orgId = resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
+  if (!orgId) {
+    itemCatalog.value = [];
+    stockUnitOptions.value = [];
+    categoryOptions.value = [];
+    tagOptions.value = [];
+    return;
+  }
+  optionLoading.value = true;
+  try {
+    const [items, units, categories, tags] = await Promise.all([
+      fetchAllPages<ItemVO>((pageNo, pageSizeValue) =>
+        fetchItemsApi({ pageNo, pageSize: pageSizeValue, status: '全部', itemType: '全部' }, orgId)),
+      fetchAllPages<UnitItem>((pageNo, pageSizeValue) =>
+        fetchUnitsApi({ pageNum: pageNo, pageSize: pageSizeValue, status: 'ALL', unitType: 'ALL' }, orgId)),
+      fetchItemCategoryTreeApi(orgId),
+      fetchAllPages<ItemTagRow>((pageNo, pageSizeValue) =>
+        fetchItemTagsApi({ pageNo, pageSize: pageSizeValue }, orgId)),
+    ]);
+    itemCatalog.value = items.map((item) => ({
+      itemCode: item.code,
+      itemName: item.name,
+      spec: item.spec,
+      category: item.category,
+      stockUnit: item.stockUnit,
+      tag: item.tag,
+    }));
+    stockUnitOptions.value = units.map((unit) => ({
+      value: unit.name,
+      label: unit.name,
+    }));
+    categoryOptions.value = collectCategoryLabels(categories);
+    tagOptions.value = tags.map((tag) => ({
+      value: tag.tagName,
+      label: tag.tagName,
+    }));
+  } catch {
+    itemCatalog.value = [];
+    stockUnitOptions.value = [];
+    categoryOptions.value = [];
+    tagOptions.value = [];
+  } finally {
+    optionLoading.value = false;
+  }
+};
+
+onMounted(() => {
+  void loadMasterData();
+});
+
+watch(
+  () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
+  () => {
+    void loadMasterData();
+  },
+);
 </script>
 
 <template>
@@ -269,9 +330,9 @@ const handleSave = () => {
     <FixedActionBreadcrumb
       :navs="navs"
       :active-key="activeNav"
+      :show-primary-action="false"
+      :show-secondary-action="false"
       @back="handleBack"
-      @save-draft="handleSaveDraft"
-      @save="handleSave"
       @navigate="scrollToSection"
     />
 
@@ -301,8 +362,7 @@ const handleSave = () => {
       <div ref="contentSectionRef" class="form-section-block">
         <h3 class="form-section-title">模板内容</h3>
         <div class="table-toolbar">
-          <el-button @click="openDialog">添加物品</el-button>
-          <el-button @click="handleImport">导入物品</el-button>
+          <el-button @click="openDialog">选择物品</el-button>
         </div>
 
         <el-table :data="rows" border stripe class="erp-table inventory-template-edit-table" :fit="false">
@@ -337,7 +397,7 @@ const handleSave = () => {
           <el-table-column label="库存单位" min-width="120">
             <template #default="{ row }">
               <el-select v-model="row.stockUnit" placeholder="请选择单位">
-                <el-option v-for="option in stockUnitOptions" :key="option" :label="option" :value="option" />
+                <el-option v-for="option in stockUnitOptions" :key="option.value" :label="option.label" :value="option.value" />
               </el-select>
             </template>
           </el-table-column>
@@ -364,9 +424,7 @@ const handleSave = () => {
           </el-form-item>
           <el-form-item label="物品标签">
             <el-select v-model="dialogQuery.tag" placeholder="请选择" clearable style="width: 200px">
-              <el-option label="海鲜" value="海鲜" />
-              <el-option label="原材料" value="原材料" />
-              <el-option label="蔬菜" value="蔬菜" />
+              <el-option v-for="option in tagOptions" :key="option.value" :label="option.label" :value="option.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="是否已添加">
@@ -377,7 +435,7 @@ const handleSave = () => {
             </el-radio-group>
           </el-form-item>
           <el-form-item>
-            <el-button type="primary">查询</el-button>
+            <el-button type="primary" :loading="optionLoading">查询</el-button>
           </el-form-item>
         </el-form>
       </div>

@@ -1,10 +1,11 @@
 package com.boboboom.jxc.inventory.domain.repository;
 
-import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
-
 import java.util.List;
 import java.util.Optional;
 
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
+
+/** 库存仓储接口，定义领域需要的数据访问能力。 */
 public interface PurchaseInboundRepository {
 
     List<PurchaseInboundDO> findByScopeOrdered(String scopeType, Long scopeId);
@@ -19,5 +20,5 @@ public interface PurchaseInboundRepository {
 
     void update(PurchaseInboundDO header);
 
-    void deleteById(Long id);
+    int deleteById(Long id);
 }

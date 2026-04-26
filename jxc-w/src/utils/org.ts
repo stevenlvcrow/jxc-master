@@ -4,6 +4,15 @@ export const isGroupOrgId = (value?: string | null) => normalizeOrgId(value).sta
 
 export const isStoreOrgId = (value?: string | null) => normalizeOrgId(value).startsWith('store-');
 
+export const parseGroupId = (value?: string | null) => {
+  const normalized = normalizeOrgId(value);
+  if (!normalized.startsWith('group-')) {
+    return null;
+  }
+  const parsed = Number(normalized.slice('group-'.length));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
 export const parseStoreId = (value?: string | null) => {
   const normalized = normalizeOrgId(value);
   if (!normalized.startsWith('store-')) {

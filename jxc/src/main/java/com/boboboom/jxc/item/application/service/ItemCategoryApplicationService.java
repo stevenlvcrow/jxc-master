@@ -1,20 +1,5 @@
 package com.boboboom.jxc.item.application.service;
 
-import com.boboboom.jxc.common.BusinessCodeGenerator;
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.item.domain.repository.ItemCategoryRepository;
-import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemCategoryDO;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryBatchCreateRequest;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryBatchDeleteRequest;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryCreateRequest;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryStatusUpdateRequest;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryUpdateRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
@@ -27,27 +12,52 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.common.BusinessCodeGenerator;
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
+import com.boboboom.jxc.item.domain.repository.ItemCategoryRepository;
+import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemCategoryDO;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryBatchCreateRequest;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryBatchDeleteRequest;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryCreateRequest;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryStatusUpdateRequest;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryUpdateRequest;
+
+/** 物品分类业务服务，负责分类树、状态和批量创建维护。 */
 @Service
 public class ItemCategoryApplicationService {
 
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
+
     private static final String ROOT_CATEGORY = "物品类别";
-    private static final String STATUS_ENABLED = "启用";
-    private static final String STATUS_DISABLED = "停用";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String CATEGORY_CODE_PREFIX = "WPLB";
 
     private final ItemCategoryRepository itemCategoryRepository;
     private final BusinessCodeGenerator businessCodeGenerator;
     private final OrgScopeService orgScopeService;
+    private final DictionaryLookupService dictionaryLookupService;
 
-    public ItemCategoryApplicationService(ItemCategoryRepository itemCategoryRepository,
-                                          BusinessCodeGenerator businessCodeGenerator,
-                                          OrgScopeService orgScopeService) {
-        this.itemCategoryRepository = itemCategoryRepository;
-        this.businessCodeGenerator = businessCodeGenerator;
-        this.orgScopeService = orgScopeService;
+    /** 物品分类业务服务，负责分类树、状态和批量创建维护。 */
+    public ItemCategoryApplicationService(ItemCategoryRepository itemCategoryRepositoryValue,
+                                          BusinessCodeGenerator businessCodeGeneratorValue,
+                                          OrgScopeService orgScopeServiceValue,
+                                          DictionaryLookupService dictionaryLookupServiceValue) {
+        this.itemCategoryRepository = itemCategoryRepositoryValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 分页查询业务列表。 */
     public PageData<ItemCategoryRow> list(Integer pageNo,
                                           Integer pageSize,
                                           String categoryInfo,
@@ -57,7 +67,7 @@ public class ItemCategoryApplicationService {
                                           String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         int offset = (safePageNo - 1) * safePageSize;
 
         List<ItemCategoryDO> scopedRows = itemCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
@@ -86,6 +96,7 @@ public class ItemCategoryApplicationService {
         return new PageData<>(list, total == null ? 0 : total, safePageNo, safePageSize);
     }
 
+    /** 查询树形业务数据。 */
     public List<TreeNode> tree(String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         List<ItemCategoryDO> categories = itemCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
@@ -109,6 +120,7 @@ public class ItemCategoryApplicationService {
         return List.of(nodeMap.get(ROOT_CATEGORY));
     }
 
+    /** 创建业务记录。 */
     @Transactional
     public IdPayload create(String orgId, ItemCategoryCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -134,6 +146,7 @@ public class ItemCategoryApplicationService {
         return new IdPayload(toInsert.getId());
     }
 
+    /** 批量创建业务记录。 */
     @Transactional
     public BatchCreateResult batchCreate(String orgId, ItemCategoryBatchCreateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -178,6 +191,7 @@ public class ItemCategoryApplicationService {
         return new BatchCreateResult(createdCount);
     }
 
+    /** 更新业务记录。 */
     @Transactional
     public void update(Long id, String orgId, ItemCategoryUpdateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -205,6 +219,7 @@ public class ItemCategoryApplicationService {
         itemCategoryRepository.update(existing);
     }
 
+    /** 更新业务状态。 */
     @Transactional
     public void updateStatus(Long id, String orgId, ItemCategoryStatusUpdateRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -213,6 +228,7 @@ public class ItemCategoryApplicationService {
         itemCategoryRepository.update(existing);
     }
 
+    /** 删除业务记录。 */
     @Transactional
     public void delete(Long id, String orgId) {
         ItemScope scope = resolveItemScope(orgId);
@@ -226,6 +242,7 @@ public class ItemCategoryApplicationService {
         itemCategoryRepository.deleteById(id);
     }
 
+    /** 批量删除业务记录。 */
     @Transactional
     public void batchDelete(String orgId, ItemCategoryBatchDeleteRequest request) {
         ItemScope scope = resolveItemScope(orgId);
@@ -378,13 +395,10 @@ public class ItemCategoryApplicationService {
 
     private String normalizeStatus(String status) {
         String normalized = trim(status);
-        if (Objects.equals(normalized, STATUS_ENABLED) || Objects.equals(normalized, "ENABLED")) {
-            return STATUS_ENABLED;
+        if (DictionaryCodes.ENABLED.equals(normalized) || DictionaryCodes.DISABLED.equals(normalized)) {
+            return dictionaryLookupService.codeOf(DictionaryCodes.ITEM_STATUS, normalized);
         }
-        if (Objects.equals(normalized, STATUS_DISABLED) || Objects.equals(normalized, "DISABLED")) {
-            return STATUS_DISABLED;
-        }
-        throw new BusinessException("状态仅支持 启用/停用");
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.ITEM_STATUS, normalized);
     }
 
     private String normalizeQueryStatus(String status) {
@@ -438,11 +452,7 @@ public class ItemCategoryApplicationService {
         final Set<String> finalScopedNames = scopedNames;
         final String finalSortBy = trimNullable(sortBy);
         List<ItemCategoryDO> filtered = rows.stream()
-                .filter(row -> keyword == null
-                        || row.getCategoryCode().contains(keyword)
-                        || row.getCategoryName().contains(keyword))
-                .filter(row -> normalizedQueryStatus == null || Objects.equals(row.getStatus(), normalizedQueryStatus))
-                .filter(row -> finalScopedNames == null || finalScopedNames.contains(row.getCategoryName()))
+                .filter(row -> matchesCategoryFilter(row, keyword, normalizedQueryStatus, finalScopedNames))
                 .toList();
         if (Objects.equals(finalSortBy, "parentCategory")) {
             return filtered.stream()
@@ -468,6 +478,21 @@ public class ItemCategoryApplicationService {
                     return compareNullableLongDesc(a.getId(), b.getId());
                 })
                 .toList();
+    }
+
+    private boolean matchesCategoryFilter(ItemCategoryDO row,
+                                          String keyword,
+                                          String normalizedQueryStatus,
+                                          Set<String> scopedNames) {
+        return matchesCategoryKeyword(row, keyword)
+                && (normalizedQueryStatus == null || Objects.equals(row.getStatus(), normalizedQueryStatus))
+                && (scopedNames == null || scopedNames.contains(row.getCategoryName()));
+    }
+
+    private boolean matchesCategoryKeyword(ItemCategoryDO row, String keyword) {
+        return keyword == null
+                || row.getCategoryCode().contains(keyword)
+                || row.getCategoryName().contains(keyword);
     }
 
     private Set<String> collectTreeScopeFromRows(List<ItemCategoryDO> rows, String treeNodeName) {
@@ -548,10 +573,11 @@ public class ItemCategoryApplicationService {
     }
 
     private ItemScope resolveItemScope(String orgId) {
-        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolvePlatformOrStoreScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
         return new ItemScope(scope.scopeType(), scope.scopeId());
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record ItemCategoryRow(Long id,
                                   Integer index,
                                   String categoryCode,
@@ -562,18 +588,22 @@ public class ItemCategoryApplicationService {
                                   String remark) {
     }
 
+    /** 物品与供应商分页数据模型，承载列表数据和分页信息。 */
     public record PageData<T>(List<T> list,
                               long total,
                               int pageNo,
                               int pageSize) {
     }
 
+    /** 物品与供应商载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id) {
     }
 
+    /** 物品与供应商结果模型，承载业务处理结果。 */
     public record BatchCreateResult(int createdCount) {
     }
 
+    /** 物品与供应商数据模型，承载Tree节点数据。 */
     public record TreeNode(String label, List<TreeNode> children) {
     }
 

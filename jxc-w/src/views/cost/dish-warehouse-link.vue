@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonToolbarSection, { type ToolbarButton } from '@/components/CommonToolbarSection.vue';
 import PageTabsLayout, { type PageTabItem } from '@/components/PageTabsLayout.vue';
+import { fetchStoreWarehousesApi, type WarehouseRow } from '@/api/modules/warehouse';
+import { useSessionStore } from '@/stores/session';
+import { parseStoreId } from '@/utils/org';
 
 type DishType = '堂食' | '加料' | '餐盒';
 type DeleteStatus = '未删除' | '已删除';
@@ -25,6 +28,11 @@ type DishWarehouseRow = {
   linkedAt: string;
   deletedAt: string;
   deletedStatus: DeleteStatus;
+};
+type WarehouseOption = {
+  id: number;
+  value: string;
+  label: string;
 };
 type TreeNode = {
   value: string;
@@ -64,32 +72,7 @@ const categoryOptions = [
   '餐盒',
 ];
 
-const warehouseTree: TreeNode[] = [
-  {
-    value: 'all-warehouse',
-    label: '全部仓库',
-    children: [
-      {
-        value: 'north-warehouse',
-        label: '北区仓',
-        children: [
-          { value: 'north-cold', label: '北区冷藏仓' },
-          { value: 'north-dry', label: '北区干货仓' },
-        ],
-      },
-      {
-        value: 'south-warehouse',
-        label: '南区仓',
-        children: [
-          { value: 'south-fresh', label: '南区生鲜仓' },
-          { value: 'south-pack', label: '南区包材仓' },
-        ],
-      },
-    ],
-  },
-];
-
-const dishTreeData: TreeNode[] = [
+const dishTreeData = [
   {
     value: '全部',
     label: '全部',
@@ -114,25 +97,43 @@ const dishTreeData: TreeNode[] = [
   },
 ];
 
+const sessionStore = useSessionStore();
+const warehouseOptions = ref<WarehouseOption[]>([]);
+
+const resolveStoreId = () => {
+  const currentOrg = sessionStore.currentOrg;
+  if (!currentOrg) {
+    return null;
+  }
+  if (currentOrg.type === 'store') {
+    return parseStoreId(currentOrg.id);
+  }
+  if (currentOrg.type === 'group') {
+    const firstStore = currentOrg.children?.[0];
+    return firstStore ? parseStoreId(firstStore.id) : null;
+  }
+  return null;
+};
+
 const categoryWarehouseRows: CategoryWarehouseRow[] = [
-  { id: 1, dishType: '堂食', categoryName: '必点菜', remark: '热销菜默认关联冷藏仓', warehouses: ['北区冷藏仓'] },
-  { id: 2, dishType: '堂食', categoryName: '推出新品', remark: '新品单独补货', warehouses: ['北区干货仓', '南区生鲜仓'] },
-  { id: 3, dishType: '堂食', categoryName: '下饭菜', remark: '', warehouses: ['南区生鲜仓'] },
-  { id: 4, dishType: '堂食', categoryName: '家常菜', remark: '', warehouses: ['北区冷藏仓', '南区生鲜仓'] },
-  { id: 5, dishType: '堂食', categoryName: '汤类', remark: '', warehouses: ['南区生鲜仓'] },
-  { id: 6, dishType: '加料', categoryName: '加料', remark: '统一走包材仓', warehouses: ['南区包材仓'] },
-  { id: 7, dishType: '餐盒', categoryName: '餐盒', remark: '独立包材仓管理', warehouses: ['南区包材仓'] },
+  { id: 1, dishType: '堂食', categoryName: '必点菜', remark: '热销菜默认关联生产仓', warehouses: ['中央加工间'] },
+  { id: 2, dishType: '堂食', categoryName: '推出新品', remark: '新品单独补货', warehouses: ['热厨加工间', '冷厨加工间'] },
+  { id: 3, dishType: '堂食', categoryName: '下饭菜', remark: '', warehouses: ['热厨加工间'] },
+  { id: 4, dishType: '堂食', categoryName: '家常菜', remark: '', warehouses: ['中央加工间', '热厨加工间'] },
+  { id: 5, dishType: '堂食', categoryName: '汤类', remark: '', warehouses: ['冷厨加工间'] },
+  { id: 6, dishType: '加料', categoryName: '加料', remark: '统一走包材仓', warehouses: ['中央加工间'] },
+  { id: 7, dishType: '餐盒', categoryName: '餐盒', remark: '独立包材仓管理', warehouses: ['中央加工间'] },
 ];
 
 const dishWarehouseRows: DishWarehouseRow[] = [
-  { id: 1, dishCode: 'D0001', dishName: '宫保鸡丁', categoryName: '必点菜', spec: '标准份', warehouses: ['北区冷藏仓'], dishType: '堂食', linkedAt: '2026-04-13 10:10:00', deletedAt: '-', deletedStatus: '未删除' },
-  { id: 2, dishCode: 'D0002', dishName: '鱼香肉丝', categoryName: '下饭菜', spec: '标准份', warehouses: ['北区冷藏仓', '南区生鲜仓'], dishType: '堂食', linkedAt: '2026-04-12 16:20:00', deletedAt: '-', deletedStatus: '未删除' },
-  { id: 3, dishCode: 'D0003', dishName: '番茄牛腩', categoryName: '家常菜', spec: '大份', warehouses: ['南区生鲜仓'], dishType: '堂食', linkedAt: '2026-04-11 09:42:00', deletedAt: '-', deletedStatus: '未删除' },
-  { id: 4, dishCode: 'D0004', dishName: '老坛酸菜', categoryName: '推出新品', spec: '标准份', warehouses: ['北区干货仓'], dishType: '堂食', linkedAt: '2026-04-10 14:05:00', deletedAt: '-', deletedStatus: '未删除' },
-  { id: 5, dishCode: 'D0005', dishName: '脆爽萝卜', categoryName: '加料', spec: '加量', warehouses: ['南区包材仓'], dishType: '加料', linkedAt: '2026-04-09 12:18:00', deletedAt: '-', deletedStatus: '未删除' },
-  { id: 6, dishCode: 'D0006', dishName: '外卖餐盒', categoryName: '餐盒', spec: '1000ml', warehouses: ['南区包材仓'], dishType: '餐盒', linkedAt: '2026-04-08 18:30:00', deletedAt: '-', deletedStatus: '未删除' },
-  { id: 7, dishCode: 'D0007', dishName: '酸梅汤', categoryName: '酒水饮料', spec: '杯', warehouses: ['北区干货仓'], dishType: '堂食', linkedAt: '2026-04-08 10:22:00', deletedAt: '2026-04-12 09:00:00', deletedStatus: '已删除' },
-  { id: 8, dishCode: 'D0008', dishName: '鲜蔬拼盘', categoryName: '蔬菜类', spec: '标准份', warehouses: ['南区生鲜仓'], dishType: '堂食', linkedAt: '2026-04-07 15:40:00', deletedAt: '-', deletedStatus: '未删除' },
+  { id: 1, dishCode: 'D0001', dishName: '宫保鸡丁', categoryName: '必点菜', spec: '标准份', warehouses: ['中央加工间'], dishType: '堂食', linkedAt: '2026-04-13 10:10:00', deletedAt: '-', deletedStatus: '未删除' },
+  { id: 2, dishCode: 'D0002', dishName: '鱼香肉丝', categoryName: '下饭菜', spec: '标准份', warehouses: ['中央加工间', '热厨加工间'], dishType: '堂食', linkedAt: '2026-04-12 16:20:00', deletedAt: '-', deletedStatus: '未删除' },
+  { id: 3, dishCode: 'D0003', dishName: '番茄牛腩', categoryName: '家常菜', spec: '大份', warehouses: ['热厨加工间'], dishType: '堂食', linkedAt: '2026-04-11 09:42:00', deletedAt: '-', deletedStatus: '未删除' },
+  { id: 4, dishCode: 'D0004', dishName: '老坛酸菜', categoryName: '推出新品', spec: '标准份', warehouses: ['冷厨加工间'], dishType: '堂食', linkedAt: '2026-04-10 14:05:00', deletedAt: '-', deletedStatus: '未删除' },
+  { id: 5, dishCode: 'D0005', dishName: '脆爽萝卜', categoryName: '加料', spec: '加量', warehouses: ['中央加工间'], dishType: '加料', linkedAt: '2026-04-09 12:18:00', deletedAt: '-', deletedStatus: '未删除' },
+  { id: 6, dishCode: 'D0006', dishName: '外卖餐盒', categoryName: '餐盒', spec: '1000ml', warehouses: ['中央加工间'], dishType: '餐盒', linkedAt: '2026-04-08 18:30:00', deletedAt: '-', deletedStatus: '未删除' },
+  { id: 7, dishCode: 'D0007', dishName: '酸梅汤', categoryName: '酒水饮料', spec: '杯', warehouses: ['热厨加工间'], dishType: '堂食', linkedAt: '2026-04-08 10:22:00', deletedAt: '2026-04-12 09:00:00', deletedStatus: '已删除' },
+  { id: 8, dishCode: 'D0008', dishName: '鲜蔬拼盘', categoryName: '蔬菜类', spec: '标准份', warehouses: ['冷厨加工间'], dishType: '堂食', linkedAt: '2026-04-07 15:40:00', deletedAt: '-', deletedStatus: '未删除' },
 ];
 
 const categoryQuery = reactive({
@@ -154,44 +155,49 @@ const dishCurrentPage = ref(1);
 const categoryPageSize = ref(10);
 const dishPageSize = ref(10);
 const selectedTreeNode = ref('全部');
+const selectedWarehouseNames = (values: string[]) => values.filter(Boolean);
 
-const warehouseLabelMap = computed(() => {
-  const map = new Map<string, string>();
-  const walk = (nodes: TreeNode[]) => {
-    nodes.forEach((node) => {
-      map.set(node.value, node.label);
-      if (node.children?.length) {
-        walk(node.children);
-      }
+const loadWarehouses = async () => {
+  const storeId = resolveStoreId();
+  if (!storeId) {
+    warehouseOptions.value = [];
+    return;
+  }
+  try {
+    const rows = await fetchStoreWarehousesApi(storeId, {
+      status: 'ENABLED',
+      warehouseType: '出品及生产部门',
     });
-  };
-  walk(warehouseTree);
-  return map;
-});
-
-const selectedWarehouseLabels = (values: string[]) => values
-  .map((value) => warehouseLabelMap.value.get(value) ?? value)
-  .filter((label) => label !== '全部仓库');
+    warehouseOptions.value = rows.map((item: WarehouseRow) => ({
+      id: item.id,
+      value: item.warehouseName,
+      label: `${item.warehouseName}（${item.warehouseCode}）`,
+    }));
+  } catch {
+    warehouseOptions.value = [];
+    ElMessage.error('仓库列表加载失败');
+  }
+};
 
 const categoryFilteredRows = computed(() => {
-  const warehouseLabels = selectedWarehouseLabels(categoryQuery.warehouses);
+  const warehouseNames = selectedWarehouseNames(categoryQuery.warehouses);
   return categoryWarehouseRows.filter((row) => {
     const matchedDishType = !categoryQuery.dishType || row.dishType === categoryQuery.dishType;
     const matchedCategory = !categoryQuery.categoryNames.length || categoryQuery.categoryNames.includes(row.categoryName);
-    const matchedWarehouse = !warehouseLabels.length || warehouseLabels.some((label) => row.warehouses.includes(label));
+    const matchedWarehouse = !warehouseNames.length || warehouseNames.some((name) => row.warehouses.includes(name));
     return matchedDishType && matchedCategory && matchedWarehouse;
   });
 });
 
 const dishFilteredRows = computed(() => {
   const keyword = dishQuery.dishInfo.trim().toLowerCase();
-  const warehouseLabels = selectedWarehouseLabels(dishQuery.warehouses);
+  const warehouseNames = selectedWarehouseNames(dishQuery.warehouses);
   return dishWarehouseRows.filter((row) => {
     const matchedManageRange = dishQuery.manageRange === '全部';
     const matchedKeyword = !keyword
       || row.dishCode.toLowerCase().includes(keyword)
       || row.dishName.toLowerCase().includes(keyword);
-    const matchedWarehouse = !warehouseLabels.length || warehouseLabels.some((label) => row.warehouses.includes(label));
+    const matchedWarehouse = !warehouseNames.length || warehouseNames.some((name) => row.warehouses.includes(name));
     const matchedDeleteStatus = row.deletedStatus === dishQuery.deleteStatus;
     const matchedTree = selectedTreeNode.value === '全部' || row.categoryName === selectedTreeNode.value || row.dishType === selectedTreeNode.value;
     return matchedManageRange && matchedKeyword && matchedWarehouse && matchedDeleteStatus && matchedTree;
@@ -266,6 +272,10 @@ const handleDishTreeSelect = (node: TreeNode) => {
   selectedTreeNode.value = node.label;
   dishCurrentPage.value = 1;
 };
+
+onMounted(() => {
+  void loadWarehouses();
+});
 </script>
 
 <template>
@@ -305,19 +315,22 @@ const handleDishTreeSelect = (node: TreeNode) => {
             </el-select>
           </el-form-item>
           <el-form-item label="仓库">
-            <el-tree-select
+            <el-select
               v-model="categoryQuery.warehouses"
-              :data="warehouseTree"
-              :props="{ label: 'label', value: 'value', children: 'children' }"
               multiple
-              show-checkbox
-              check-strictly
-              default-expand-all
               collapse-tags
               collapse-tags-tooltip
               placeholder="请选择"
               style="width: 260px"
-            />
+              filterable
+            >
+              <el-option
+                v-for="option in warehouseOptions"
+                :key="option.id"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="handleCategorySearch">查询</el-button>
@@ -397,21 +410,24 @@ const handleDishTreeSelect = (node: TreeNode) => {
                   style="width: 220px"
                 />
               </el-form-item>
-              <el-form-item label="仓库">
-                <el-tree-select
-                  v-model="dishQuery.warehouses"
-                  :data="warehouseTree"
-                  :props="{ label: 'label', value: 'value', children: 'children' }"
-                  multiple
-                  show-checkbox
-                  check-strictly
-                  default-expand-all
-                  collapse-tags
-                  collapse-tags-tooltip
-                  placeholder="请选择"
-                  style="width: 260px"
-                />
-              </el-form-item>
+          <el-form-item label="仓库">
+            <el-select
+              v-model="dishQuery.warehouses"
+              multiple
+              collapse-tags
+              collapse-tags-tooltip
+              placeholder="请选择"
+              style="width: 260px"
+              filterable
+            >
+              <el-option
+                v-for="option in warehouseOptions"
+                :key="option.id"
+                :label="option.label"
+                :value="option.value"
+              />
+            </el-select>
+          </el-form-item>
               <el-form-item label="菜品是否删除">
                 <el-select v-model="dishQuery.deleteStatus" style="width: 140px">
                   <el-option

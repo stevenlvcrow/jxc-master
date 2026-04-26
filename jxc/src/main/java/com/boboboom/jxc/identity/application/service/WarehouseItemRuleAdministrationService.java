@@ -1,29 +1,36 @@
 package com.boboboom.jxc.identity.application.service;
 
-import com.boboboom.jxc.common.BusinessCodeGenerator;
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.domain.repository.WarehouseItemRuleRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.boboboom.jxc.common.BusinessCodeGenerator;
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.domain.repository.WarehouseItemRuleRepository;
+
+/** 身份与权限服务，负责相关业务规则和流程协作。 */
 @Service
 public class WarehouseItemRuleAdministrationService {
 
     private static final String RULE_CODE_PREFIX = "CKWP";
-    private static final String STATUS_ENABLED = "ENABLED";
 
     private final WarehouseItemRuleRepository warehouseItemRuleRepository;
     private final BusinessCodeGenerator businessCodeGenerator;
+    private final DictionaryLookupService dictionaryLookupService;
 
-    public WarehouseItemRuleAdministrationService(WarehouseItemRuleRepository warehouseItemRuleRepository,
-                                                  BusinessCodeGenerator businessCodeGenerator) {
-        this.warehouseItemRuleRepository = warehouseItemRuleRepository;
-        this.businessCodeGenerator = businessCodeGenerator;
+    /** 身份与权限服务，负责相关业务规则和流程协作。 */
+    public WarehouseItemRuleAdministrationService(WarehouseItemRuleRepository warehouseItemRuleRepositoryValue,
+                                                  BusinessCodeGenerator businessCodeGeneratorValue,
+                                                  DictionaryLookupService dictionaryLookupServiceValue) {
+        this.warehouseItemRuleRepository = warehouseItemRuleRepositoryValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 查询规则列表。 */
     public List<RuleSummaryData> listRules(Long groupId) {
         return warehouseItemRuleRepository.findRuleSummariesByGroupId(groupId).stream()
                 .map(rule -> new RuleSummaryData(
@@ -40,6 +47,7 @@ public class WarehouseItemRuleAdministrationService {
                 .toList();
     }
 
+    /** 获取RuleDetail。 */
     public RuleDetailData getRuleDetail(Long ruleId) {
         WarehouseItemRuleRepository.RuleDetailData detail = warehouseItemRuleRepository.findRuleDetailById(ruleId);
         if (detail == null || detail.rule() == null) {
@@ -64,12 +72,14 @@ public class WarehouseItemRuleAdministrationService {
         );
     }
 
+    /** 查询并校验规则存在。 */
     public RuleRecordData requireRule(Long ruleId) {
         WarehouseItemRuleRepository.RuleRecord rule = warehouseItemRuleRepository.findRuleById(ruleId)
                 .orElseThrow(() -> new BusinessException("规则不存在"));
         return toRuleRecordData(rule);
     }
 
+    /** 创建规则。 */
     @Transactional
     public Long createRule(CreateRuleCommand command) {
         WarehouseItemRuleRepository.RuleRecord rule = new WarehouseItemRuleRepository.RuleRecord(
@@ -81,7 +91,7 @@ public class WarehouseItemRuleAdministrationService {
                 command.controlOrder(),
                 command.controlPurchaseInbound(),
                 command.controlTransferInbound(),
-                STATUS_ENABLED,
+                enabledStatus(),
                 command.operatorUsername(),
                 null,
                 null,
@@ -97,6 +107,7 @@ public class WarehouseItemRuleAdministrationService {
         return ruleId;
     }
 
+    /** 更新规则。 */
     @Transactional
     public void updateRule(UpdateRuleCommand command) {
         RuleRecordData current = requireRule(command.ruleId());
@@ -124,6 +135,7 @@ public class WarehouseItemRuleAdministrationService {
         );
     }
 
+    /** 删除规则。 */
     @Transactional
     public void deleteRule(Long ruleId) {
         requireRule(ruleId);
@@ -193,6 +205,7 @@ public class WarehouseItemRuleAdministrationService {
                 .toList();
     }
 
+    /** 身份与权限分页数据模型，承载列表数据和分页信息。 */
     public record RuleSummaryData(Long id,
                                   String ruleCode,
                                   String ruleName,
@@ -204,6 +217,7 @@ public class WarehouseItemRuleAdministrationService {
                                   LocalDateTime updatedAt) {
     }
 
+    /** 身份与权限分页数据模型，承载列表数据和分页信息。 */
     public record RuleRecordData(Long id,
                                  Long groupId,
                                  String ruleCode,
@@ -219,12 +233,14 @@ public class WarehouseItemRuleAdministrationService {
                                  LocalDateTime updatedAt) {
     }
 
+    /** 身份与权限分页数据模型，承载列表数据和分页信息。 */
     public record RuleDetailData(RuleRecordData rule,
                                  List<RuleItemData> items,
                                  List<RuleCategoryData> categories,
                                  List<RuleWarehouseData> warehouses) {
     }
 
+    /** 身份与权限分页数据模型，承载列表数据和分页信息。 */
     public record RuleItemData(Long id,
                                String itemCode,
                                String itemName,
@@ -232,6 +248,7 @@ public class WarehouseItemRuleAdministrationService {
                                String itemCategory) {
     }
 
+    /** 身份与权限分页数据模型，承载列表数据和分页信息。 */
     public record RuleCategoryData(Long id,
                                    String categoryCode,
                                    String categoryName,
@@ -239,11 +256,13 @@ public class WarehouseItemRuleAdministrationService {
                                    String childCategory) {
     }
 
+    /** 身份与权限分页数据模型，承载列表数据和分页信息。 */
     public record RuleWarehouseData(Long id,
                                     Long warehouseId,
                                     String warehouseName) {
     }
 
+    /** 身份与权限命令模型，承载Create规则命令写操作参数。 */
     public record CreateRuleCommand(Long groupId,
                                     String ruleName,
                                     boolean businessControl,
@@ -256,6 +275,7 @@ public class WarehouseItemRuleAdministrationService {
                                     List<RuleWarehouseData> warehouses) {
     }
 
+    /** 身份与权限命令模型，承载Update规则命令写操作参数。 */
     public record UpdateRuleCommand(Long ruleId,
                                     String ruleName,
                                     Boolean businessControl,
@@ -266,5 +286,9 @@ public class WarehouseItemRuleAdministrationService {
                                     List<RuleItemData> items,
                                     List<RuleCategoryData> categories,
                                     List<RuleWarehouseData> warehouses) {
+    }
+
+    private String enabledStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.COMMON_ENABLED_STATUS, DictionaryCodes.ENABLED);
     }
 }

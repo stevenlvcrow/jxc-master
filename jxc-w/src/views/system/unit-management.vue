@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { createUnitApi, deleteUnitApi, fetchUnitsApi, updateUnitApi, type UnitItem } from '@/api/modules/unit';
+import {
+  createUnitApi,
+  deleteUnitApi,
+  fetchUnitsApi,
+  updateUnitApi,
+  type UnitItem,
+} from '@/api/modules/unit';
 import ItemPaginationSection from '@/views/items/components/ItemPaginationSection.vue';
 import { useSessionStore } from '@/stores/session';
+import { resolveArchiveOrgId } from '@/views/items/org';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
-type UnitType = 'STANDARD' | 'AUXILIARY';
-type UnitStatus = 'ENABLED' | 'DISABLED';
+type UnitType = string;
+type UnitStatus = string;
 
 type UnitRecord = {
   id: number;
@@ -29,8 +37,33 @@ const query = reactive<{
 const currentPage = ref(1);
 const pageSize = ref(10);
 const sessionStore = useSessionStore();
+const COMMON_STATUS_DICT = 'common.enabled_status';
+const UNIT_TYPE_DICT = 'unit.type';
+const { optionsOf } = useDictionaryOptions([COMMON_STATUS_DICT, UNIT_TYPE_DICT]);
+const statusOptions = optionsOf(COMMON_STATUS_DICT, { enabled: true });
+const unitTypeOptions = optionsOf(UNIT_TYPE_DICT, { enabled: true });
+const enabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'ENABLED')?.itemCode ?? 'ENABLED'
+));
+const disabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'DISABLED')?.itemCode ?? 'DISABLED'
+));
+const standardUnitType = computed(() => (
+  unitTypeOptions.value.find((item) => item.itemKey === 'STANDARD')?.itemCode ?? 'STANDARD'
+));
+const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
+const emptyText = computed(() => {
+  if (!archiveOrgId.value) {
+    return '请先选择门店机构';
+  }
+  if (archiveOrgId.value === 'platform') {
+    return '平台模板暂无数据';
+  }
+  return '当前机构暂无数据';
+});
 
 const tableData = ref<UnitRecord[]>([]);
+const total = ref(0);
 const loading = ref(false);
 
 const dialogVisible = ref(false);
@@ -62,40 +95,58 @@ const filteredData = computed(() => {
   return tableData.value;
 });
 const pagedData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  return filteredData.value.slice(start, start + pageSize.value);
+  return filteredData.value;
 });
 
-const statusLabel = (status: UnitStatus) => (status === 'ENABLED' ? '启用' : '停用');
-const typeLabel = (type: UnitType) => (type === 'STANDARD' ? '标准单位' : '辅助单位');
+const statusLabel = (status: UnitStatus) => (
+  statusOptions.value.find((item) => item.itemCode === status)?.itemLabel ?? status
+);
+const typeLabel = (type: UnitType) => (
+  unitTypeOptions.value.find((item) => item.itemCode === type)?.itemLabel ?? type
+);
 
 const openCreateDialog = () => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   dialogMode.value = 'create';
   editingId.value = null;
   createForm.code = '';
   createForm.name = '';
-  createForm.type = 'STANDARD';
+  createForm.type = standardUnitType.value;
   createForm.status = true;
   dialogVisible.value = true;
 };
 const openEditDialog = (row: UnitRecord) => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   dialogMode.value = 'edit';
   editingId.value = row.id;
   createForm.code = row.code;
   createForm.name = row.name;
   createForm.type = row.type;
-  createForm.status = row.status === 'ENABLED';
+  createForm.status = row.status === enabledStatus.value;
   dialogVisible.value = true;
 };
 const loadUnits = async () => {
   loading.value = true;
   try {
+    const orgId = archiveOrgId.value;
+    if (!orgId) {
+      tableData.value = [];
+      return;
+    }
     const data = await fetchUnitsApi({
+      pageNum: currentPage.value,
+      pageSize: pageSize.value,
       keyword: query.keyword.trim() || undefined,
       status: query.status,
       unitType: query.unitType,
-    }, sessionStore.currentOrgId || undefined);
-    tableData.value = data.map((item: UnitItem) => ({
+    }, orgId);
+    tableData.value = data.list.map((item: UnitItem) => ({
       id: item.id,
       code: item.code,
       name: item.name,
@@ -103,6 +154,10 @@ const loadUnits = async () => {
       status: item.status,
       createdAt: item.createdAt,
     }));
+    total.value = data.total;
+  } catch {
+    tableData.value = [];
+    total.value = 0;
   } finally {
     loading.value = false;
   }
@@ -120,38 +175,48 @@ const handleReset = () => {
 };
 const handlePageChange = (page: number) => {
   currentPage.value = page;
+  void loadUnits();
 };
 const handlePageSizeChange = (size: number) => {
   pageSize.value = size;
   currentPage.value = 1;
+  void loadUnits();
 };
 
 const handleDelete = async (row: UnitRecord) => {
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   await ElMessageBox.confirm(`确定删除单位“${row.name}”吗？`, '删除确认', {
     type: 'warning',
     confirmButtonText: '确定',
     cancelButtonText: '取消',
   });
-  await deleteUnitApi(row.id, sessionStore.currentOrgId || undefined);
+  await deleteUnitApi(row.id, archiveOrgId.value);
   ElMessage.success('删除成功');
   await loadUnits();
 };
 
 const submitCreate = async () => {
   await createFormRef.value?.validate();
+  if (!archiveOrgId.value) {
+    ElMessage.warning('请先选择门店机构');
+    return;
+  }
   saving.value = true;
   const payload = {
     code: dialogMode.value === 'edit' ? createForm.code.trim() : undefined,
     name: createForm.name.trim(),
     type: createForm.type,
-    status: createForm.status ? 'ENABLED' : 'DISABLED',
+    status: createForm.status ? enabledStatus.value : disabledStatus.value,
   } as const;
   try {
     if (dialogMode.value === 'create') {
-      await createUnitApi(payload, sessionStore.currentOrgId || undefined);
+      await createUnitApi(payload, archiveOrgId.value);
       ElMessage.success('新增成功');
     } else if (editingId.value != null) {
-      await updateUnitApi(editingId.value, payload, sessionStore.currentOrgId || undefined);
+      await updateUnitApi(editingId.value, payload, archiveOrgId.value);
       ElMessage.success('编辑成功');
     }
     dialogVisible.value = false;
@@ -164,6 +229,14 @@ const submitCreate = async () => {
 onMounted(() => {
   void loadUnits();
 });
+
+watch(
+  () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
+  () => {
+    currentPage.value = 1;
+    void loadUnits();
+  },
+);
 </script>
 
 <template>
@@ -179,16 +252,22 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" style="width: 120px">
-            <el-option label="全部" value="ALL" />
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="单位类型">
           <el-select v-model="query.unitType" style="width: 130px">
-            <el-option label="标准单位" value="STANDARD" />
-            <el-option label="辅助单位" value="AUXILIARY" />
-            <el-option label="全部" value="ALL" />
+            <el-option
+              v-for="option in unitTypeOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item>
@@ -207,6 +286,7 @@ onMounted(() => {
         border
         stripe
         class="erp-table"
+        :empty-text="emptyText"
       >
         <el-table-column label="序号" width="60" align="center">
           <template #default="scope">
@@ -222,7 +302,7 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="状态" width="80" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'ENABLED' ? 'success' : 'info'" size="small">
+            <el-tag :type="row.status === enabledStatus ? 'success' : 'info'" size="small">
               {{ statusLabel(row.status) }}
             </el-tag>
           </template>
@@ -240,7 +320,7 @@ onMounted(() => {
         :selected-count="0"
         :current-page="currentPage"
         :page-size="pageSize"
-        :total="filteredData.length"
+        :total="total"
         @update:current-page="handlePageChange"
         @update:page-size="handlePageSizeChange"
       />
@@ -269,8 +349,13 @@ onMounted(() => {
       </el-form-item>
       <el-form-item label="单位类型" prop="type">
         <el-radio-group v-model="createForm.type">
-          <el-radio value="STANDARD">标准单位</el-radio>
-          <el-radio value="AUXILIARY">辅助单位</el-radio>
+          <el-radio
+            v-for="option in unitTypeOptions.filter((item) => item.itemCode !== 'ALL')"
+            :key="option.itemCode"
+            :value="option.itemCode"
+          >
+            {{ option.itemLabel }}
+          </el-radio>
         </el-radio-group>
       </el-form-item>
       <el-form-item label="状态">

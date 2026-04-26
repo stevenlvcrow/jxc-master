@@ -1,15 +1,5 @@
 package com.boboboom.jxc.item.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.item.domain.repository.DishCategoryRepository;
-import com.boboboom.jxc.item.domain.repository.DishProfileRepository;
-import com.boboboom.jxc.item.infrastructure.persistence.dataobject.DishCategoryDO;
-import com.boboboom.jxc.item.infrastructure.persistence.dataobject.DishProfileDO;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayDeque;
@@ -22,8 +12,23 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.item.domain.repository.DishCategoryRepository;
+import com.boboboom.jxc.item.domain.repository.DishProfileRepository;
+import com.boboboom.jxc.item.infrastructure.persistence.dataobject.DishCategoryDO;
+import com.boboboom.jxc.item.infrastructure.persistence.dataobject.DishProfileDO;
+
+/** 菜品业务服务，负责菜品列表和菜品分类树查询。 */
 @Service
 public class DishApplicationService {
+
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
 
     private static final String ROOT_CATEGORY = "菜品分类";
     private static final String ROOT_CATEGORY_ID = "all";
@@ -33,14 +38,16 @@ public class DishApplicationService {
     private final DishCategoryRepository dishCategoryRepository;
     private final OrgScopeService orgScopeService;
 
-    public DishApplicationService(DishProfileRepository dishProfileRepository,
-                                  DishCategoryRepository dishCategoryRepository,
-                                  OrgScopeService orgScopeService) {
-        this.dishProfileRepository = dishProfileRepository;
-        this.dishCategoryRepository = dishCategoryRepository;
-        this.orgScopeService = orgScopeService;
+    /** 菜品业务服务，负责菜品列表和菜品分类树查询。 */
+    public DishApplicationService(DishProfileRepository dishProfileRepositoryValue,
+                                  DishCategoryRepository dishCategoryRepositoryValue,
+                                  OrgScopeService orgScopeServiceValue) {
+        this.dishProfileRepository = dishProfileRepositoryValue;
+        this.dishCategoryRepository = dishCategoryRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
     }
 
+    /** 分页查询业务列表。 */
     public PageData<DishListRow> list(Integer pageNo,
                                       Integer pageSize,
                                       String keyword,
@@ -50,7 +57,7 @@ public class DishApplicationService {
                                       String orgId) {
         DishScope scope = resolveDishScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         int offset = (safePageNo - 1) * safePageSize;
 
         String keywordValue = trimNullable(keyword);
@@ -59,22 +66,12 @@ public class DishApplicationService {
         Set<Long> categoryIds = resolveCategoryFilter(scope, categoryId);
 
         List<DishProfileDO> rows = dishProfileRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
-                .filter(row -> matchDeleted(row.getDeleted(), deletedValue))
-                .filter(row -> categoryIds == null || categoryIds.isEmpty() || categoryIds.contains(row.getCategoryId()))
-                .filter(row -> StringUtils.hasText(keywordValue)
-                        ? containsKeyword(row, keywordValue)
-                        : true)
-                .filter(row -> !StringUtils.hasText(dishTypeValue) || Objects.equals(row.getDishType(), dishTypeValue))
+                .filter(row -> matchesDishListFilter(row, deletedValue, categoryIds, keywordValue, dishTypeValue))
                 .skip(offset)
                 .limit(safePageSize)
                 .toList();
         long total = dishProfileRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
-                .filter(row -> matchDeleted(row.getDeleted(), deletedValue))
-                .filter(row -> categoryIds == null || categoryIds.isEmpty() || categoryIds.contains(row.getCategoryId()))
-                .filter(row -> StringUtils.hasText(keywordValue)
-                        ? containsKeyword(row, keywordValue)
-                        : true)
-                .filter(row -> !StringUtils.hasText(dishTypeValue) || Objects.equals(row.getDishType(), dishTypeValue))
+                .filter(row -> matchesDishListFilter(row, deletedValue, categoryIds, keywordValue, dishTypeValue))
                 .count();
 
         Map<Long, String> categoryNameMap = buildCategoryNameMap(scope);
@@ -101,6 +98,30 @@ public class DishApplicationService {
         return new PageData<>(list, total, safePageNo, safePageSize);
     }
 
+    private boolean matchesDishListFilter(DishProfileDO row,
+                                          String deletedValue,
+                                          Set<Long> categoryIds,
+                                          String keywordValue,
+                                          String dishTypeValue) {
+        return matchDeleted(row.getDeleted(), deletedValue)
+                && matchesDishCategory(row, categoryIds)
+                && matchesDishKeyword(row, keywordValue)
+                && matchesDishType(row, dishTypeValue);
+    }
+
+    private boolean matchesDishCategory(DishProfileDO row, Set<Long> categoryIds) {
+        return categoryIds == null || categoryIds.isEmpty() || categoryIds.contains(row.getCategoryId());
+    }
+
+    private boolean matchesDishKeyword(DishProfileDO row, String keywordValue) {
+        return !StringUtils.hasText(keywordValue) || containsKeyword(row, keywordValue);
+    }
+
+    private boolean matchesDishType(DishProfileDO row, String dishTypeValue) {
+        return !StringUtils.hasText(dishTypeValue) || Objects.equals(row.getDishType(), dishTypeValue);
+    }
+
+    /** 查询分类树数据。 */
     public List<TreeNode> categoryTree(String orgId) {
         DishScope scope = resolveDishScope(orgId);
         List<DishCategoryDO> categories = dishCategoryRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
@@ -240,12 +261,14 @@ public class DishApplicationService {
         return value == null ? "" : value;
     }
 
+    /** 物品与供应商分页数据模型，承载列表数据和分页信息。 */
     public record PageData<T>(List<T> list,
                               long total,
                               int pageNo,
                               int pageSize) {
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record DishListRow(Long id,
                               int index,
                               String dishId,
@@ -261,6 +284,7 @@ public class DishApplicationService {
                               String updatedAt) {
     }
 
+    /** 物品与供应商数据模型，承载Tree节点数据。 */
     public record TreeNode(String id,
                            String label,
                            List<TreeNode> children) {

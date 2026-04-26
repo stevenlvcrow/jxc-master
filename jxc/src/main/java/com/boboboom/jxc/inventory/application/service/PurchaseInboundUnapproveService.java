@@ -1,14 +1,16 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
-import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
-import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
-import com.boboboom.jxc.workflow.application.service.PurchaseInboundWorkflowService;
+import java.util.List;
+import java.util.Objects;
+
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.List;
-import java.util.Objects;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
+import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
 
 /**
  * 采购入库反审核编排服务。
@@ -16,25 +18,27 @@ import java.util.Objects;
 @Service
 public class PurchaseInboundUnapproveService {
 
-    private static final String STATUS_APPROVED = "已审核";
-    private static final String STATUS_SUBMITTED = "已提交";
     private static final String PENDING_OPERATION_DELETE = "DELETE";
     private static final String PENDING_OPERATION_NONE = "NONE";
     private static final String INVENTORY_BIZ_TYPE_UNAPPROVE = "PURCHASE_INBOUND_UNAPPROVE";
 
-    private final PurchaseInboundWorkflowService purchaseInboundWorkflowService;
+    private final InventoryDocumentWorkflowService inventoryDocumentWorkflowService;
     private final PurchaseInboundNotificationService purchaseInboundNotificationService;
     private final InventoryStockMutationService inventoryStockMutationService;
     private final PurchaseInboundRepository purchaseInboundRepository;
+    private final DictionaryLookupService dictionaryLookupService;
 
-    public PurchaseInboundUnapproveService(PurchaseInboundWorkflowService purchaseInboundWorkflowService,
-                                           PurchaseInboundNotificationService purchaseInboundNotificationService,
-                                           InventoryStockMutationService inventoryStockMutationService,
-                                           PurchaseInboundRepository purchaseInboundRepository) {
-        this.purchaseInboundWorkflowService = purchaseInboundWorkflowService;
-        this.purchaseInboundNotificationService = purchaseInboundNotificationService;
-        this.inventoryStockMutationService = inventoryStockMutationService;
-        this.purchaseInboundRepository = purchaseInboundRepository;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public PurchaseInboundUnapproveService(InventoryDocumentWorkflowService inventoryDocumentWorkflowServiceValue,
+                                           PurchaseInboundNotificationService purchaseInboundNotificationServiceValue,
+                                           InventoryStockMutationService inventoryStockMutationServiceValue,
+                                           PurchaseInboundRepository purchaseInboundRepositoryValue,
+                                           DictionaryLookupService dictionaryLookupServiceValue) {
+        this.inventoryDocumentWorkflowService = inventoryDocumentWorkflowServiceValue;
+        this.purchaseInboundNotificationService = purchaseInboundNotificationServiceValue;
+        this.inventoryStockMutationService = inventoryStockMutationServiceValue;
+        this.purchaseInboundRepository = purchaseInboundRepositoryValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
     /**
@@ -55,11 +59,12 @@ public class PurchaseInboundUnapproveService {
                         List<PurchaseInboundLineDO> lines,
                         Long operatorId,
                         String rejectionReason) {
-        if (!Objects.equals(header.getStatus(), STATUS_APPROVED)) {
+        if (!Objects.equals(header.getStatus(), approvedStatus())) {
             resetDeletePendingIfNecessary(header);
             return;
         }
-        String approverRole = purchaseInboundWorkflowService.resolveApprovalRoleLabel(
+        String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
+                InventoryDocumentType.PURCHASE_INBOUND,
                 scopeType,
                 scopeId,
                 groupId,
@@ -102,6 +107,14 @@ public class PurchaseInboundUnapproveService {
                     line.getItemCode(),
                     line.getItemName(),
                     line.getQuantity().negate(),
+                    line.getQuantity().multiply(line.getUnitPrice()),
+                    header.getInboundDate(),
+                    new InventoryStockMutationService.BatchInfo(
+                            line.getBatchNo(),
+                            line.getManufacturer(),
+                            line.getProductionDate(),
+                            line.getExpiryDate()
+                    ),
                     INVENTORY_BIZ_TYPE_UNAPPROVE,
                     operatorId
             );
@@ -109,7 +122,7 @@ public class PurchaseInboundUnapproveService {
     }
 
     private void markHeaderSubmitted(PurchaseInboundDO header, String rejectionReason) {
-        header.setStatus(STATUS_SUBMITTED);
+        header.setStatus(submittedStatus());
         header.setApprovedBy(null);
         header.setApprovedAt(null);
         header.setRejectionReason(rejectionReason);
@@ -118,7 +131,7 @@ public class PurchaseInboundUnapproveService {
 
     private void persistAfterUnapprove(PurchaseInboundDO header) {
         if (hasWorkflowMetadata(header)) {
-            purchaseInboundWorkflowService.resetWorkflowState(header);
+            inventoryDocumentWorkflowService.resetPurchaseInboundWorkflowState(header);
             return;
         }
         purchaseInboundRepository.update(header);
@@ -132,5 +145,13 @@ public class PurchaseInboundUnapproveService {
                 || StringUtils.hasText(header.getWorkflowTaskId())
                 || StringUtils.hasText(header.getWorkflowTaskName())
                 || (StringUtils.hasText(header.getWorkflowStatus()) && !"NONE".equals(header.getWorkflowStatus()));
+    }
+
+    private String submittedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.SUBMITTED);
+    }
+
+    private String approvedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.APPROVED);
     }
 }

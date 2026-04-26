@@ -87,7 +87,7 @@ onMounted(async () => {
           </div>
           <el-button type="primary" size="small" @click="chooseOrg(store.id)">选择</el-button>
         </div>
-        <p class="org-meta">商户号：{{ store.merchantNo }}　机构编码：{{ store.code }}</p>
+        <p class="org-meta">商户号：{{ store.merchantNo }} 机构编码：{{ store.code }}</p>
       </el-card>
 
       <el-collapse v-model="activeGroups" class="org-collapse">
@@ -104,9 +104,16 @@ onMounted(async () => {
                   <el-tag type="primary" effect="light">集团</el-tag>
                   <strong>{{ group.name }}</strong>
                 </div>
-                <el-button type="primary" size="small" @click.stop="chooseOrg(group.id)">选择</el-button>
+                <el-button
+                  v-if="group.selectable !== false"
+                  type="primary"
+                  size="small"
+                  @click.stop="chooseOrg(group.id)"
+                >
+                  选择
+                </el-button>
               </div>
-              <div class="org-meta">集团号：{{ group.merchantNo }}　机构编码：{{ group.code }}</div>
+              <div class="org-meta">集团号：{{ group.merchantNo }} 机构编码：{{ group.code }}</div>
             </div>
           </template>
 
@@ -119,7 +126,7 @@ onMounted(async () => {
             >
               <div class="org-child-main">
                 <strong>{{ child.name }}</strong>
-                <p class="org-meta">商户号：{{ child.merchantNo }}　机构编码：{{ child.code }}</p>
+                <p class="org-meta">商户号：{{ child.merchantNo }} 机构编码：{{ child.code }}</p>
               </div>
               <el-button type="primary" size="small" @click="chooseOrg(child.id)">选择</el-button>
             </div>

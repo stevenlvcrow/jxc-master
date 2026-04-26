@@ -1,5 +1,8 @@
 package com.boboboom.jxc.item.interfaces.rest.request;
 
+import java.math.BigDecimal;
+import java.util.List;
+
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -7,9 +10,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import java.math.BigDecimal;
-import java.util.List;
-
+/** 物品与供应商请求参数，承载接口入参。 */
 public record SupplierCreateRequest(
         @Size(max = 64, message = "供货商编码长度不能超过64")
         String supplierCode,
@@ -106,6 +107,7 @@ public record SupplierCreateRequest(
         @Size(max = 255, message = "单位地址长度不能超过255")
         String invoiceAddress
 ) {
+    /** 物品与供应商请求参数，承载接口入参。 */
     public record QualificationItemRequest(
             @Size(max = 255, message = "资质文件名长度不能超过255")
             String fileName,
@@ -128,6 +130,7 @@ public record SupplierCreateRequest(
     ) {
     }
 
+    /** 物品与供应商请求参数，承载接口入参。 */
     public record ContractItemRequest(
             @Size(max = 255, message = "合同附件名长度不能超过255")
             String attachmentName,
@@ -149,6 +152,7 @@ public record SupplierCreateRequest(
     ) {
     }
 
+    /** 物品与供应商请求参数，承载接口入参。 */
     public record FinanceItemRequest(
             @NotBlank(message = "银行账号不能为空")
             @Size(max = 64, message = "银行账号长度不能超过64")

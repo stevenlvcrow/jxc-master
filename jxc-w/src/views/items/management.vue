@@ -11,7 +11,7 @@ import {
   type ItemStatus,
 } from '@/api/modules/item';
 import { useSessionStore } from '@/stores/session';
-import { normalizeItemOrgId, requireItemOrgId } from './org';
+import { requireItemOrgId, resolveArchiveOrgId } from './org';
 import ItemCategoryTree from './components/ItemCategoryTree.vue';
 import ItemPaginationSection from './components/ItemPaginationSection.vue';
 import ItemQuerySection from './components/ItemQuerySection.vue';
@@ -40,9 +40,10 @@ const tableData = ref<ItemRow[]>([]);
 const selectedRows = ref<ItemRow[]>([]);
 const loading = ref(false);
 const loadFailed = ref(false);
+const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
 const emptyText = computed(() => {
-  if (!normalizeItemOrgId(sessionStore.currentOrgId)) {
-    return '请先选择机构';
+  if (!archiveOrgId.value) {
+    return '请先选择门店机构';
   }
   if (loadFailed.value) {
     return '物品列表加载失败，请重试';
@@ -66,13 +67,18 @@ const isCancelError = (error: unknown) => {
   return false;
 };
 
-const isMissingOrgError = (error: unknown) => error instanceof Error && error.message === '请先选择机构';
+const isMissingOrgError = (error: unknown) => error instanceof Error && error.message === '请先选择门店机构';
 
-const resolveItemOrgId = () => requireItemOrgId(sessionStore.currentOrgId);
+const resolveItemOrgId = () => requireItemOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
 
 const fetchCategoryTree = async () => {
+  const orgId = archiveOrgId.value;
+  if (!orgId) {
+    categoryTree.value = [{ label: rootCategoryName, children: [] }];
+    return;
+  }
   try {
-    const tree = await fetchItemCategoryTreeApi(resolveItemOrgId());
+    const tree = await fetchItemCategoryTreeApi(orgId);
     categoryTree.value = tree.length ? tree : [{ label: rootCategoryName, children: [] }];
   } catch (error) {
     categoryTree.value = [{ label: rootCategoryName, children: [] }];
@@ -86,6 +92,14 @@ const fetchTableData = async () => {
   loading.value = true;
   loadFailed.value = false;
   try {
+    const orgId = archiveOrgId.value;
+    if (!orgId) {
+      tableData.value = [];
+      total.value = 0;
+      selectedRows.value = [];
+      selectedCount.value = 0;
+      return;
+    }
     const res = await fetchItemsApi({
       pageNo: currentPage.value,
       pageSize: pageSize.value,
@@ -96,7 +110,7 @@ const fetchTableData = async () => {
       statType: query.statType,
       storageMode: query.storageMode,
       tag: query.tag,
-    }, resolveItemOrgId());
+    }, orgId);
 
     tableData.value = res.list;
     total.value = res.total;
@@ -107,7 +121,7 @@ const fetchTableData = async () => {
     total.value = 0;
     selectedRows.value = [];
     selectedCount.value = 0;
-    if (!normalizeItemOrgId(sessionStore.currentOrgId)) {
+    if (!archiveOrgId.value) {
       loadFailed.value = false;
       return;
     }
@@ -216,10 +230,14 @@ const batchDelete = async () => {
   await fetchTableData();
 };
 
-const handleToolbarAction = async (action: string) => {
+  const handleToolbarAction = async (action: string) => {
   try {
     if (action === '新增物品') {
-      router.push('/archive/1/1/create');
+      if (!archiveOrgId.value) {
+        ElMessage.warning('请先选择门店机构');
+        return;
+      }
+      router.push('/archive/items/create');
       return;
     }
 
@@ -273,7 +291,7 @@ const handleToggleStatus = async (row: ItemRow) => {
 
 const handleEditOne = (row: ItemRow) => {
   router.push({
-    path: '/archive/1/1/create',
+    path: '/archive/items/create',
     query: {
       id: row.id,
       mode: 'edit',
@@ -305,7 +323,7 @@ onMounted(async () => {
 });
 
 watch(
-  () => sessionStore.currentOrgId,
+  () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
   async () => {
     selectedTreeNode.value = rootCategoryName;
     selectedTreeCategories.value = [];

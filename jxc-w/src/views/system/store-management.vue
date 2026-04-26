@@ -7,23 +7,31 @@ import ItemPaginationSection from '@/views/items/components/ItemPaginationSectio
 import {
   createGroupStoreApi,
   deleteGroupStoreApi,
-  fetchAdminGroupsApi,
+  fetchGroupUsersApi,
   fetchGroupStoresApi,
   updateGroupStoreApi,
-  type GroupAdminItem,
+  type GroupUserOptionItem,
   type GroupStoreItem,
 } from '@/api/modules/system-admin';
 import { useSessionStore, type OrgNode } from '@/stores/session';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 const sessionStore = useSessionStore();
+const COMMON_STATUS_DICT = 'common.enabled_status';
+const { optionsOf } = useDictionaryOptions([COMMON_STATUS_DICT]);
+const statusOptions = optionsOf(COMMON_STATUS_DICT);
+const enabledStatus = computed(() => (
+  statusOptions.value.find((item) => item.itemKey === 'ENABLED')?.itemCode ?? 'ENABLED'
+));
 const loading = ref(false);
 const creating = ref(false);
+const adminUserLoading = ref(false);
 const createDialogVisible = ref(false);
 const dialogTitle = ref('新增门店');
 const isEdit = ref(false);
 const editingStoreId = ref<number | null>(null);
-const groups = ref<GroupAdminItem[]>([]);
 const stores = ref<GroupStoreItem[]>([]);
+const adminUserOptions = ref<GroupUserOptionItem[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const selectedGroupId = ref<number>();
@@ -34,7 +42,8 @@ const query = reactive({
 
 const createForm = reactive({
   storeName: '',
-  status: 'ENABLED' as 'ENABLED' | 'DISABLED',
+  adminUserId: undefined as number | undefined,
+  status: 'ENABLED',
   contactName: '',
   contactPhone: '',
   address: '',
@@ -70,7 +79,8 @@ const pagedStores = computed(() => {
 
 const resetCreateForm = () => {
   createForm.storeName = '';
-  createForm.status = 'ENABLED';
+  createForm.adminUserId = undefined;
+  createForm.status = enabledStatus.value;
   createForm.contactName = '';
   createForm.contactPhone = '';
   createForm.address = '';
@@ -80,25 +90,17 @@ const resetCreateForm = () => {
   dialogTitle.value = '新增门店';
 };
 
-const loadGroups = async () => {
-  groups.value = await fetchAdminGroupsApi();
-  if (!groups.value.length) {
-    selectedGroupId.value = undefined;
-    stores.value = [];
-    return;
-  }
+const resolveSelectedGroupId = () => {
   const currentGroup = resolveParentGroup(sessionStore.currentOrg);
-  if (!selectedGroupId.value) {
-    if (currentGroup?.id.startsWith('group-')) {
-      const currentId = Number(currentGroup.id.slice('group-'.length));
-      if (!Number.isNaN(currentId) && groups.value.some((item) => item.id === currentId)) {
-        selectedGroupId.value = currentId;
-      }
-    }
-    if (!selectedGroupId.value) {
-      selectedGroupId.value = groups.value[0].id;
+  if (currentGroup?.id.startsWith('group-')) {
+    const currentId = Number(currentGroup.id.slice('group-'.length));
+    if (Number.isFinite(currentId) && currentId > 0) {
+      selectedGroupId.value = currentId;
+      return;
     }
   }
+  selectedGroupId.value = undefined;
+  stores.value = [];
 };
 
 const loadStores = async () => {
@@ -114,14 +116,22 @@ const loadStores = async () => {
   }
 };
 
-const refresh = async () => {
-  loading.value = true;
-  try {
-    await loadGroups();
-    await loadStores();
-  } finally {
-    loading.value = false;
+const loadAdminUserOptions = async () => {
+  if (!selectedGroupId.value) {
+    adminUserOptions.value = [];
+    return;
   }
+  adminUserLoading.value = true;
+  try {
+    adminUserOptions.value = await fetchGroupUsersApi(selectedGroupId.value);
+  } finally {
+    adminUserLoading.value = false;
+  }
+};
+
+const refresh = async () => {
+  resolveSelectedGroupId();
+  await loadStores();
 };
 
 const handleToolbarAction = (key: string) => {
@@ -131,6 +141,7 @@ const handleToolbarAction = (key: string) => {
       return;
     }
     resetCreateForm();
+    void loadAdminUserOptions();
     createDialogVisible.value = true;
     return;
   }
@@ -176,6 +187,10 @@ const handleCreateStore = async () => {
     ElMessage.warning('请填写门店名称');
     return;
   }
+  if (!isEdit.value && !createForm.adminUserId) {
+    ElMessage.warning('请选择管理员');
+    return;
+  }
   creating.value = true;
   try {
     const payload = {
@@ -194,6 +209,7 @@ const handleCreateStore = async () => {
       await createGroupStoreApi(selectedGroupId.value, {
         ...payload,
         storeCode: undefined,
+        adminUserId: createForm.adminUserId!,
       });
       ElMessage.success('门店创建成功');
     }
@@ -234,23 +250,17 @@ onMounted(() => {
   <div class="page-grid single">
     <section class="panel item-main-panel">
       <CommonQuerySection :model="query">
-        <el-form-item label="集团">
-          <el-select v-model="selectedGroupId" style="width: 260px" filterable>
-            <el-option
-              v-for="group in groups"
-              :key="group.id"
-              :label="`${group.groupName}（${group.groupCode}）`"
-              :value="group.id"
-            />
-          </el-select>
-        </el-form-item>
         <el-form-item label="关键字">
           <el-input v-model="query.keyword" placeholder="门店编码/名称/联系方式" clearable style="width: 260px" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" clearable style="width: 140px">
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
       </CommonQuerySection>
@@ -262,7 +272,11 @@ onMounted(() => {
         <el-table-column prop="storeName" label="门店名称" min-width="180" />
         <el-table-column prop="contactName" label="联系人" width="120" />
         <el-table-column prop="contactPhone" label="联系电话" width="140" />
-        <el-table-column prop="status" label="状态" width="100" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            {{ statusOptions.find((item) => item.itemCode === row.status)?.itemLabel ?? row.status }}
+          </template>
+        </el-table-column>
         <el-table-column prop="address" label="地址" min-width="220" show-overflow-tooltip />
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
@@ -293,10 +307,34 @@ onMounted(() => {
         <el-form-item label="门店名称" required>
           <el-input v-model="createForm.storeName" maxlength="128" />
         </el-form-item>
+        <el-form-item v-if="!isEdit" label="管理员" required>
+          <el-select
+            v-model="createForm.adminUserId"
+            filterable
+            clearable
+            :loading="adminUserLoading"
+            placeholder="请选择集团下用户"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="user in adminUserOptions"
+              :key="user.userId"
+              :label="`${user.realName}（${user.phone}）`"
+              :value="user.userId"
+            >
+              <span>{{ user.realName }}</span>
+              <span class="user-option-meta">{{ user.phone }} / {{ user.username }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="createForm.status" style="width: 100%">
-            <el-option label="启用" value="ENABLED" />
-            <el-option label="停用" value="DISABLED" />
+            <el-option
+              v-for="option in statusOptions"
+              :key="option.itemCode"
+              :label="option.itemLabel"
+              :value="option.itemCode"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="联系人">
@@ -321,4 +359,12 @@ onMounted(() => {
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.user-option-meta {
+  float: right;
+  color: #909399;
+  font-size: 12px;
+}
+</style>
 

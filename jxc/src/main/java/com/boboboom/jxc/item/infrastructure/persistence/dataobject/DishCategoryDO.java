@@ -3,7 +3,8 @@ package com.boboboom.jxc.item.infrastructure.persistence.dataobject;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.BaseAuditDO;
 
-@TableName("dev.dish_category")
+/** 物品与供应商数据对象，映射数据库表记录。 */
+@TableName("dish_category")
 public class DishCategoryDO extends BaseAuditDO {
 
     private String scopeType;
@@ -13,51 +14,63 @@ public class DishCategoryDO extends BaseAuditDO {
     private String parentCategory;
     private String status;
 
+    /** 获取ScopeType。 */
     public String getScopeType() {
         return scopeType;
     }
 
-    public void setScopeType(String scopeType) {
-        this.scopeType = scopeType;
+    /** 设置ScopeType。 */
+    public void setScopeType(String scopeTypeValue) {
+        this.scopeType = scopeTypeValue;
     }
 
+    /** 获取ScopeId。 */
     public Long getScopeId() {
         return scopeId;
     }
 
-    public void setScopeId(Long scopeId) {
-        this.scopeId = scopeId;
+    /** 设置ScopeId。 */
+    public void setScopeId(Long scopeIdValue) {
+        this.scopeId = scopeIdValue;
     }
 
+    /** 获取CategoryCode。 */
     public String getCategoryCode() {
         return categoryCode;
     }
 
-    public void setCategoryCode(String categoryCode) {
-        this.categoryCode = categoryCode;
+    /** 设置CategoryCode。 */
+    public void setCategoryCode(String categoryCodeValue) {
+        this.categoryCode = categoryCodeValue;
     }
 
+    /** 获取CategoryName。 */
     public String getCategoryName() {
         return categoryName;
     }
 
-    public void setCategoryName(String categoryName) {
-        this.categoryName = categoryName;
+    /** 设置CategoryName。 */
+    public void setCategoryName(String categoryNameValue) {
+        this.categoryName = categoryNameValue;
     }
 
+    /** 获取ParentCategory。 */
     public String getParentCategory() {
         return parentCategory;
     }
 
-    public void setParentCategory(String parentCategory) {
-        this.parentCategory = parentCategory;
+    /** 设置ParentCategory。 */
+    public void setParentCategory(String parentCategoryValue) {
+        this.parentCategory = parentCategoryValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 }

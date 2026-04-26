@@ -1,11 +1,10 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.domain.repository.RoleRepository;
-import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
 import org.springframework.stereotype.Service;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.application.service.DataScopeAccessService;
+import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
 
 /**
  * 通用库存单据权限判断服务。
@@ -14,15 +13,13 @@ import org.springframework.stereotype.Service;
 public class InventoryDocumentPermissionService {
 
     private final WorkflowActionService workflowActionService;
-    private final UserRoleRelRepository userRoleRelRepository;
-    private final RoleRepository roleRepository;
+    private final DataScopeAccessService dataScopeAccessService;
 
-    public InventoryDocumentPermissionService(WorkflowActionService workflowActionService,
-                                              UserRoleRelRepository userRoleRelRepository,
-                                              RoleRepository roleRepository) {
-        this.workflowActionService = workflowActionService;
-        this.userRoleRelRepository = userRoleRelRepository;
-        this.roleRepository = roleRepository;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public InventoryDocumentPermissionService(WorkflowActionService workflowActionServiceValue,
+                                              DataScopeAccessService dataScopeAccessServiceValue) {
+        this.workflowActionService = workflowActionServiceValue;
+        this.dataScopeAccessService = dataScopeAccessServiceValue;
     }
 
     /**
@@ -42,7 +39,8 @@ public class InventoryDocumentPermissionService {
                                                  Long operatorId) {
         boolean canManageAll = canViewAll(scopeType, scopeId, groupId, operatorId);
         if (!type.isWorkflowEnabled()) {
-            return new PermissionSnapshot(true, true, true, false, false);
+            boolean canApprove = type == InventoryDocumentType.WAREHOUSE_OPENING_BALANCE;
+            return new PermissionSnapshot(true, true, true, canApprove, false);
         }
         boolean canApprove = canReview(type, scopeType, scopeId, groupId, operatorId) || canManageAll;
         return new PermissionSnapshot(
@@ -64,15 +62,7 @@ public class InventoryDocumentPermissionService {
      * @return 是否可查看全部
      */
     public boolean canViewAll(String scopeType, Long scopeId, Long groupId, Long operatorId) {
-        if (operatorId == null) {
-            return false;
-        }
-        if (hasRoleInScope(operatorId, "STORE_ADMIN", "STORE", scopeId)) {
-            return true;
-        }
-        return "STORE".equals(scopeType)
-                && groupId != null
-                && hasRoleInScope(operatorId, "GROUP_ADMIN", "GROUP", groupId);
+        return dataScopeAccessService.canViewScopeData(scopeType, scopeId, groupId, operatorId);
     }
 
     /**
@@ -140,6 +130,9 @@ public class InventoryDocumentPermissionService {
                                        Long scopeId,
                                        Long groupId,
                                        Long operatorId) {
+        if (type == InventoryDocumentType.WAREHOUSE_OPENING_BALANCE) {
+            return;
+        }
         if (!type.isWorkflowEnabled()) {
             throw new BusinessException(type.getBusinessName() + "不支持审核");
         }
@@ -162,17 +155,6 @@ public class InventoryDocumentPermissionService {
                 operatorId,
                 action
         );
-    }
-
-    private boolean hasRoleInScope(Long operatorId, String roleCode, String scopeType, Long scopeId) {
-        if (operatorId == null || scopeId == null) {
-            return false;
-        }
-        RoleDO role = roleRepository.findByRoleCode(roleCode).orElse(null);
-        if (role == null) {
-            return false;
-        }
-        return userRoleRelRepository.findByUserIdRoleAndScope(operatorId, role.getId(), scopeType, scopeId).isPresent();
     }
 
     /**

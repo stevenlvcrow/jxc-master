@@ -1,7 +1,7 @@
 import { apiClient } from '@/api/http-client';
 
-export type WarehouseStatus = 'ENABLED' | 'DISABLED';
-export type WarehouseType = '出品及生产部门' | '行政部门' | '普通仓库';
+export type WarehouseStatus = string;
+export type WarehouseType = string;
 type WarehouseQueryParams = { keyword?: string; status?: string; warehouseType?: string };
 type WarehousePageData<T> = {
   list: T[];
@@ -31,7 +31,7 @@ export type WarehouseCreatePayload = {
   warehouseCode?: string;
   warehouseName: string;
   department?: string;
-  status?: 'ENABLED' | 'DISABLED';
+  status?: string;
   warehouseType?: WarehouseType;
   contactName?: string;
   contactPhone?: string;
@@ -44,7 +44,7 @@ export type WarehouseCreatePayload = {
 export type WarehouseUpdatePayload = {
   warehouseName: string;
   department?: string;
-  status?: 'ENABLED' | 'DISABLED';
+  status?: string;
   warehouseType?: WarehouseType;
   contactName?: string;
   contactPhone?: string;
@@ -63,7 +63,7 @@ const normalizeWarehouseQueryParams = (params?: WarehouseQueryParams) => ({
 const fetchWarehousePagedList = async (url: string, params?: WarehouseQueryParams) => {
   const rows: WarehouseRow[] = [];
   let pageNum = 1;
-  let total = 0;
+  let total: number;
   const normalizedParams = normalizeWarehouseQueryParams(params);
 
   do {
@@ -110,5 +110,5 @@ export const deleteWarehouseApi = (id: number) =>
 export const setWarehouseDefaultApi = (id: number) =>
   apiClient.put<void>(`/api/identity/admin/warehouses/${id}/default`);
 
-export const updateWarehouseStatusApi = (id: number, status: 'ENABLED' | 'DISABLED') =>
+export const updateWarehouseStatusApi = (id: number, status: string) =>
   apiClient.put<void>(`/api/identity/admin/warehouses/${id}/status`, { status });

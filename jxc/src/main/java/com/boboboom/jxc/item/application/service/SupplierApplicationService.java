@@ -1,22 +1,5 @@
 package com.boboboom.jxc.item.application.service;
 
-import com.boboboom.jxc.common.BusinessCodeGenerator;
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.item.domain.repository.SupplierContractRepository;
-import com.boboboom.jxc.item.domain.repository.SupplierFinanceAccountRepository;
-import com.boboboom.jxc.item.domain.repository.SupplierProfileRepository;
-import com.boboboom.jxc.item.domain.repository.SupplierQualificationRepository;
-import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierContractDO;
-import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierFinanceAccountDO;
-import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierProfileDO;
-import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierQualificationDO;
-import com.boboboom.jxc.item.interfaces.rest.request.SupplierCreateRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
-
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -26,19 +9,35 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.common.BusinessCodeGenerator;
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
+import com.boboboom.jxc.item.domain.repository.SupplierContractRepository;
+import com.boboboom.jxc.item.domain.repository.SupplierFinanceAccountRepository;
+import com.boboboom.jxc.item.domain.repository.SupplierProfileRepository;
+import com.boboboom.jxc.item.domain.repository.SupplierQualificationRepository;
+import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierContractDO;
+import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierFinanceAccountDO;
+import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierProfileDO;
+import com.boboboom.jxc.item.infrastructure.persistence.dataobject.SupplierQualificationDO;
+import com.boboboom.jxc.item.interfaces.rest.request.SupplierCreateRequest;
+
+/** 供应商业务服务，负责供应商资料、资质、合同和财务信息维护。 */
 @Service
 public class SupplierApplicationService {
 
-    private static final String STATUS_ENABLED = "启用";
-    private static final String STATUS_DISABLED = "停用";
-    private static final String BIND_STATUS_BOUND = "已绑定";
-    private static final String BIND_STATUS_UNBOUND = "未绑定";
-    private static final String SOURCE_GROUP = "集团";
-    private static final String SOURCE_STORE = "门店";
-    private static final String SUPPLY_RELATION_YES = "有";
-    private static final String SUPPLY_RELATION_NO = "无";
-    private static final String SCOPE_CONTROL_ON = "开启";
-    private static final String SCOPE_CONTROL_OFF = "关闭";
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
+
+    private static final String DICT_SUPPLIER_SUPPLY_RELATION = "supplier.supply_relation";
+    private static final String DICT_SUPPLIER_SCOPE_CONTROL = "supplier.scope_control";
     private static final String SUPPLIER_CODE_PREFIX = "GYBM";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -48,21 +47,26 @@ public class SupplierApplicationService {
     private final SupplierFinanceAccountRepository supplierFinanceAccountRepository;
     private final OrgScopeService orgScopeService;
     private final BusinessCodeGenerator businessCodeGenerator;
+    private final DictionaryLookupService dictionaryLookupService;
 
-    public SupplierApplicationService(SupplierProfileRepository supplierProfileRepository,
-                                      SupplierQualificationRepository supplierQualificationRepository,
-                                      SupplierContractRepository supplierContractRepository,
-                                      SupplierFinanceAccountRepository supplierFinanceAccountRepository,
-                                      OrgScopeService orgScopeService,
-                                      BusinessCodeGenerator businessCodeGenerator) {
-        this.supplierProfileRepository = supplierProfileRepository;
-        this.supplierQualificationRepository = supplierQualificationRepository;
-        this.supplierContractRepository = supplierContractRepository;
-        this.supplierFinanceAccountRepository = supplierFinanceAccountRepository;
-        this.orgScopeService = orgScopeService;
-        this.businessCodeGenerator = businessCodeGenerator;
+    /** 供应商业务服务，负责供应商资料、资质、合同和财务信息维护。 */
+    public SupplierApplicationService(SupplierProfileRepository supplierProfileRepositoryValue,
+                                      SupplierQualificationRepository supplierQualificationRepositoryValue,
+                                      SupplierContractRepository supplierContractRepositoryValue,
+                                      SupplierFinanceAccountRepository supplierFinanceAccountRepositoryValue,
+                                      OrgScopeService orgScopeServiceValue,
+                                      BusinessCodeGenerator businessCodeGeneratorValue,
+                                      DictionaryLookupService dictionaryLookupServiceValue) {
+        this.supplierProfileRepository = supplierProfileRepositoryValue;
+        this.supplierQualificationRepository = supplierQualificationRepositoryValue;
+        this.supplierContractRepository = supplierContractRepositoryValue;
+        this.supplierFinanceAccountRepository = supplierFinanceAccountRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 分页查询业务列表。 */
     public PageData<SupplierListRow> list(
             Integer pageNo,
             Integer pageSize,
@@ -76,7 +80,7 @@ public class SupplierApplicationService {
     ) {
         SupplierScope scope = resolveSupplierScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         int offset = (safePageNo - 1) * safePageSize;
 
         List<SupplierProfileDO> records = filterSupplierProfiles(
@@ -124,6 +128,7 @@ public class SupplierApplicationService {
         return new PageData<>(rows, total == null ? 0 : total, safePageNo, safePageSize);
     }
 
+    /** 创建业务记录。 */
     @Transactional
     public IdPayload create(String orgId, SupplierCreateRequest request) {
         SupplierScope scope = resolveSupplierScope(orgId);
@@ -134,18 +139,20 @@ public class SupplierApplicationService {
         profile.setScopeType(scope.scopeType());
         profile.setScopeId(scope.scopeId());
         applyProfileFields(profile, request, scope.scopeType(), supplierCode);
-        profile.setBindStatus(BIND_STATUS_UNBOUND);
+        profile.setBindStatus(codeOf(DictionaryCodes.SUPPLIER_BIND_STATUS, DictionaryCodes.UNBOUND));
         supplierProfileRepository.save(profile);
         replaceSupplierDetails(profile.getId(), request);
         return new IdPayload(profile.getId());
     }
 
+    /** 查询业务详情。 */
     public SupplierDetailResponse detail(Long id, String orgId) {
         SupplierScope scope = resolveSupplierScope(orgId);
         SupplierProfileDO profile = requireSupplierInScope(scope, id, "供应商不存在或无权限访问");
         return buildSupplierDetail(profile);
     }
 
+    /** 更新业务记录。 */
     @Transactional
     public IdPayload update(Long id, String orgId, SupplierCreateRequest request) {
         SupplierScope scope = resolveSupplierScope(orgId);
@@ -364,13 +371,7 @@ public class SupplierApplicationService {
 
     private String normalizeStatus(String status) {
         String normalized = trim(status);
-        if (Objects.equals(normalized, STATUS_ENABLED) || Objects.equals(normalized, "ENABLED")) {
-            return STATUS_ENABLED;
-        }
-        if (Objects.equals(normalized, STATUS_DISABLED) || Objects.equals(normalized, "DISABLED")) {
-            return STATUS_DISABLED;
-        }
-        throw new BusinessException("启用状态仅支持 启用/停用");
+        return normalizeDictionaryCode(DictionaryCodes.SUPPLIER_STATUS, normalized);
     }
 
     private String normalizeQueryStatus(String status) {
@@ -392,10 +393,7 @@ public class SupplierApplicationService {
         if (Objects.equals(normalized, "全部") || Objects.equals(normalized, "ALL")) {
             return null;
         }
-        if (!Objects.equals(normalized, BIND_STATUS_BOUND) && !Objects.equals(normalized, BIND_STATUS_UNBOUND)) {
-            throw new BusinessException("绑定状态仅支持 全部/已绑定/未绑定");
-        }
-        return normalized;
+        return normalizeDictionaryCode(DictionaryCodes.SUPPLIER_BIND_STATUS, normalized);
     }
 
     private String normalizeQuerySource(String source) {
@@ -406,10 +404,7 @@ public class SupplierApplicationService {
         if (Objects.equals(normalized, "全部") || Objects.equals(normalized, "ALL")) {
             return null;
         }
-        if (!Objects.equals(normalized, SOURCE_GROUP) && !Objects.equals(normalized, SOURCE_STORE)) {
-            throw new BusinessException("来源仅支持 全部/集团/门店");
-        }
-        return normalized;
+        return normalizeDictionaryCode(DictionaryCodes.SUPPLIER_SOURCE, normalized);
     }
 
     private String normalizeQuerySupplyRelation(String supplyRelation) {
@@ -420,10 +415,7 @@ public class SupplierApplicationService {
         if (Objects.equals(normalized, "全部") || Objects.equals(normalized, "ALL")) {
             return null;
         }
-        if (!Objects.equals(normalized, SUPPLY_RELATION_YES) && !Objects.equals(normalized, SUPPLY_RELATION_NO)) {
-            throw new BusinessException("供货关系仅支持 全部/有/无");
-        }
-        return normalized;
+        return normalizeDictionaryCode(DICT_SUPPLIER_SUPPLY_RELATION, normalized);
     }
 
     private String normalizeSettlementMethod(String value) {
@@ -452,10 +444,7 @@ public class SupplierApplicationService {
 
     private String normalizeScopeControl(String value) {
         String normalized = trim(value);
-        if (Objects.equals(normalized, SCOPE_CONTROL_ON) || Objects.equals(normalized, SCOPE_CONTROL_OFF)) {
-            return normalized;
-        }
-        throw new BusinessException("范围控制仅支持 开启/关闭");
+        return normalizeDictionaryCode(DICT_SUPPLIER_SCOPE_CONTROL, normalized);
     }
 
     private BigDecimal normalizeTaxRate(BigDecimal taxRate) {
@@ -470,16 +459,34 @@ public class SupplierApplicationService {
 
     private String resolveSource(String scopeType) {
         if (Objects.equals(scopeType, OrgScopeService.SCOPE_STORE)) {
-            return SOURCE_STORE;
+            return codeOf(DictionaryCodes.SUPPLIER_SOURCE, DictionaryCodes.STORE);
         }
-        return SOURCE_GROUP;
+        return codeOf(DictionaryCodes.SUPPLIER_SOURCE, DictionaryCodes.GROUP);
     }
 
     private String resolveSupplyRelation(String scopeControl) {
-        if (Objects.equals(scopeControl, SCOPE_CONTROL_OFF)) {
-            return SUPPLY_RELATION_NO;
+        if (Objects.equals(scopeControl, codeOf(DICT_SUPPLIER_SCOPE_CONTROL, DictionaryCodes.DISABLED))) {
+            return codeOf(DICT_SUPPLIER_SUPPLY_RELATION, DictionaryCodes.NO);
         }
-        return SUPPLY_RELATION_YES;
+        return codeOf(DICT_SUPPLIER_SUPPLY_RELATION, DictionaryCodes.YES);
+    }
+
+    private String normalizeDictionaryCode(String dictCode, String value) {
+        if (DictionaryCodes.ENABLED.equals(value)
+                || DictionaryCodes.DISABLED.equals(value)
+                || DictionaryCodes.YES.equals(value)
+                || DictionaryCodes.NO.equals(value)
+                || DictionaryCodes.BOUND.equals(value)
+                || DictionaryCodes.UNBOUND.equals(value)
+                || DictionaryCodes.GROUP.equals(value)
+                || DictionaryCodes.STORE.equals(value)) {
+            return codeOf(dictCode, value);
+        }
+        return dictionaryLookupService.requireEnabledCode(dictCode, value);
+    }
+
+    private String codeOf(String dictCode, String itemKey) {
+        return dictionaryLookupService.codeOf(dictCode, itemKey);
     }
 
     private LocalDate parseNullableDate(String value, String label) {
@@ -510,25 +517,52 @@ public class SupplierApplicationService {
         String querySupplyRelation = normalizeQuerySupplyRelation(supplyRelation);
         String treeNodeValue = trimNullable(treeNode);
         return rows.stream()
-                .filter(row -> infoKeyword == null
-                        || contains(row.getSupplierCode(), infoKeyword)
-                        || contains(row.getSupplierName(), infoKeyword)
-                        || contains(row.getSupplierShortName(), infoKeyword)
-                        || contains(row.getSupplierMnemonic(), infoKeyword)
-                        || contains(row.getSupplierCategory(), infoKeyword))
-                .filter(row -> queryStatus == null || Objects.equals(row.getStatus(), queryStatus))
-                .filter(row -> queryBindStatus == null || Objects.equals(row.getBindStatus(), queryBindStatus))
-                .filter(row -> querySource == null || Objects.equals(row.getSource(), querySource))
-                .filter(row -> querySupplyRelation == null || Objects.equals(row.getSupplyRelation(), querySupplyRelation))
-                .filter(row -> treeNodeValue == null
-                        || Objects.equals(treeNodeValue, "all")
-                        || Objects.equals(treeNodeValue, "全部")
-                        || Objects.equals(treeNodeValue, "供应商类别")
-                        || Objects.equals(treeNodeValue, "全部供应商")
-                        || Objects.equals(row.getSupplierCategory(), treeNodeValue))
+                .filter(row -> matchesSupplierFilter(row, infoKeyword, queryStatus, queryBindStatus,
+                        querySource, querySupplyRelation, treeNodeValue))
                 .skip(offset)
                 .limit(limit)
                 .toList();
+    }
+
+    private boolean matchesSupplierFilter(SupplierProfileDO row,
+                                          String infoKeyword,
+                                          String queryStatus,
+                                          String queryBindStatus,
+                                          String querySource,
+                                          String querySupplyRelation,
+                                          String treeNodeValue) {
+        return matchesSupplierKeyword(row, infoKeyword)
+                && matchesSupplierStatus(row, queryStatus, queryBindStatus, querySource, querySupplyRelation)
+                && matchesSupplierTreeNode(row, treeNodeValue);
+    }
+
+    private boolean matchesSupplierKeyword(SupplierProfileDO row, String infoKeyword) {
+        return infoKeyword == null
+                || contains(row.getSupplierCode(), infoKeyword)
+                || contains(row.getSupplierName(), infoKeyword)
+                || contains(row.getSupplierShortName(), infoKeyword)
+                || contains(row.getSupplierMnemonic(), infoKeyword)
+                || contains(row.getSupplierCategory(), infoKeyword);
+    }
+
+    private boolean matchesSupplierStatus(SupplierProfileDO row,
+                                          String queryStatus,
+                                          String queryBindStatus,
+                                          String querySource,
+                                          String querySupplyRelation) {
+        return (queryStatus == null || Objects.equals(row.getStatus(), queryStatus))
+                && (queryBindStatus == null || Objects.equals(row.getBindStatus(), queryBindStatus))
+                && (querySource == null || Objects.equals(row.getSource(), querySource))
+                && (querySupplyRelation == null || Objects.equals(row.getSupplyRelation(), querySupplyRelation));
+    }
+
+    private boolean matchesSupplierTreeNode(SupplierProfileDO row, String treeNodeValue) {
+        return treeNodeValue == null
+                || Objects.equals(treeNodeValue, "all")
+                || Objects.equals(treeNodeValue, "全部")
+                || Objects.equals(treeNodeValue, "供应商类别")
+                || Objects.equals(treeNodeValue, "全部供应商")
+                || Objects.equals(row.getSupplierCategory(), treeNodeValue);
     }
 
     private boolean contains(String value, String keyword) {
@@ -572,6 +606,7 @@ public class SupplierApplicationService {
         return value.toString();
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record SupplierListRow(Long id,
                                   Integer index,
                                   String supplierCode,
@@ -587,12 +622,15 @@ public class SupplierApplicationService {
                                   String operatedAt) {
     }
 
+    /** 物品与供应商分页数据模型，承载列表数据和分页信息。 */
     public record PageData<T>(List<T> list, long total, int pageNo, int pageSize) {
     }
 
+    /** 物品与供应商载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id) {
     }
 
+    /** 物品与供应商响应模型，承载接口返回数据。 */
     public record SupplierDetailResponse(Long id,
                                          String supplierCode,
                                          String supplierName,
@@ -624,6 +662,7 @@ public class SupplierApplicationService {
                                          String taxpayerId,
                                          String invoicePhone,
                                          String invoiceAddress) {
+        /** 物品与供应商明细项模型，承载子表或批量操作明细。 */
         public record QualificationItem(String fileName,
                                         String fileUrl,
                                         String qualificationType,
@@ -632,6 +671,7 @@ public class SupplierApplicationService {
                                         String remark) {
         }
 
+        /** 物品与供应商明细项模型，承载子表或批量操作明细。 */
         public record ContractItem(String attachmentName,
                                    String attachmentUrl,
                                    String contractName,
@@ -640,6 +680,7 @@ public class SupplierApplicationService {
                                    String status) {
         }
 
+        /** 物品与供应商明细项模型，承载子表或批量操作明细。 */
         public record FinanceItem(String bankAccount,
                                   String accountName,
                                   String bankName,

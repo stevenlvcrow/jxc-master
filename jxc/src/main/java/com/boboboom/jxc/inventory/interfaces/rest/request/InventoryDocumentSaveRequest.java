@@ -1,12 +1,12 @@
 package com.boboboom.jxc.inventory.interfaces.rest.request;
 
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
-
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 
 /**
  * 通用库存单据保存请求。
@@ -55,6 +55,9 @@ public record InventoryDocumentSaveRequest(
      * @param unitPrice 单价
      * @param amount 金额
      * @param lineReason 行原因
+     * @param dishId 菜品ID
+     * @param dishName 菜品名称
+     * @param damageReason 报损原因
      * @param remark 行备注
      * @param extraFields 扩展字段
      */
@@ -71,6 +74,9 @@ public record InventoryDocumentSaveRequest(
             BigDecimal unitPrice,
             BigDecimal amount,
             String lineReason,
+            String dishId,
+            String dishName,
+            String damageReason,
             String remark,
             Map<String, String> extraFields
     ) {

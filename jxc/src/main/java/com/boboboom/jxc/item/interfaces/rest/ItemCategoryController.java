@@ -1,5 +1,19 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
+import java.util.List;
+
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
 import com.boboboom.jxc.item.application.service.ItemCategoryApplicationService;
 import com.boboboom.jxc.item.application.service.ItemCategoryApplicationService.BatchCreateResult;
@@ -12,27 +26,15 @@ import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryBatchDeleteRequ
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryCreateRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryStatusUpdateRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCategoryUpdateRequest;
+
 import jakarta.validation.Valid;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.security.access.prepost.PreAuthorize;
 
-import java.util.List;
-
-@Validated
-@RestController
-@RequestMapping("/api/items/categories")
 /**
  * 商品分类接口，负责分类分页、树形查询、新建、批量和状态维护。
  */
+@Validated
+@RestController
+@RequestMapping("/api/items/categories")
 public class ItemCategoryController {
 
     private final ItemCategoryApplicationService itemCategoryApplicationService;
@@ -40,10 +42,10 @@ public class ItemCategoryController {
     /**
      * 构造商品分类接口。
      *
-     * @param itemCategoryApplicationService 商品分类服务
+     * @param itemCategoryApplicationServiceValue 商品分类服务
      */
-    public ItemCategoryController(ItemCategoryApplicationService itemCategoryApplicationService) {
-        this.itemCategoryApplicationService = itemCategoryApplicationService;
+    public ItemCategoryController(ItemCategoryApplicationService itemCategoryApplicationServiceValue) {
+        this.itemCategoryApplicationService = itemCategoryApplicationServiceValue;
     }
 
     /**
@@ -71,13 +73,13 @@ public class ItemCategoryController {
         return CodeDataResponse.ok(itemCategoryApplicationService.list(pageNo, pageSize, categoryInfo, status, treeNode, sortBy, orgId));
     }
 
-    @GetMapping("/tree")
     /**
      * 查询商品分类树。
      *
      * @param orgId 机构标识
      * @return 分类树
      */
+    @GetMapping("/tree")
     public CodeDataResponse<List<TreeNode>> tree(@RequestParam(required = false) String orgId) {
         return CodeDataResponse.ok(itemCategoryApplicationService.tree(orgId));
     }
@@ -144,8 +146,6 @@ public class ItemCategoryController {
         return CodeDataResponse.ok();
     }
 
-    @DeleteMapping("/{id}")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 删除商品分类。
      *
@@ -153,6 +153,8 @@ public class ItemCategoryController {
      * @param orgId 机构标识
      * @return 空响应
      */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> delete(@PathVariable Long id,
                                          @RequestParam(required = false) String orgId) {
         itemCategoryApplicationService.delete(id, orgId);
