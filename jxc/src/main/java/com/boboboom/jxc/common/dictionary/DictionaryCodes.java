@@ -18,6 +18,10 @@ public final class DictionaryCodes {
     public static final String ITEM_STATUS = "item.status";
     public static final String INVENTORY_DOCUMENT_STATUS = "inventory.document_status";
     public static final String INVENTORY_WORKFLOW_STATUS = "inventory.workflow_status";
+    public static final String INVENTORY_PERIOD_TYPE = "inventory.period_type";
+    public static final String INVENTORY_CHECK_RANGE_TYPE = "inventory.check_range_type";
+    public static final String INVENTORY_CHECK_GENERATION_STATUS = "inventory.check_generation_status";
+    public static final String DOCUMENT_PRINT_STATUS = "document.print_status";
     public static final String WORKFLOW_DEFINITION_STATUS = "workflow.definition_status";
     public static final String WORKFLOW_NODE_TYPE = "workflow.node_type";
     public static final String WORKFLOW_SIGN_MODE = "workflow.sign_mode";

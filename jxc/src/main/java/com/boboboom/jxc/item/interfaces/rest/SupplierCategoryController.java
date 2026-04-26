@@ -1,11 +1,7 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.item.application.service.SupplierCategoryApplicationService;
-import com.boboboom.jxc.item.application.service.SupplierCategoryApplicationService.IdPayload;
-import com.boboboom.jxc.item.application.service.SupplierCategoryApplicationService.TreeNode;
-import com.boboboom.jxc.item.interfaces.rest.request.SupplierCategoryCreateRequest;
-import jakarta.validation.Valid;
+import java.util.List;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,14 +11,20 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.item.application.service.SupplierCategoryApplicationService;
+import com.boboboom.jxc.item.application.service.SupplierCategoryApplicationService.IdPayload;
+import com.boboboom.jxc.item.application.service.SupplierCategoryApplicationService.TreeNode;
+import com.boboboom.jxc.item.interfaces.rest.request.SupplierCategoryCreateRequest;
 
-@Validated
-@RestController
-@RequestMapping("/api/items/supplier-categories")
+import jakarta.validation.Valid;
+
 /**
  * 供应商分类接口，负责树形分类查询与新增。
  */
+@Validated
+@RestController
+@RequestMapping("/api/items/supplier-categories")
 public class SupplierCategoryController {
 
     private final SupplierCategoryApplicationService supplierCategoryApplicationService;
@@ -30,10 +32,10 @@ public class SupplierCategoryController {
     /**
      * 构造供应商分类接口。
      *
-     * @param supplierCategoryApplicationService 供应商分类服务
+     * @param supplierCategoryApplicationServiceValue 供应商分类服务
      */
-    public SupplierCategoryController(SupplierCategoryApplicationService supplierCategoryApplicationService) {
-        this.supplierCategoryApplicationService = supplierCategoryApplicationService;
+    public SupplierCategoryController(SupplierCategoryApplicationService supplierCategoryApplicationServiceValue) {
+        this.supplierCategoryApplicationService = supplierCategoryApplicationServiceValue;
     }
 
     /**

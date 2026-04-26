@@ -11,8 +11,9 @@ public class DomainEventPublisher {
 
     private final ApplicationEventPublisher applicationEventPublisher;
 
-    public DomainEventPublisher(ApplicationEventPublisher applicationEventPublisher) {
-        this.applicationEventPublisher = applicationEventPublisher;
+    /** 创建领域事件发布器。 */
+    public DomainEventPublisher(ApplicationEventPublisher applicationEventPublisherValue) {
+        this.applicationEventPublisher = applicationEventPublisherValue;
     }
 
     /**

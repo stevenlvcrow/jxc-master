@@ -6,12 +6,10 @@ package com.boboboom.jxc.identity.application.event;
  * @param groupId 集团 ID
  * @param storeId 门店 ID
  * @param operatorId 操作人 ID
- * @param adminRealName 门店管理员姓名
- * @param adminPhone 门店管理员手机号
+ * @param adminUserId 门店管理员用户 ID
  */
 public record StoreCreatedEvent(Long groupId,
                                 Long storeId,
                                 Long operatorId,
-                                String adminRealName,
-                                String adminPhone) {
+                                Long adminUserId) {
 }

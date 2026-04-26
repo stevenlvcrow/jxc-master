@@ -1,11 +1,10 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.domain.repository.RoleRepository;
-import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
-import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
 import org.springframework.stereotype.Service;
+
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.application.service.DataScopeAccessService;
+import com.boboboom.jxc.workflow.application.service.WorkflowActionService;
 
 /**
  * 通用库存单据权限判断服务。
@@ -14,15 +13,13 @@ import org.springframework.stereotype.Service;
 public class InventoryDocumentPermissionService {
 
     private final WorkflowActionService workflowActionService;
-    private final UserRoleRelRepository userRoleRelRepository;
-    private final RoleRepository roleRepository;
+    private final DataScopeAccessService dataScopeAccessService;
 
-    public InventoryDocumentPermissionService(WorkflowActionService workflowActionService,
-                                              UserRoleRelRepository userRoleRelRepository,
-                                              RoleRepository roleRepository) {
-        this.workflowActionService = workflowActionService;
-        this.userRoleRelRepository = userRoleRelRepository;
-        this.roleRepository = roleRepository;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public InventoryDocumentPermissionService(WorkflowActionService workflowActionServiceValue,
+                                              DataScopeAccessService dataScopeAccessServiceValue) {
+        this.workflowActionService = workflowActionServiceValue;
+        this.dataScopeAccessService = dataScopeAccessServiceValue;
     }
 
     /**
@@ -40,6 +37,9 @@ public class InventoryDocumentPermissionService {
                                                  Long scopeId,
                                                  Long groupId,
                                                  Long operatorId) {
+        if (isSystemGeneratedInventoryCheckDocument(type)) {
+            return new PermissionSnapshot(false, false, false, false, false);
+        }
         boolean canManageAll = canViewAll(scopeType, scopeId, groupId, operatorId);
         if (!type.isWorkflowEnabled()) {
             boolean canApprove = type == InventoryDocumentType.WAREHOUSE_OPENING_BALANCE;
@@ -65,15 +65,7 @@ public class InventoryDocumentPermissionService {
      * @return 是否可查看全部
      */
     public boolean canViewAll(String scopeType, Long scopeId, Long groupId, Long operatorId) {
-        if (operatorId == null) {
-            return false;
-        }
-        if (hasRoleInScope(operatorId, "STORE_ADMIN", "STORE", scopeId)) {
-            return true;
-        }
-        return "STORE".equals(scopeType)
-                && groupId != null
-                && hasRoleInScope(operatorId, "GROUP_ADMIN", "GROUP", groupId);
+        return dataScopeAccessService.canViewScopeData(scopeType, scopeId, groupId, operatorId);
     }
 
     /**
@@ -116,6 +108,9 @@ public class InventoryDocumentPermissionService {
                                           Long groupId,
                                           Long operatorId,
                                           String action) {
+        if (isSystemGeneratedInventoryCheckDocument(type)) {
+            throw new BusinessException(type.getBusinessName() + "由盘点审核自动生成，不允许手工操作");
+        }
         if (!type.isWorkflowEnabled()) {
             return;
         }
@@ -141,6 +136,9 @@ public class InventoryDocumentPermissionService {
                                        Long scopeId,
                                        Long groupId,
                                        Long operatorId) {
+        if (isSystemGeneratedInventoryCheckDocument(type)) {
+            throw new BusinessException(type.getBusinessName() + "由盘点审核自动生成，不支持手工审核");
+        }
         if (type == InventoryDocumentType.WAREHOUSE_OPENING_BALANCE) {
             return;
         }
@@ -168,15 +166,8 @@ public class InventoryDocumentPermissionService {
         );
     }
 
-    private boolean hasRoleInScope(Long operatorId, String roleCode, String scopeType, Long scopeId) {
-        if (operatorId == null || scopeId == null) {
-            return false;
-        }
-        RoleDO role = roleRepository.findByRoleCode(roleCode).orElse(null);
-        if (role == null) {
-            return false;
-        }
-        return userRoleRelRepository.findByUserIdRoleAndScope(operatorId, role.getId(), scopeType, scopeId).isPresent();
+    private boolean isSystemGeneratedInventoryCheckDocument(InventoryDocumentType type) {
+        return type == InventoryDocumentType.PROFIT_INBOUND || type == InventoryDocumentType.LOSS_OUTBOUND;
     }
 
     /**

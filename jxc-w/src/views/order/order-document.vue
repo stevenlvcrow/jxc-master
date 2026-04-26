@@ -96,86 +96,7 @@ const supplierOrgTree = computed<TreeNode[]>(() => sessionStore.rootGroups.map((
   })),
 })));
 
-const tableData = ref<OrderDocumentRow[]>([
-  {
-    id: 1,
-    documentCode: 'SO-202604-001',
-    orderDate: '2026-04-20',
-    paymentAmount: 1200,
-    orderAmount: 1380,
-    freightAmount: 60,
-    documentStatus: '已确认',
-    logisticsMode: '配送',
-    createMode: '手工创建',
-    paymentStatus: '已付款',
-    paymentInfo: '微信支付',
-    downstreamDocument: 'DN-202604-001',
-    expectedArrivalDate: '2026-04-24',
-    submittedAt: '2026-04-20 09:18:00',
-    estimatedShipDate: '2026-04-22',
-    estimatedArrivalDate: '2026-04-24',
-    creator: '张敏',
-    orderTemplate: '系统默认模板',
-    supplierOrg: '华东配送中心',
-    isPresale: '否',
-    substituteOrder: '否',
-    documentTag: '常规',
-    printStatus: '已打印',
-    remark: '常规补货',
-  },
-  {
-    id: 2,
-    documentCode: 'SO-202604-002',
-    orderDate: '2026-04-21',
-    paymentAmount: 0,
-    orderAmount: 860,
-    freightAmount: 40,
-    documentStatus: '已提交',
-    logisticsMode: '自提',
-    createMode: '模板生成',
-    paymentStatus: '未付款',
-    paymentInfo: '-',
-    downstreamDocument: '-',
-    expectedArrivalDate: '2026-04-25',
-    submittedAt: '2026-04-21 10:35:00',
-    estimatedShipDate: '2026-04-23',
-    estimatedArrivalDate: '2026-04-25',
-    creator: '李娜',
-    orderTemplate: '门店补货模板',
-    supplierOrg: '中央厨房',
-    isPresale: '否',
-    substituteOrder: '是',
-    documentTag: '加急',
-    printStatus: '未打印',
-    remark: '门店临时补货',
-  },
-  {
-    id: 3,
-    documentCode: 'SO-202604-003',
-    orderDate: '2026-04-21',
-    paymentAmount: 300,
-    orderAmount: 520,
-    freightAmount: 0,
-    documentStatus: '草稿',
-    logisticsMode: '三方物流',
-    createMode: '代店下单',
-    paymentStatus: '部分付款',
-    paymentInfo: '余额支付',
-    downstreamDocument: '-',
-    expectedArrivalDate: '2026-04-26',
-    submittedAt: '2026-04-21 14:08:00',
-    estimatedShipDate: '2026-04-24',
-    estimatedArrivalDate: '2026-04-26',
-    creator: '王磊',
-    orderTemplate: '活动订货模板',
-    supplierOrg: '华南配送中心',
-    isPresale: '是',
-    substituteOrder: '是',
-    documentTag: '活动',
-    printStatus: '未打印',
-    remark: '活动预售',
-  },
-]);
+const tableData = ref<OrderDocumentRow[]>([]);
 
 const fetchAllPages = async <T,>(
   loader: (pageNo: number, pageSizeValue: number) => Promise<{ list?: T[]; total?: number; pageSize?: number }>,
@@ -315,15 +236,14 @@ const handleToolbarAction = (action: string) => {
     router.push('/order/order-documents/create');
     return;
   }
-  ElMessage.info(`${action}功能待接入`);
 };
 
 const handleView = (row: OrderDocumentRow) => {
-  ElMessage.info(`查看：${row.documentCode}`);
+  router.push(`/order/order-documents/view/${row.id}`);
 };
 
 const handleEdit = (row: OrderDocumentRow) => {
-  ElMessage.info(`编辑：${row.documentCode}`);
+  router.push(`/order/order-documents/edit/${row.id}`);
 };
 
 const handlePageChange = (page: number) => {
@@ -459,15 +379,15 @@ onMounted(() => {
         <el-icon><Plus /></el-icon>
         新增
       </el-button>
-      <el-button :disabled="!selectedIds.length" @click="handleToolbarAction('批量打印')">
+      <el-button disabled>
         <el-icon><Printer /></el-icon>
         批量打印
       </el-button>
-      <el-button :disabled="!selectedIds.length" @click="handleToolbarAction('批量导出单据明细')">
+      <el-button disabled>
         <el-icon><Download /></el-icon>
         批量导出单据明细
       </el-button>
-      <el-button :disabled="!selectedIds.length" @click="handleToolbarAction('批量导出单据列表')">
+      <el-button disabled>
         <el-icon><Download /></el-icon>
         批量导出单据列表
       </el-button>
@@ -484,7 +404,14 @@ onMounted(() => {
     >
       <el-table-column type="selection" width="44" fixed="left" />
       <el-table-column type="index" label="序号" width="56" fixed="left" />
-      <el-table-column prop="documentCode" label="单据号" min-width="150" fixed="left" show-overflow-tooltip />
+      <el-table-column prop="documentCode" label="单据号" min-width="150" fixed="left" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-button v-if="row.documentCode" type="primary" link @click="handleView(row)">
+            {{ row.documentCode }}
+          </el-button>
+          <template v-else>-</template>
+        </template>
+      </el-table-column>
       <el-table-column prop="orderDate" label="订单日期" min-width="120" show-overflow-tooltip />
       <el-table-column prop="paymentAmount" label="付款金额" min-width="110" align="right">
         <template #default="{ row }">{{ formatMoney(row.paymentAmount) }}</template>
@@ -509,7 +436,6 @@ onMounted(() => {
       <el-table-column prop="orderTemplate" label="订货模板" min-width="140" show-overflow-tooltip />
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link @click="handleView(row)">查看</el-button>
           <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
         </template>
       </el-table-column>

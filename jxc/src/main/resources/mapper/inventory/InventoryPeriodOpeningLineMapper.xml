@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.inventory.infrastructure.persistence.mapper.InventoryPeriodOpeningLineMapper">
+
+    <resultMap id="InventoryPeriodOpeningLineDOResultMap" type="com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryPeriodOpeningLineDO">
+        <id property="id" column="id"/>
+        <result property="headerId" column="header_id"/>
+        <result property="itemCode" column="item_code"/>
+        <result property="itemName" column="item_name"/>
+        <result property="spec" column="spec"/>
+        <result property="category" column="category"/>
+        <result property="unitName" column="unit_name"/>
+        <result property="openingQty" column="opening_qty"/>
+        <result property="openingAmount" column="opening_amount"/>
+        <result property="openingAvgCost" column="opening_avg_cost"/>
+        <result property="remark" column="remark"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <sql id="InventoryPeriodOpeningLineColumns">
+        id, header_id, item_code, item_name, spec, category, unit_name, opening_qty, opening_amount,
+        opening_avg_cost, remark, created_at
+    </sql>
+
+    <select id="selectByHeaderId" resultMap="InventoryPeriodOpeningLineDOResultMap">
+        select
+        <include refid="InventoryPeriodOpeningLineColumns"/>
+        from inventory_period_opening_line
+        where header_id = #{headerId}
+        order by id asc
+    </select>
+
+    <select id="selectByHeaderIds" resultMap="InventoryPeriodOpeningLineDOResultMap">
+        select
+        <include refid="InventoryPeriodOpeningLineColumns"/>
+        from inventory_period_opening_line
+        where header_id in
+        <foreach item="id" collection="headerIds" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        order by header_id asc, id asc
+    </select>
+
+    <delete id="deleteByHeaderId">
+        delete from inventory_period_opening_line
+        where header_id = #{headerId}
+    </delete>
+</mapper>

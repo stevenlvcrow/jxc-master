@@ -1,5 +1,5 @@
 ﻿import axios, {
-  AxiosError,
+  type AxiosError,
   type AxiosInstance,
   type AxiosRequestConfig,
   type AxiosResponse,
@@ -22,24 +22,17 @@ const baseConfig: AxiosRequestConfig = {
   timeout: 12000,
 };
 
-const shouldUnwrap = (payload: unknown): payload is ApiSuccess<unknown> => {
-  if (!payload || typeof payload !== 'object') {
+const isRecord = (payload: unknown): payload is Record<string, unknown> => (
+  Boolean(payload) && typeof payload === 'object'
+);
+
+const isUnifiedResponse = (payload: unknown): payload is ApiSuccess<unknown> => {
+  if (!isRecord(payload)) {
     return false;
   }
-  return 'code' in payload && 'data' in payload;
-};
-
-type LegacyApiResponse<T> = {
-  success: boolean;
-  message: string;
-  data: T;
-};
-
-const isLegacyResponse = (payload: unknown): payload is LegacyApiResponse<unknown> => {
-  if (!payload || typeof payload !== 'object') {
-    return false;
-  }
-  return 'success' in payload && 'message' in payload;
+  return typeof payload.code === 'number'
+    && typeof payload.message === 'string'
+    && 'data' in payload;
 };
 
 const mapBusinessError = (payload: ApiFailure, status?: number) => {
@@ -55,8 +48,11 @@ const toApiError = (error: unknown) => {
 
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
-    const data = error.response?.data as ApiFailure | undefined;
-    return mapBusinessError(data ?? {}, status);
+    const data = error.response?.data;
+    if (data != null && !isUnifiedResponse(data)) {
+      return new ApiError('接口响应结构不符合统一规范', -1, undefined, status);
+    }
+    return mapBusinessError((data ?? {}) as ApiFailure, status);
   }
 
   return new ApiError('请求失败，请稍后重试');
@@ -64,14 +60,8 @@ const toApiError = (error: unknown) => {
 
 const handleResponse = (response: AxiosResponse) => {
   const payload = response.data;
-  if (!shouldUnwrap(payload)) {
-    if (isLegacyResponse(payload)) {
-      if (payload.success) {
-        return payload.data;
-      }
-      throw mapBusinessError({ message: payload.message }, response.status);
-    }
-    return payload;
+  if (!isUnifiedResponse(payload)) {
+    throw new ApiError('接口响应结构不符合统一规范', -1, undefined, response.status);
   }
 
   if (payload.code === 0 || payload.code === 200) {
@@ -97,7 +87,7 @@ const createHttpClient = () => {
   });
 
   client.interceptors.response.use(
-    handleResponse,
+    handleResponse as unknown as (response: AxiosResponse) => AxiosResponse,
     async (error: AxiosError<ApiFailure>) => {
       const config = error.config as ApiAxiosRequestConfig | undefined;
       const status = error.response?.status;

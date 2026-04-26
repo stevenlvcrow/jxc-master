@@ -19,7 +19,7 @@ import WarehouseItemRuleManagementView from '@/views/system/warehouse-item-rule-
 import OrgManagementView from '@/views/system/org-management.vue';
 import PurchasePricingView from '@/views/purchase/purchase-pricing.vue';
 import PricingAdjustmentManagementView from '@/views/purchase/pricing-adjustment-management.vue';
-import WarehouseOpeningBalanceView from '@/views/inventory/warehouse-opening-balance.vue';
+import PeriodOpeningView from '@/views/inventory/period-opening.vue';
 import PurchaseInboundView from '@/views/inventory/purchase-inbound.vue';
 import PurchaseReturnOutboundView from '@/views/inventory/purchase-return-outbound.vue';
 import StockTransferView from '@/views/inventory/stock-transfer.vue';
@@ -37,7 +37,6 @@ import CustomerSalesOutboundView from '@/views/inventory/customer-sales-outbound
 import CustomerReturnInboundView from '@/views/inventory/customer-return-inbound.vue';
 import InventoryCheckView from '@/views/inventory/inventory-check.vue';
 import MultiInventoryCheckView from '@/views/inventory/multi-inventory-check.vue';
-import ProfitInboundView from '@/views/inventory/profit-inbound.vue';
 import LossOutboundView from '@/views/inventory/loss-outbound.vue';
 import DishConsumptionOutboundView from '@/views/inventory/dish-consumption-outbound.vue';
 import BatchAdjustmentView from '@/views/inventory/batch-adjustment.vue';
@@ -77,7 +76,7 @@ const isWarehouseItemRuleManagement = computed(() => title.value === '仓库物�
 const isOrgManagement = computed(() => title.value === '机构管理');
 const isPurchasePricing = computed(() => title.value === '采购单定价');
 const isPricingAdjustmentManagement = computed(() => title.value === '采购定价明细调整单');
-const isWarehouseOpeningBalance = computed(() => title.value === '仓库期初');
+const isPeriodOpening = computed(() => title.value === '期初库存');
 const isPurchaseInbound = computed(() => title.value === '采购入库');
 const isPurchaseReturnOutbound = computed(() => title.value === '采购退货出库');
 const isStockTransfer = computed(() => title.value === '移库单');
@@ -95,7 +94,6 @@ const isCustomerSalesOutbound = computed(() => title.value === '客户销售出�
 const isCustomerReturnInbound = computed(() => title.value === '客户退货入库');
 const isInventoryCheck = computed(() => title.value === '盘点单');
 const isMultiInventoryCheck = computed(() => title.value === '多人盘点单');
-const isProfitInbound = computed(() => title.value === '盘盈单');
 const isLossOutbound = computed(() => title.value === '盘亏单');
 const isDishConsumptionOutbound = computed(() => title.value === '菜品消耗出库');
 const isBatchAdjustment = computed(() => title.value === '批次调整单');
@@ -170,8 +168,8 @@ const pendingTasks = [
   <div v-else-if="isPricingAdjustmentManagement" class="page-grid single">
     <PricingAdjustmentManagementView />
   </div>
-  <div v-else-if="isWarehouseOpeningBalance" class="page-grid single">
-    <WarehouseOpeningBalanceView />
+  <div v-else-if="isPeriodOpening" class="page-grid single">
+    <PeriodOpeningView />
   </div>
   <div v-else-if="isPurchaseInbound" class="page-grid single">
     <PurchaseInboundView />
@@ -223,9 +221,6 @@ const pendingTasks = [
   </div>
   <div v-else-if="isMultiInventoryCheck" class="page-grid single">
     <MultiInventoryCheckView />
-  </div>
-  <div v-else-if="isProfitInbound" class="page-grid single">
-    <ProfitInboundView />
   </div>
   <div v-else-if="isLossOutbound" class="page-grid single">
     <LossOutboundView />

@@ -2,7 +2,7 @@
 import InventoryDocumentCreatePage from '@/views/inventory/inventory-document-create-page.vue';
 import { inventoryDocumentMetaMap } from '@/views/inventory/document-meta';
 
-const meta = inventoryDocumentMetaMap.warehouseOpeningBalance;
+const meta = inventoryDocumentMetaMap.profitInbound;
 </script>
 
 <template>

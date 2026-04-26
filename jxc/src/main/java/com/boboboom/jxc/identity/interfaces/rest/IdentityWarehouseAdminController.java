@@ -1,17 +1,7 @@
 package com.boboboom.jxc.identity.interfaces.rest;
 
-import com.boboboom.jxc.identity.application.service.IdentityAccessControlService;
-import com.boboboom.jxc.identity.application.service.IdentityAdminLookupService;
-import com.boboboom.jxc.identity.application.service.WarehouseAdministrationService;
-import com.boboboom.jxc.common.BusinessException;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
-import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
-import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseCreateRequest;
-import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseUpdateRequest;
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
-import jakarta.validation.Valid;
+import java.util.List;
+
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,15 +14,30 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.identity.application.service.IdentityAccessControlService;
+import com.boboboom.jxc.identity.application.service.IdentityAdminLookupService;
+import com.boboboom.jxc.identity.application.service.WarehouseAdministrationService;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
+import com.boboboom.jxc.identity.interfaces.rest.request.StatusUpdateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseCreateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.WarehouseUpdateRequest;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 
-@Validated
-@RestController
-@RequestMapping("/api/identity/admin")
+import jakarta.validation.Valid;
+
 /**
  * 仓库管理接口，负责分组仓库的查询、新增、更新与状态维护。
  */
+@Validated
+@RestController
+@RequestMapping("/api/identity/admin")
 public class IdentityWarehouseAdminController {
+
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
 
     private final IdentityAccessControlService identityAccessControlService;
     private final WarehouseAdministrationService warehouseAdministrationService;
@@ -42,22 +47,21 @@ public class IdentityWarehouseAdminController {
     /**
      * 构造仓库管理接口。
      *
-     * @param identityAccessControlService 组织权限控制服务
-     * @param warehouseAdministrationService 仓库管理服务
-     * @param identityAdminLookupService 仓库查询辅助服务
-     * @param identityAdminSupport 当前登录管理员辅助服务
+     * @param identityAccessControlServiceValue 组织权限控制服务
+     * @param warehouseAdministrationServiceValue 仓库管理服务
+     * @param identityAdminLookupServiceValue 仓库查询辅助服务
+     * @param identityAdminSupportValue 当前登录管理员辅助服务
      */
-    public IdentityWarehouseAdminController(IdentityAccessControlService identityAccessControlService,
-                                            WarehouseAdministrationService warehouseAdministrationService,
-                                            IdentityAdminLookupService identityAdminLookupService,
-                                            IdentityAdminSupport identityAdminSupport) {
-        this.identityAccessControlService = identityAccessControlService;
-        this.warehouseAdministrationService = warehouseAdministrationService;
-        this.identityAdminLookupService = identityAdminLookupService;
-        this.identityAdminSupport = identityAdminSupport;
+    public IdentityWarehouseAdminController(IdentityAccessControlService identityAccessControlServiceValue,
+                                            WarehouseAdministrationService warehouseAdministrationServiceValue,
+                                            IdentityAdminLookupService identityAdminLookupServiceValue,
+                                            IdentityAdminSupport identityAdminSupportValue) {
+        this.identityAccessControlService = identityAccessControlServiceValue;
+        this.warehouseAdministrationService = warehouseAdministrationServiceValue;
+        this.identityAdminLookupService = identityAdminLookupServiceValue;
+        this.identityAdminSupport = identityAdminSupportValue;
     }
 
-    @GetMapping("/groups/{groupId}/warehouses")
     /**
      * 查询分组下的仓库列表。
      *
@@ -69,6 +73,7 @@ public class IdentityWarehouseAdminController {
      * @param warehouseType 仓库类型
      * @return 仓库列表响应
      */
+    @GetMapping("/groups/{groupId}/warehouses")
     public CodeDataResponse<PageData<WarehouseAdminView>> listGroupWarehouses(@PathVariable Long groupId,
                                                                               @RequestParam(defaultValue = "1") Integer pageNum,
                                                                               @RequestParam(defaultValue = "10") Integer pageSize,
@@ -99,7 +104,6 @@ public class IdentityWarehouseAdminController {
         return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
-    @GetMapping("/stores/{storeId}/warehouses")
     /**
      * 查询门店下的仓库列表。
      *
@@ -111,6 +115,7 @@ public class IdentityWarehouseAdminController {
      * @param warehouseType 仓库类型
      * @return 仓库列表响应
      */
+    @GetMapping("/stores/{storeId}/warehouses")
     public CodeDataResponse<PageData<WarehouseAdminView>> listStoreWarehouses(@PathVariable Long storeId,
                                                                               @RequestParam(defaultValue = "1") Integer pageNum,
                                                                               @RequestParam(defaultValue = "10") Integer pageSize,
@@ -142,8 +147,6 @@ public class IdentityWarehouseAdminController {
         return CodeDataResponse.ok(paginate(result, pageNum, pageSize));
     }
 
-    @PostMapping("/groups/{groupId}/warehouses")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 当前接口保留创建仓库入口，但明确提示必须通过门店维度创建。
      *
@@ -151,13 +154,13 @@ public class IdentityWarehouseAdminController {
      * @param request 仓库新增请求
      * @return 不可用异常
      */
+    @PostMapping("/groups/{groupId}/warehouses")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<IdPayload> createWarehouse(@PathVariable Long groupId,
                                                        @Valid @RequestBody WarehouseCreateRequest request) {
         throw new BusinessException("请通过门店创建仓库");
     }
 
-    @PostMapping("/stores/{storeId}/warehouses")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 新增门店仓库。
      *
@@ -165,6 +168,8 @@ public class IdentityWarehouseAdminController {
      * @param request 仓库新增请求
      * @return 新建结果
      */
+    @PostMapping("/stores/{storeId}/warehouses")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<IdPayload> createStoreWarehouse(@PathVariable Long storeId,
                                                             @Valid @RequestBody WarehouseCreateRequest request) {
         StoreDO store = identityAdminLookupService.requireStore(storeId);
@@ -173,8 +178,6 @@ public class IdentityWarehouseAdminController {
         return CodeDataResponse.ok(new IdPayload(warehouse.getId()));
     }
 
-    @PutMapping("/warehouses/{id}")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 更新仓库信息。
      *
@@ -182,6 +185,8 @@ public class IdentityWarehouseAdminController {
      * @param request 仓库更新请求
      * @return 空响应
      */
+    @PutMapping("/warehouses/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> updateWarehouse(@PathVariable Long id,
                                                   @Valid @RequestBody WarehouseUpdateRequest request) {
         WarehouseDO warehouse = identityAdminLookupService.requireWarehouse(id);
@@ -190,14 +195,14 @@ public class IdentityWarehouseAdminController {
         return CodeDataResponse.ok(null);
     }
 
-    @DeleteMapping("/warehouses/{id}")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 删除仓库。
      *
      * @param id 仓库主键
      * @return 空响应
      */
+    @DeleteMapping("/warehouses/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> deleteWarehouse(@PathVariable Long id) {
         WarehouseDO warehouse = identityAdminLookupService.requireWarehouse(id);
         ensureCanManageWarehouse(warehouse);
@@ -205,14 +210,14 @@ public class IdentityWarehouseAdminController {
         return CodeDataResponse.ok(null);
     }
 
-    @PutMapping("/warehouses/{id}/default")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 设置默认仓库。
      *
      * @param id 仓库主键
      * @return 空响应
      */
+    @PutMapping("/warehouses/{id}/default")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> setWarehouseDefault(@PathVariable Long id) {
         WarehouseDO warehouse = identityAdminLookupService.requireWarehouse(id);
         ensureCanManageWarehouse(warehouse);
@@ -220,8 +225,6 @@ public class IdentityWarehouseAdminController {
         return CodeDataResponse.ok(null);
     }
 
-    @PutMapping("/warehouses/{id}/status")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 更新仓库状态。
      *
@@ -229,6 +232,8 @@ public class IdentityWarehouseAdminController {
      * @param request 状态更新请求
      * @return 空响应
      */
+    @PutMapping("/warehouses/{id}/status")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> updateWarehouseStatus(@PathVariable Long id,
                                                         @RequestBody StatusUpdateRequest request) {
         WarehouseDO warehouse = identityAdminLookupService.requireWarehouse(id);
@@ -255,7 +260,7 @@ public class IdentityWarehouseAdminController {
 
     private <T> PageData<T> paginate(List<T> rows, Integer pageNum, Integer pageSize) {
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         int fromIndex = Math.min((safePageNum - 1) * safePageSize, rows.size());
         int toIndex = Math.min(fromIndex + safePageSize, rows.size());
         return new PageData<>(rows.subList(fromIndex, toIndex), rows.size(), safePageNum, safePageSize);

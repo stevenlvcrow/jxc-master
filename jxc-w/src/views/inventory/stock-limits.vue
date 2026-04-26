@@ -1,185 +1,173 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import {
-  Delete,
-  Download,
-  Plus,
-  RefreshRight,
-  Search,
-  Setting,
-} from '@element-plus/icons-vue';
+import { RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
-import { useSessionStore } from '@/stores/session';
+import { fetchStockWarningReportApi, type StockWarningReportRow } from '@/api/modules/inventory';
+import { fetchItemCategoryTreeApi, fetchItemsApi, type ItemCategoryTreeNode, type ItemVO } from '@/api/modules/item';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 
-type InventoryStatus = '全部' | '正常' | '偏低' | '偏高';
-type StockLimitRow = {
-  id: number;
-  warehouseCode: string;
-  warehouseName: string;
-  itemCode: string;
-  itemName: string;
-  spec: string;
-  unit: string;
-  minDays: number;
-  safeDays: number;
-  maxDays: number;
-  avg7: number;
-  avg14: number;
-  avg21: number;
-  avg30: number;
-  avg60: number;
-  minQty: number;
-  maxQty: number;
-  safeQty: number;
-  currentQty: number;
+type TreeNode = {
+  value: string;
+  label: string;
+  children?: TreeNode[];
 };
 
-const sessionStore = useSessionStore();
+const { orgId } = useRequiredOrgScope();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
-const categoryOptions = ['全部', '肉类', '蔬菜', '调料', '包材'];
-const itemOptions = ['全部', '鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
-const statusOptions: InventoryStatus[] = ['全部', '正常', '偏低', '偏高'];
+const loading = ref(false);
+const optionLoading = ref(false);
+const rows = ref<StockWarningReportRow[]>([]);
+const itemCategoryTree = ref<TreeNode[]>([]);
+const itemTree = ref<TreeNode[]>([]);
+const currentPage = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
+
+const warningStatusOptions: TreeNode[] = [
+  { value: '正常', label: '正常' },
+  { value: '库存不足', label: '库存不足' },
+  { value: '库存超储', label: '库存超储' },
+];
 
 const query = reactive({
   warehouse: '',
-  category: '全部',
-  item: '全部',
-  status: '全部' as InventoryStatus,
+  itemCategory: '',
+  itemCode: '',
+  warningStatus: '',
 });
 
-const tableData: StockLimitRow[] = [
-  {
-    id: 1,
-    warehouseCode: 'WH-001',
-    warehouseName: '中央成品仓',
-    itemCode: 'IT-0001',
-    itemName: '鸡胸肉',
-    spec: '1kg/包',
-    unit: '包',
-    minDays: 3,
-    safeDays: 5,
-    maxDays: 10,
-    avg7: 24,
-    avg14: 22,
-    avg21: 20,
-    avg30: 18,
-    avg60: 17,
-    minQty: 72,
-    maxQty: 240,
-    safeQty: 120,
-    currentQty: 98,
-  },
-  {
-    id: 2,
-    warehouseCode: 'WH-002',
-    warehouseName: '北区原料仓',
-    itemCode: 'IT-0002',
-    itemName: '牛腩',
-    spec: '2kg/包',
-    unit: '包',
-    minDays: 2,
-    safeDays: 4,
-    maxDays: 8,
-    avg7: 18,
-    avg14: 16,
-    avg21: 15,
-    avg30: 14,
-    avg60: 13,
-    minQty: 36,
-    maxQty: 144,
-    safeQty: 72,
-    currentQty: 30,
-  },
-  {
-    id: 3,
-    warehouseCode: 'WH-003',
-    warehouseName: '南区包材仓',
-    itemCode: 'IT-0003',
-    itemName: '包装盒',
-    spec: '50个/箱',
-    unit: '箱',
-    minDays: 4,
-    safeDays: 7,
-    maxDays: 14,
-    avg7: 12,
-    avg14: 11,
-    avg21: 10,
-    avg30: 9,
-    avg60: 8,
-    minQty: 48,
-    maxQty: 168,
-    safeQty: 84,
-    currentQty: 92,
-  },
-];
+const fetchAllPages = async <T,>(
+  loader: (pageNo: number, pageSizeValue: number) => Promise<{ list?: T[]; total?: number; pageSize?: number }>,
+  pageSizeValue = 200,
+) => {
+  const collected: T[] = [];
+  let pageNo = 1;
+  let totalValue: number;
+  do {
+    const page = await loader(pageNo, pageSizeValue);
+    const list = Array.isArray(page.list) ? page.list : [];
+    collected.push(...list);
+    totalValue = Number(page.total ?? collected.length);
+    if (!list.length || Number(page.pageSize ?? 0) <= 0) {
+      break;
+    }
+    pageNo += 1;
+  } while (collected.length < totalValue);
+  return collected;
+};
 
-onMounted(() => {
-  void loadWarehouseTree();
-});
+const normalizeCategoryTree = (nodes: ItemCategoryTreeNode[]): TreeNode[] => nodes.map((node) => ({
+  value: node.label,
+  label: node.label,
+  children: node.children?.length ? normalizeCategoryTree(node.children) : undefined,
+}));
+
+const loadOptions = async () => {
+  optionLoading.value = true;
+  try {
+    await loadWarehouseTree();
+    if (!orgId.value) {
+      itemCategoryTree.value = [];
+      itemTree.value = [];
+      return;
+    }
+    const [categoryRows, itemRows] = await Promise.all([
+      fetchItemCategoryTreeApi(orgId.value),
+      fetchAllPages<ItemVO>((pageNo, pageSizeValue) =>
+        fetchItemsApi({ pageNo, pageSize: pageSizeValue, status: '全部', itemType: '全部' }, orgId.value)),
+    ]);
+    itemCategoryTree.value = normalizeCategoryTree(categoryRows ?? []);
+    itemTree.value = itemRows.map((row) => ({
+      value: row.code,
+      label: `${row.code} / ${row.name}`,
+    }));
+  } catch {
+    itemCategoryTree.value = [];
+    itemTree.value = [];
+    ElMessage.error('库存上下限筛选项加载失败');
+  } finally {
+    optionLoading.value = false;
+  }
+};
+
+const loadRows = async () => {
+  if (!orgId.value) {
+    rows.value = [];
+    total.value = 0;
+    return;
+  }
+  loading.value = true;
+  try {
+    const page = await fetchStockWarningReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      statisticDimension: '仓库',
+      warehouse: query.warehouse || undefined,
+      itemCategory: query.itemCategory || undefined,
+      itemCode: query.itemCode || undefined,
+      warningStatus: query.warningStatus || undefined,
+    }, orgId.value);
+    rows.value = page.list ?? [];
+    total.value = Number(page.total ?? 0);
+  } catch {
+    rows.value = [];
+    total.value = 0;
+    ElMessage.error('库存上下限列表加载失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
+const handleSearch = async () => {
+  currentPage.value = 1;
+  await loadRows();
+};
+
+const handleReset = async () => {
+  query.warehouse = '';
+  query.itemCategory = '';
+  query.itemCode = '';
+  query.warningStatus = '';
+  currentPage.value = 1;
+  await loadRows();
+};
+
+const handlePageChange = async (page: number) => {
+  currentPage.value = page;
+  await loadRows();
+};
+
+const handlePageSizeChange = async (size: number) => {
+  pageSize.value = size;
+  currentPage.value = 1;
+  await loadRows();
+};
+
+const selectedIds = ref<string[]>([]);
+const handleSelectionChange = (selectedRows: StockWarningReportRow[]) => {
+  selectedIds.value = selectedRows.map((row) => row.id);
+};
+
+const emptyText = computed(() => (orgId.value ? '暂无库存上下限数据' : '请先选择机构'));
 
 watch(
-  () => sessionStore.currentOrgId,
-  () => {
-    void loadWarehouseTree();
+  orgId,
+  async () => {
+    rows.value = [];
+    total.value = 0;
+    selectedIds.value = [];
+    currentPage.value = 1;
+    await loadOptions();
+    await loadRows();
   },
 );
 
-const currentPage = ref(1);
-const pageSize = ref(10);
-const selectedIds = ref<number[]>([]);
-
-const filteredRows = computed(() => {
-  return tableData.filter((row) => {
-    const matchedWarehouse = !query.warehouse || row.warehouseCode === query.warehouse;
-    const matchedCategory = query.category === '全部' || row.itemName.includes(query.category);
-    const matchedItem = query.item === '全部' || row.itemName === query.item;
-    const matchedStatus = query.status === '全部'
-      || (query.status === '偏低' && row.currentQty < row.safeQty)
-      || (query.status === '偏高' && row.currentQty > row.maxQty)
-      || (query.status === '正常' && row.currentQty >= row.safeQty && row.currentQty <= row.maxQty);
-    return matchedWarehouse && matchedCategory && matchedItem && matchedStatus;
-  });
+onMounted(async () => {
+  await loadOptions();
+  await loadRows();
 });
-
-const pagedRows = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  return filteredRows.value.slice(start, start + pageSize.value);
-});
-
-const handleSearch = () => {
-  currentPage.value = 1;
-};
-
-const handleReset = () => {
-  query.warehouse = '';
-  query.category = '全部';
-  query.item = '全部';
-  query.status = '全部';
-  currentPage.value = 1;
-};
-
-const handleToolbarAction = (action: string) => {
-  ElMessage.info(`${action}功能待接入`);
-};
-
-const handleSelectionChange = (rows: StockLimitRow[]) => {
-  selectedIds.value = rows.map((row) => row.id);
-};
-
-const handleView = (row: StockLimitRow) => {
-  ElMessage.info(`查看：${row.itemCode}`);
-};
-
-const handlePageChange = (page: number) => {
-  currentPage.value = page;
-};
-
-const handlePageSizeChange = (size: number) => {
-  pageSize.value = size;
-  currentPage.value = 1;
-};
 </script>
 
 <template>
@@ -197,22 +185,43 @@ const handlePageSizeChange = (size: number) => {
         />
       </el-form-item>
       <el-form-item label="物品类别">
-        <el-select v-model="query.category" style="width: 140px">
-          <el-option v-for="option in categoryOptions" :key="option" :label="option" :value="option" />
-        </el-select>
+        <el-tree-select
+          v-model="query.itemCategory"
+          :data="itemCategoryTree"
+          :props="{ label: 'label', value: 'value', children: 'children' }"
+          :loading="optionLoading"
+          clearable
+          check-strictly
+          default-expand-all
+          style="width: 180px"
+        />
       </el-form-item>
       <el-form-item label="物品信息">
-        <el-select v-model="query.item" style="width: 140px">
-          <el-option v-for="option in itemOptions" :key="option" :label="option" :value="option" />
-        </el-select>
+        <el-tree-select
+          v-model="query.itemCode"
+          :data="itemTree"
+          :props="{ label: 'label', value: 'value' }"
+          :loading="optionLoading"
+          clearable
+          filterable
+          check-strictly
+          default-expand-all
+          style="width: 220px"
+        />
       </el-form-item>
       <el-form-item label="库存状态">
-        <el-select v-model="query.status" style="width: 140px">
-          <el-option v-for="option in statusOptions" :key="option" :label="option" :value="option" />
-        </el-select>
+        <el-tree-select
+          v-model="query.warningStatus"
+          :data="warningStatusOptions"
+          :props="{ label: 'label', value: 'value' }"
+          clearable
+          check-strictly
+          default-expand-all
+          style="width: 140px"
+        />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="handleSearch">
+        <el-button type="primary" :loading="loading" @click="handleSearch">
           <el-icon><Search /></el-icon>
           查询
         </el-button>
@@ -223,63 +232,29 @@ const handlePageSizeChange = (size: number) => {
       </el-form-item>
     </CommonQuerySection>
 
-    <div class="table-toolbar">
-      <el-button type="primary" @click="handleToolbarAction('新增')">
-        <el-icon><Plus /></el-icon>
-        新增
-      </el-button>
-      <el-button @click="handleToolbarAction('导出')">
-        <el-icon><Download /></el-icon>
-        导出
-      </el-button>
-      <el-button @click="handleToolbarAction('批量设置库存下限')">批量设置库存下限</el-button>
-      <el-button @click="handleToolbarAction('批量设置库存上限')">批量设置库存上限</el-button>
-      <el-button @click="handleToolbarAction('批量设置安全库存')">批量设置安全库存</el-button>
-      <el-button @click="handleToolbarAction('批量删除')">
-        <el-icon><Delete /></el-icon>
-        批量删除
-      </el-button>
-      <el-button @click="handleToolbarAction('计算上下限和安全库存')">
-        <el-icon><Setting /></el-icon>
-        计算上下限和安全库存
-      </el-button>
-    </div>
-
     <el-table
-      :data="pagedRows"
+      v-loading="loading"
+      :data="rows"
       border
       stripe
       class="erp-table"
       :fit="false"
       :height="400"
-      :empty-text="'当前机构暂无数据'"
+      :empty-text="emptyText"
       @selection-change="handleSelectionChange"
     >
       <el-table-column type="selection" width="44" fixed="left" />
       <el-table-column type="index" label="序号" width="56" fixed="left" />
-      <el-table-column prop="warehouseCode" label="仓库编码" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="warehouseName" label="仓库名称" min-width="140" show-overflow-tooltip />
+      <el-table-column prop="warehouse" label="仓库" min-width="140" show-overflow-tooltip />
       <el-table-column prop="itemCode" label="物品编码" min-width="120" show-overflow-tooltip />
       <el-table-column prop="itemName" label="物品名称" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="spec" label="规格型号" min-width="120" show-overflow-tooltip />
+      <el-table-column prop="itemCategory" label="物品类别" min-width="120" show-overflow-tooltip />
       <el-table-column prop="unit" label="单位" min-width="80" show-overflow-tooltip />
-      <el-table-column prop="minDays" label="最小库存天数" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="safeDays" label="安全库存天数" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="maxDays" label="最大库存天数" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="avg7" label="近7天日均出库量" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="avg14" label="近14天日均出库量" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="avg21" label="近21天日均出库量" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="avg30" label="近30天日均出库量" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="avg60" label="近60天日均出库量" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="minQty" label="库存下限数量" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="maxQty" label="库存上限数量" min-width="140" show-overflow-tooltip />
-      <el-table-column prop="safeQty" label="安全库存" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="currentQty" label="当前库存" min-width="100" show-overflow-tooltip />
-      <el-table-column label="操作" width="120" fixed="right">
-        <template #default="{ row }">
-          <el-button text type="primary" @click="handleView(row)">查看</el-button>
-        </template>
-      </el-table-column>
+      <el-table-column prop="stockLowerLimit" label="库存下限数量" min-width="140" align="right" show-overflow-tooltip />
+      <el-table-column prop="stockUpperLimit" label="库存上限数量" min-width="140" align="right" show-overflow-tooltip />
+      <el-table-column prop="currentStock" label="当前库存" min-width="100" align="right" show-overflow-tooltip />
+      <el-table-column prop="warningStatus" label="库存状态" min-width="110" show-overflow-tooltip />
+      <el-table-column prop="itemStatus" label="物品状态" min-width="100" show-overflow-tooltip />
     </el-table>
 
     <div class="table-pagination">
@@ -288,7 +263,7 @@ const handlePageSizeChange = (size: number) => {
         :current-page="currentPage"
         :page-size="pageSize"
         :page-sizes="[10, 20, 50]"
-        :total="filteredRows.length"
+        :total="total"
         background
         small
         layout="total, sizes, prev, pager, next, jumper"

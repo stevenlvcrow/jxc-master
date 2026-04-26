@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { Download, Lock, RefreshRight, Search, Unlock } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { onMounted, reactive, ref, watch } from 'vue';
+import { RefreshRight, Search } from '@element-plus/icons-vue';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
-import { useSessionStore } from '@/stores/session';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 
 type TreeNode = {
@@ -11,6 +10,7 @@ type TreeNode = {
   label: string;
   children?: TreeNode[];
 };
+
 type StockLockRow = {
   id: number;
   documentCode: string;
@@ -30,18 +30,17 @@ type StockLockRow = {
   remark: string;
 };
 
-const sessionStore = useSessionStore();
+const { orgId } = useRequiredOrgScope();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
-const itemOptions = ['鸡胸肉', '牛腩', '包装盒', '酸梅汤'];
+const rows = ref<StockLockRow[]>([]);
+const currentPage = ref(1);
+const pageSize = ref(10);
+
 const reasonTree: TreeNode[] = [
   {
-    value: 'reason-root',
+    value: 'inventory-lock',
     label: '锁库原因',
-    children: [
-      { value: '品质异常', label: '品质异常' },
-      { value: '盘点冻结', label: '盘点冻结' },
-      { value: '外部稽核', label: '外部稽核' },
-    ],
+    children: [],
   },
 ];
 
@@ -50,104 +49,8 @@ const query = reactive({
   warehouse: '',
   documentCode: '',
   upstreamCode: '',
-  itemName: '',
+  itemKeyword: '',
   lockReason: '',
-});
-
-const tableData: StockLockRow[] = [
-  {
-    id: 1,
-    documentCode: 'LK-202604-001',
-    upstreamCode: 'PD-202604-021',
-    upstreamType: '盘点单',
-    orgName: '总部',
-    warehouse: '中央成品仓',
-    itemCode: 'IT-0001',
-    itemName: '鸡胸肉',
-    spec: '1kg/包',
-    stockUnit: '包',
-    stockUnitQty: 18,
-    baseUnit: '千克',
-    baseUnitQty: 18,
-    lockReason: '盘点冻结',
-    lockDate: '2026-04-13',
-    remark: '',
-  },
-  {
-    id: 2,
-    documentCode: 'LK-202604-002',
-    upstreamCode: 'QA-202604-005',
-    upstreamType: '质检单',
-    orgName: '华东分公司',
-    warehouse: '北区原料仓',
-    itemCode: 'IT-0002',
-    itemName: '牛腩',
-    spec: '2kg/包',
-    stockUnit: '包',
-    stockUnitQty: 6,
-    baseUnit: '千克',
-    baseUnitQty: 12,
-    lockReason: '品质异常',
-    lockDate: '2026-04-12',
-    remark: '待复检',
-  },
-  {
-    id: 3,
-    documentCode: 'LK-202604-003',
-    upstreamCode: 'AD-202604-013',
-    upstreamType: '调整单',
-    orgName: '华南分公司',
-    warehouse: '南区包材仓',
-    itemCode: 'IT-0003',
-    itemName: '包装盒',
-    spec: '50个/箱',
-    stockUnit: '箱',
-    stockUnitQty: 4,
-    baseUnit: '个',
-    baseUnitQty: 200,
-    lockReason: '外部稽核',
-    lockDate: '2026-04-11',
-    remark: '稽核冻结',
-  },
-];
-
-onMounted(() => {
-  void loadWarehouseTree();
-});
-
-watch(
-  () => sessionStore.currentOrgId,
-  () => {
-    void loadWarehouseTree();
-  },
-);
-
-const currentPage = ref(1);
-const pageSize = ref(10);
-
-const filteredRows = computed(() => {
-  const [startDate, endDate] = query.lockDateRange;
-  return tableData.filter((row) => {
-    const matchedStart = !startDate || row.lockDate >= startDate;
-    const matchedEnd = !endDate || row.lockDate <= endDate;
-    const matchedWarehouse = !query.warehouse || row.warehouse === query.warehouse;
-    const matchedDocument = !query.documentCode || row.documentCode.includes(query.documentCode);
-    const matchedUpstream = !query.upstreamCode || row.upstreamCode.includes(query.upstreamCode);
-    const matchedItem = !query.itemName || row.itemName === query.itemName;
-    const matchedReason = !query.lockReason || row.lockReason === query.lockReason;
-    return matchedStart
-      && matchedEnd
-      && matchedWarehouse
-      && matchedDocument
-      && matchedUpstream
-      && matchedItem
-      && matchedReason;
-  });
-});
-
-const pagedRows = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  return filteredRows.value.slice(start, start + pageSize.value);
 });
 
 const handleSearch = () => {
@@ -159,23 +62,20 @@ const handleReset = () => {
   query.warehouse = '';
   query.documentCode = '';
   query.upstreamCode = '';
-  query.itemName = '';
+  query.itemKeyword = '';
   query.lockReason = '';
   currentPage.value = 1;
 };
 
-const handleToolbarAction = (action: string) => {
-  ElMessage.info(`${action}功能待接入`);
-};
-
-const handlePageChange = (page: number) => {
-  currentPage.value = page;
-};
-
-const handlePageSizeChange = (size: number) => {
-  pageSize.value = size;
+watch(orgId, () => {
+  rows.value = [];
   currentPage.value = 1;
-};
+  void loadWarehouseTree();
+});
+
+onMounted(() => {
+  void loadWarehouseTree();
+});
 </script>
 
 <template>
@@ -210,9 +110,7 @@ const handlePageSizeChange = (size: number) => {
         <el-input v-model="query.upstreamCode" placeholder="请输入上游单据号" clearable style="width: 160px" />
       </el-form-item>
       <el-form-item label="物品">
-        <el-select v-model="query.itemName" clearable style="width: 140px">
-          <el-option v-for="option in itemOptions" :key="option" :label="option" :value="option" />
-        </el-select>
+        <el-input v-model="query.itemKeyword" placeholder="请输入物品编码/名称" clearable style="width: 180px" />
       </el-form-item>
       <el-form-item label="锁库原因">
         <el-tree-select
@@ -238,31 +136,14 @@ const handlePageSizeChange = (size: number) => {
       </el-form-item>
     </CommonQuerySection>
 
-    <div class="table-toolbar">
-      <el-button type="primary" @click="handleToolbarAction('锁库')">
-        <el-icon><Lock /></el-icon>
-        锁库
-      </el-button>
-      <el-button @click="handleToolbarAction('解锁')">
-        <el-icon><Unlock /></el-icon>
-        解锁
-      </el-button>
-      <el-button @click="handleToolbarAction('批量锁库')">批量锁库</el-button>
-      <el-button @click="handleToolbarAction('批量解锁')">批量解锁</el-button>
-      <el-button @click="handleToolbarAction('批量导出单据列表')">
-        <el-icon><Download /></el-icon>
-        批量导出单据列表
-      </el-button>
-    </div>
-
     <el-table
-      :data="pagedRows"
+      :data="rows"
       border
       stripe
       class="erp-table"
       :fit="false"
       :height="400"
-      :empty-text="'当前机构暂无数据'"
+      empty-text="暂无锁库数据"
     >
       <el-table-column type="index" label="序号" width="56" fixed="left" />
       <el-table-column prop="documentCode" label="单据编号" min-width="150" show-overflow-tooltip />
@@ -287,12 +168,12 @@ const handlePageSizeChange = (size: number) => {
         :current-page="currentPage"
         :page-size="pageSize"
         :page-sizes="[10, 20, 50]"
-        :total="filteredRows.length"
+        :total="rows.length"
         background
         small
         layout="total, sizes, prev, pager, next, jumper"
-        @current-change="handlePageChange"
-        @size-change="handlePageSizeChange"
+        @current-change="(page: number) => { currentPage = page; }"
+        @size-change="(size: number) => { pageSize = size; currentPage = 1; }"
       />
     </div>
   </section>

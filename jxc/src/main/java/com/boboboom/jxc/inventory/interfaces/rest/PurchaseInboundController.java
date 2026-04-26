@@ -1,16 +1,6 @@
 package com.boboboom.jxc.inventory.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService;
-import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.IdPayload;
-import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.InventoryBalanceRow;
-import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PageData;
-import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundDetail;
-import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundPermissionView;
-import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundRow;
-import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundBatchRequest;
-import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundCreateRequest;
-import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,16 +11,26 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.security.access.prepost.PreAuthorize;
 
-import java.util.List;
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService;
+import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.IdPayload;
+import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.InventoryBalanceRow;
+import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PageData;
+import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundDetail;
+import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundPermissionView;
+import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundRow;
+import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundBatchRequest;
+import com.boboboom.jxc.inventory.interfaces.rest.request.PurchaseInboundCreateRequest;
 
-@Validated
-@RestController
-@RequestMapping("/api/inventory")
+import jakarta.validation.Valid;
+
 /**
  * 采购入库接口，负责入库单、权限、库存余额和批量操作。
  */
+@Validated
+@RestController
+@RequestMapping("/api/inventory")
 public class PurchaseInboundController {
 
     private final PurchaseInboundApplicationService purchaseInboundApplicationService;
@@ -38,10 +38,10 @@ public class PurchaseInboundController {
     /**
      * 构造采购入库接口。
      *
-     * @param purchaseInboundApplicationService 采购入库服务
+     * @param purchaseInboundApplicationServiceValue 采购入库服务
      */
-    public PurchaseInboundController(PurchaseInboundApplicationService purchaseInboundApplicationService) {
-        this.purchaseInboundApplicationService = purchaseInboundApplicationService;
+    public PurchaseInboundController(PurchaseInboundApplicationService purchaseInboundApplicationServiceValue) {
+        this.purchaseInboundApplicationService = purchaseInboundApplicationServiceValue;
     }
 
     /**
@@ -111,13 +111,13 @@ public class PurchaseInboundController {
                 orgId));
     }
 
-    @GetMapping("/purchase-inbound/permissions")
     /**
      * 查询采购入库权限。
      *
      * @param orgId 机构标识
      * @return 权限视图
      */
+    @GetMapping("/purchase-inbound/permissions")
     public CodeDataResponse<PurchaseInboundPermissionView> purchaseInboundPermissions(@RequestParam(required = false) String orgId) {
         return CodeDataResponse.ok(purchaseInboundApplicationService.purchaseInboundPermissions(orgId));
     }
@@ -136,7 +136,25 @@ public class PurchaseInboundController {
         return CodeDataResponse.ok(purchaseInboundApplicationService.createPurchaseInbound(orgId, request));
     }
 
-    @GetMapping("/purchase-inbound/{id}")
+    /**
+     * 查询库存余额列表。
+     *
+     * @param warehouse 仓库
+     * @param itemName 商品名称
+     * @param checkDate 盘点日期
+     * @param orgId 机构标识
+     * @return 库存余额列表
+     */
+    @GetMapping("/balances")
+    public CodeDataResponse<PageData<InventoryBalanceRow>> listBalances(@RequestParam(defaultValue = "1") Integer pageNum,
+                                                                         @RequestParam(defaultValue = "10") Integer pageSize,
+                                                                         @RequestParam(required = false) String warehouse,
+                                                                         @RequestParam(required = false) String itemName,
+                                                                         @RequestParam(required = false) String checkDate,
+                                                                         @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(purchaseInboundApplicationService.listBalances(pageNum, pageSize, warehouse, itemName, checkDate, orgId));
+    }
+
     /**
      * 查询采购入库单详情。
      *
@@ -144,6 +162,7 @@ public class PurchaseInboundController {
      * @param orgId 机构标识
      * @return 详情结果
      */
+    @GetMapping("/purchase-inbound/{id:\\d+}")
     public CodeDataResponse<PurchaseInboundDetail> detailPurchaseInbound(@PathVariable Long id,
                                                                          @RequestParam(required = false) String orgId) {
         return CodeDataResponse.ok(purchaseInboundApplicationService.detailPurchaseInbound(id, orgId));
@@ -157,7 +176,7 @@ public class PurchaseInboundController {
      * @param request 更新请求
      * @return 空响应
      */
-    @PutMapping("/purchase-inbound/{id}")
+    @PutMapping("/purchase-inbound/{id:\\d+}")
     @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> updatePurchaseInbound(@PathVariable Long id,
                                                         @RequestParam(required = false) String orgId,
@@ -166,8 +185,6 @@ public class PurchaseInboundController {
         return CodeDataResponse.ok();
     }
 
-    @DeleteMapping("/purchase-inbound/{id}")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 删除采购入库单。
      *
@@ -175,6 +192,8 @@ public class PurchaseInboundController {
      * @param orgId 机构标识
      * @return 空响应
      */
+    @DeleteMapping("/purchase-inbound/{id:\\d+}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> deletePurchaseInbound(@PathVariable Long id,
                                                         @RequestParam(required = false) String orgId) {
         purchaseInboundApplicationService.deletePurchaseInbound(id, orgId);
@@ -196,8 +215,6 @@ public class PurchaseInboundController {
         return CodeDataResponse.ok();
     }
 
-    @PostMapping("/purchase-inbound/batch-approve")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 批量审核采购入库单。
      *
@@ -205,6 +222,8 @@ public class PurchaseInboundController {
      * @param request 批量请求
      * @return 空响应
      */
+    @PostMapping("/purchase-inbound/batch-approve")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> batchApprove(@RequestParam(required = false) String orgId,
                                                @Valid @RequestBody PurchaseInboundBatchRequest request) {
         purchaseInboundApplicationService.batchApprove(orgId, request);
@@ -224,22 +243,5 @@ public class PurchaseInboundController {
                                                   @Valid @RequestBody PurchaseInboundBatchRequest request) {
         purchaseInboundApplicationService.batchUnapprove(orgId, request);
         return CodeDataResponse.ok();
-    }
-
-    /**
-     * 查询库存余额列表。
-     *
-     * @param warehouse 仓库
-     * @param itemName 商品名称
-     * @param orgId 机构标识
-     * @return 库存余额列表
-     */
-    @GetMapping("/balances")
-    public CodeDataResponse<PageData<InventoryBalanceRow>> listBalances(@RequestParam(defaultValue = "1") Integer pageNum,
-                                                                        @RequestParam(defaultValue = "10") Integer pageSize,
-                                                                        @RequestParam(required = false) String warehouse,
-                                                                        @RequestParam(required = false) String itemName,
-                                                                        @RequestParam(required = false) String orgId) {
-        return CodeDataResponse.ok(purchaseInboundApplicationService.listBalances(pageNum, pageSize, warehouse, itemName, orgId));
     }
 }

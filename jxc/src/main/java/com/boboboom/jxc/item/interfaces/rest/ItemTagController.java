@@ -1,15 +1,5 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.item.application.service.ItemTagApplicationService;
-import com.boboboom.jxc.item.application.service.ItemTagApplicationService.BatchImportResult;
-import com.boboboom.jxc.item.application.service.ItemTagApplicationService.IdPayload;
-import com.boboboom.jxc.item.application.service.ItemTagApplicationService.ItemTagRow;
-import com.boboboom.jxc.item.application.service.ItemTagApplicationService.PageData;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemTagBatchImportRequest;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemTagCreateRequest;
-import com.boboboom.jxc.item.interfaces.rest.request.ItemTagUpdateRequest;
-import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,12 +12,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Validated
-@RestController
-@RequestMapping("/api/items/tags")
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.item.application.service.ItemTagApplicationService;
+import com.boboboom.jxc.item.application.service.ItemTagApplicationService.BatchImportResult;
+import com.boboboom.jxc.item.application.service.ItemTagApplicationService.IdPayload;
+import com.boboboom.jxc.item.application.service.ItemTagApplicationService.ItemTagRow;
+import com.boboboom.jxc.item.application.service.ItemTagApplicationService.PageData;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemTagBatchImportRequest;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemTagCreateRequest;
+import com.boboboom.jxc.item.interfaces.rest.request.ItemTagUpdateRequest;
+
+import jakarta.validation.Valid;
+
 /**
  * 商品标签接口，负责标签分页查询、创建、修改、删除和批量导入。
  */
+@Validated
+@RestController
+@RequestMapping("/api/items/tags")
 public class ItemTagController {
 
     private final ItemTagApplicationService itemTagApplicationService;
@@ -35,10 +37,10 @@ public class ItemTagController {
     /**
      * 构造商品标签接口。
      *
-     * @param itemTagApplicationService 商品标签服务
+     * @param itemTagApplicationServiceValue 商品标签服务
      */
-    public ItemTagController(ItemTagApplicationService itemTagApplicationService) {
-        this.itemTagApplicationService = itemTagApplicationService;
+    public ItemTagController(ItemTagApplicationService itemTagApplicationServiceValue) {
+        this.itemTagApplicationService = itemTagApplicationServiceValue;
     }
 
     /**
@@ -62,8 +64,6 @@ public class ItemTagController {
         return CodeDataResponse.ok(itemTagApplicationService.list(pageNo, pageSize, tagCode, tagName, itemName, orgId));
     }
 
-    @PostMapping
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 新建商品标签。
      *
@@ -71,6 +71,8 @@ public class ItemTagController {
      * @param request 新增请求
      * @return 新建结果
      */
+    @PostMapping
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<IdPayload> create(@RequestParam(required = false) String orgId,
                                               @Valid @RequestBody ItemTagCreateRequest request) {
         return CodeDataResponse.ok(itemTagApplicationService.create(orgId, request));
@@ -93,8 +95,6 @@ public class ItemTagController {
         return CodeDataResponse.ok();
     }
 
-    @DeleteMapping("/{id}")
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 删除商品标签。
      *
@@ -102,6 +102,8 @@ public class ItemTagController {
      * @param orgId 机构标识
      * @return 空响应
      */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<Void> delete(@PathVariable Long id,
                                          @RequestParam(required = false) String orgId) {
         itemTagApplicationService.delete(id, orgId);

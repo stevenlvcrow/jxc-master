@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.purchase.infrastructure.persistence.mapper.PurchaseDocumentMapper">
+
+    <resultMap id="PurchaseDocumentHeaderMap" type="com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService$Header">
+        <id property="id" column="id"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="documentType" column="document_type"/>
+        <result property="documentCode" column="document_code"/>
+        <result property="documentDate" column="document_date"/>
+        <result property="expectedArrivalDate" column="expected_arrival_date"/>
+        <result property="purchaseOrg" column="purchase_org"/>
+        <result property="warehouseName" column="warehouse_name"/>
+        <result property="supplierName" column="supplier_name"/>
+        <result property="sourceDocumentCode" column="source_document_code"/>
+        <result property="downstreamDocumentCode" column="downstream_document_code"/>
+        <result property="documentStatus" column="document_status"/>
+        <result property="reviewStatus" column="review_status"/>
+        <result property="shipStatus" column="ship_status"/>
+        <result property="receiveStatus" column="receive_status"/>
+        <result property="reconciliationStatus" column="reconciliation_status"/>
+        <result property="supplierSplitStatus" column="supplier_split_status"/>
+        <result property="documentBizType" column="document_biz_type"/>
+        <result property="splitReceiptStatus" column="split_receipt_status"/>
+        <result property="printStatus" column="print_status"/>
+        <result property="returnReason" column="return_reason"/>
+        <result property="inspectionStatus" column="inspection_status"/>
+        <result property="inspectionCount" column="inspection_count"/>
+        <result property="adjustedPrice" column="adjusted_price"/>
+        <result property="workflowProcessCode" column="workflow_process_code"/>
+        <result property="workflowDefinitionKey" column="workflow_definition_key"/>
+        <result property="workflowDefinitionId" column="workflow_definition_id"/>
+        <result property="workflowInstanceId" column="workflow_instance_id"/>
+        <result property="workflowTaskId" column="workflow_task_id"/>
+        <result property="workflowTaskName" column="workflow_task_name"/>
+        <result property="workflowStatus" column="workflow_status"/>
+        <result property="pendingOperation" column="pending_operation"/>
+        <result property="rejectionReason" column="rejection_reason"/>
+        <result property="creatorName" column="creator_name"/>
+        <result property="submitterName" column="submitter_name"/>
+        <result property="applicantName" column="applicant_name"/>
+        <result property="lastOperatorName" column="last_operator_name"/>
+        <result property="lastOperatedAt" column="last_operated_at"/>
+        <result property="remark" column="remark"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="approvedBy" column="approved_by"/>
+        <result property="approvedAt" column="approved_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="PurchaseDocumentLineMap" type="com.boboboom.jxc.purchase.application.service.PurchaseDocumentApplicationService$Line">
+        <id property="id" column="id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="itemCode" column="item_code"/>
+        <result property="itemName" column="item_name"/>
+        <result property="spec" column="spec"/>
+        <result property="itemCategory" column="item_category"/>
+        <result property="supplierName" column="supplier_name"/>
+        <result property="purchaseUnit" column="purchase_unit"/>
+        <result property="baseUnit" column="base_unit"/>
+        <result property="baseConversion" column="base_conversion"/>
+        <result property="quantity" column="quantity"/>
+        <result property="reviewQty" column="review_qty"/>
+        <result property="receivedQty" column="received_qty"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="taxRate" column="tax_rate"/>
+        <result property="amount" column="amount"/>
+        <result property="isGift" column="is_gift"/>
+        <result property="warehouseName" column="warehouse_name"/>
+        <result property="expectedArrivalDate" column="expected_arrival_date"/>
+        <result property="reviewStatus" column="review_status"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <select id="selectHeaders" resultMap="PurchaseDocumentHeaderMap">
+        select *
+        from purchase_document
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and document_type = #{documentType}
+        <if test="!viewAll">
+          and created_by = #{createdBy}
+        </if>
+        order by document_date desc, id desc
+    </select>
+
+    <select id="selectHeader" resultMap="PurchaseDocumentHeaderMap">
+        select *
+        from purchase_document
+        where id = #{id}
+          and scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and document_type = #{documentType}
+        <if test="!viewAll">
+          and created_by = #{createdBy}
+        </if>
+    </select>
+
+    <select id="selectHeadersByIds" resultMap="PurchaseDocumentHeaderMap">
+        select *
+        from purchase_document
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and document_type = #{documentType}
+          and id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        <if test="!viewAll">
+          and created_by = #{createdBy}
+        </if>
+    </select>
+
+    <select id="countByCodePrefix" resultType="java.lang.Long">
+        select count(1)
+        from purchase_document
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and document_type = #{documentType}
+          and document_code like #{prefix}
+    </select>
+
+    <select id="insertHeader" resultType="java.lang.Long">
+        insert into purchase_document (
+            scope_type, scope_id, document_type, document_code, document_date, expected_arrival_date,
+            purchase_org, warehouse_name, supplier_name, source_document_code, downstream_document_code,
+            document_status, review_status, ship_status, receive_status, reconciliation_status,
+            supplier_split_status, document_biz_type, split_receipt_status, print_status, return_reason,
+            inspection_status, inspection_count, adjusted_price, workflow_status, pending_operation,
+            creator_name, submitter_name, applicant_name, last_operator_name, last_operated_at,
+            remark, created_by, created_at, updated_at
+        ) values (
+            #{header.scopeType}, #{header.scopeId}, #{header.documentType}, #{header.documentCode},
+            #{header.documentDate}, #{header.expectedArrivalDate}, #{header.purchaseOrg}, #{header.warehouseName},
+            #{header.supplierName}, #{header.sourceDocumentCode}, #{header.downstreamDocumentCode},
+            #{header.documentStatus}, #{header.reviewStatus}, #{header.shipStatus}, #{header.receiveStatus},
+            #{header.reconciliationStatus}, #{header.supplierSplitStatus}, #{header.documentBizType},
+            #{header.splitReceiptStatus}, #{header.printStatus}, #{header.returnReason}, #{header.inspectionStatus},
+            #{header.inspectionCount}, #{header.adjustedPrice}, #{header.workflowStatus}, #{header.pendingOperation},
+            #{header.creatorName}, #{header.submitterName}, #{header.applicantName}, #{header.lastOperatorName},
+            #{header.lastOperatedAt}, #{header.remark}, #{header.createdBy}, current_timestamp, current_timestamp
+        )
+        returning id
+    </select>
+
+    <update id="updateHeader">
+        update purchase_document
+        set document_date = #{header.documentDate},
+            expected_arrival_date = #{header.expectedArrivalDate},
+            purchase_org = #{header.purchaseOrg},
+            warehouse_name = #{header.warehouseName},
+            supplier_name = #{header.supplierName},
+            source_document_code = #{header.sourceDocumentCode},
+            downstream_document_code = #{header.downstreamDocumentCode},
+            document_status = #{header.documentStatus},
+            review_status = #{header.reviewStatus},
+            ship_status = #{header.shipStatus},
+            receive_status = #{header.receiveStatus},
+            reconciliation_status = #{header.reconciliationStatus},
+            supplier_split_status = #{header.supplierSplitStatus},
+            document_biz_type = #{header.documentBizType},
+            split_receipt_status = #{header.splitReceiptStatus},
+            print_status = #{header.printStatus},
+            return_reason = #{header.returnReason},
+            inspection_status = #{header.inspectionStatus},
+            inspection_count = #{header.inspectionCount},
+            adjusted_price = #{header.adjustedPrice},
+            workflow_process_code = #{header.workflowProcessCode},
+            workflow_definition_key = #{header.workflowDefinitionKey},
+            workflow_definition_id = #{header.workflowDefinitionId},
+            workflow_instance_id = #{header.workflowInstanceId},
+            workflow_task_id = #{header.workflowTaskId},
+            workflow_task_name = #{header.workflowTaskName},
+            workflow_status = #{header.workflowStatus},
+            pending_operation = #{header.pendingOperation},
+            rejection_reason = #{header.rejectionReason},
+            creator_name = #{header.creatorName},
+            submitter_name = #{header.submitterName},
+            applicant_name = #{header.applicantName},
+            last_operator_name = #{header.lastOperatorName},
+            last_operated_at = #{header.lastOperatedAt},
+            remark = #{header.remark},
+            approved_by = #{header.approvedBy},
+            approved_at = #{header.approvedAt},
+            updated_at = current_timestamp
+        where id = #{header.id}
+    </update>
+
+    <delete id="deleteHeaderById">
+        delete from purchase_document
+        where id = #{id}
+    </delete>
+
+    <update id="updateLastOperator">
+        update purchase_document
+        set last_operator_name = #{operatorName},
+            last_operated_at = current_timestamp,
+            updated_at = current_timestamp
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <delete id="deleteLinesByDocumentId">
+        delete from purchase_document_line
+        where document_id = #{documentId}
+    </delete>
+
+    <insert id="insertLine">
+        insert into purchase_document_line (
+            document_id, item_code, item_name, spec, item_category, supplier_name, purchase_unit,
+            base_unit, base_conversion, quantity, review_qty, received_qty, unit_price, tax_rate,
+            amount, is_gift, warehouse_name, expected_arrival_date, review_status, remark, created_at
+        ) values (
+            #{line.documentId}, #{line.itemCode}, #{line.itemName}, #{line.spec}, #{line.itemCategory},
+            #{line.supplierName}, #{line.purchaseUnit}, #{line.baseUnit}, #{line.baseConversion},
+            #{line.quantity}, #{line.reviewQty}, #{line.receivedQty}, #{line.unitPrice}, #{line.taxRate},
+            #{line.amount}, #{line.isGift}, #{line.warehouseName}, #{line.expectedArrivalDate},
+            #{line.reviewStatus}, #{line.remark}, current_timestamp
+        )
+    </insert>
+
+    <select id="selectLinesByDocumentIds" resultMap="PurchaseDocumentLineMap">
+        select *
+        from purchase_document_line
+        where document_id in
+        <foreach collection="documentIds" item="documentId" open="(" separator="," close=")">
+            #{documentId}
+        </foreach>
+        order by id asc
+    </select>
+
+    <select id="selectLinesByDocumentId" resultMap="PurchaseDocumentLineMap">
+        select *
+        from purchase_document_line
+        where document_id = #{documentId}
+        order by id asc
+    </select>
+
+    <select id="selectLinesByIds" resultMap="PurchaseDocumentLineMap">
+        select *
+        from purchase_document_line
+        where id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+    <update id="updateLineReview">
+        update purchase_document_line
+        set review_status = #{reviewStatus},
+            review_qty = #{reviewQty},
+            remark = coalesce(#{remark}, remark)
+        where id = #{lineId}
+    </update>
+
+    <update id="updateLinePatch">
+        update purchase_document_line
+        set supplier_name = coalesce(#{supplierName}, supplier_name),
+            expected_arrival_date = coalesce(#{expectedArrivalDate}, expected_arrival_date),
+            review_qty = #{reviewQty},
+            remark = coalesce(#{remark}, remark)
+        where id = #{lineId}
+    </update>
+</mapper>

@@ -13,6 +13,7 @@ import {
   batchUnapprovePurchaseInboundApi,
   createPurchaseInboundApi,
   fetchPurchaseInboundDetailApi,
+  fetchPurchaseInboundPermissionApi,
   updatePurchaseInboundApi,
   type PurchaseInboundDetail,
 } from '@/api/modules/inventory';
@@ -26,9 +27,9 @@ import { fetchCurrentUserRolesApi } from '@/api/modules/auth';
 import { fetchSuppliersApi, type SupplierListRow } from '@/api/modules/supplier';
 import { fetchStoreSalesmenApi, type SalesmanCandidateItem } from '@/api/modules/system-admin';
 import { fetchStoreWarehousesApi, type WarehouseRow as ApiWarehouseRow } from '@/api/modules/warehouse';
-import { fetchPurchaseInboundPermissionApi } from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
 import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 
 type SupplierOption = {
   id: number;
@@ -79,9 +80,16 @@ type WarehouseOption = {
 const router = useRouter();
 const route = useRoute();
 const sessionStore = useSessionStore();
+const { storeOrgId, storeId } = useRequiredOrgScope();
+const ITEM_STATUS_DICT = 'item.status';
 const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
-const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT]);
+const { optionsOf } = useDictionaryOptions([ITEM_STATUS_DICT, INVENTORY_DOCUMENT_STATUS_DICT]);
+const itemStatusOptions = optionsOf(ITEM_STATUS_DICT, { enabled: true, label: '全部', value: '' });
 const inventoryDocumentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const normalizedItemStatusOptions = computed(() => itemStatusOptions.value.map((item) => ({
+  label: item.itemLabel,
+  value: item.itemCode,
+})));
 const submittedStatus = computed(() => (
   inventoryDocumentStatusOptions.value.find((item) => item.itemKey === 'SUBMITTED')?.itemCode ?? '已提交'
 ));
@@ -135,7 +143,6 @@ const isReadonlyMode = computed(() => {
 
 const supplierOptions = ref<SupplierOption[]>([]);
 const warehouseOptions = ref<WarehouseOption[]>([]);
-const purchaseUnitOptions = ['斤', '箱', '袋', '个', '瓶'];
 const salesmanOptions = ref<SalesmanOption[]>([]);
 const salesmanSelectOptions = computed(() => {
   const options = [...salesmanOptions.value];
@@ -151,7 +158,7 @@ const salesmanSelectOptions = computed(() => {
 });
 const itemSelectorVisible = ref(false);
 const itemSelectorKeyword = ref('');
-const itemSelectorStatus = ref('启用');
+const itemSelectorStatus = ref('');
 const activeItemTreeId = ref<string>('all');
 const itemSelectorCurrentPage = ref(1);
 const itemSelectorPageSize = ref(10);
@@ -162,14 +169,6 @@ const selectedItemCandidates = ref<Array<Record<string, unknown>>>([]);
 const itemTreeData = ref<SelectorTreeNode[]>([]);
 const itemCandidateSource = ref<ItemCandidate[]>([]);
 const formLoading = ref(false);
-
-const resolvePurchaseInboundOrgId = () => {
-  const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!currentOrgId || !currentOrgId.startsWith('store-')) {
-    return undefined;
-  }
-  return currentOrgId;
-};
 
 const itemTableColumns: SelectorColumn[] = [
   { prop: 'code', label: '物品编码', minWidth: 130 },
@@ -241,7 +240,20 @@ const resetForm = () => {
   rows.value = [createEmptyRow(1)];
 };
 
-const applyDetail = (detail: PurchaseInboundDetail) => {
+const resolvePurchaseUnitByItemCode = async (itemCode: string) => {
+  const orgId = resolveOrgId();
+  if (!orgId || !itemCode.trim()) {
+    return '';
+  }
+  const page = await fetchItemsApi({
+    pageNo: 1,
+    pageSize: 10,
+    keyword: itemCode.trim(),
+  }, orgId);
+  return page.list.find((item) => item.code === itemCode)?.purchaseUnit ?? '';
+};
+
+const applyDetail = async (detail: PurchaseInboundDetail) => {
   detailStatus.value = detail.status ?? '';
   form.inboundDate = detail.inboundDate ?? '';
   form.remark = detail.remark ?? '';
@@ -252,7 +264,7 @@ const applyDetail = (detail: PurchaseInboundDetail) => {
   form.supplierId = supplierOptions.value.find((item) =>
     item.name === detail.supplier || `${item.name} / ${item.code}` === detail.supplier,
   )?.id ?? 0;
-  rows.value = (detail.items?.length ? detail.items : [null]).map((item, index) => {
+  const detailRows = await Promise.all((detail.items?.length ? detail.items : [null]).map(async (item, index) => {
     if (!item) {
       return createEmptyRow(index + 1);
     }
@@ -263,45 +275,18 @@ const applyDetail = (detail: PurchaseInboundDetail) => {
       spec: item.spec ?? '',
       category: item.category ?? '',
       warehouse: detail.warehouse ?? '',
-      purchaseUnit: '',
+      purchaseUnit: await resolvePurchaseUnitByItemCode(item.itemCode),
       quantity: item.quantity ?? null,
       inboundPrice: item.unitPrice ?? null,
       amount: null,
       gift: false,
       remark: '',
     } as ItemRow;
-  });
+  }));
+  rows.value = detailRows;
 };
 
-const resolveOrgId = () => {
-  return resolvePurchaseInboundOrgId();
-};
-
-const resolveWarehouseStoreId = () => {
-  const currentOrgId = (sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!currentOrgId) {
-    return undefined;
-  }
-  if (currentOrgId.startsWith('store-')) {
-    const storeId = Number(currentOrgId.slice('store-'.length));
-    return Number.isNaN(storeId) ? undefined : storeId;
-  }
-  const currentOrg = sessionStore.currentOrg;
-  if (currentOrg?.type === 'group') {
-    const firstStore = currentOrg.children?.[0];
-    if (!firstStore) {
-      return undefined;
-    }
-    const storeId = Number(String(firstStore.id).slice('store-'.length));
-    return Number.isNaN(storeId) ? undefined : storeId;
-  }
-  const firstStore = sessionStore.flatOrgs.find((item) => item.type === 'store');
-  if (!firstStore) {
-    return undefined;
-  }
-  const storeId = Number(String(firstStore.id).slice('store-'.length));
-  return Number.isNaN(storeId) ? undefined : storeId;
-};
+const resolveOrgId = () => storeOrgId.value;
 
 const loadSupplierOptions = async () => {
   const orgId = resolveOrgId();
@@ -324,12 +309,11 @@ const loadSupplierOptions = async () => {
 };
 
 const loadWarehouseOptions = async () => {
-  const storeId = resolveWarehouseStoreId();
-  if (!storeId) {
+  if (!storeId.value) {
     warehouseOptions.value = [];
     return;
   }
-  const rows = await fetchStoreWarehousesApi(storeId, { status: 'ENABLED' });
+  const rows = await fetchStoreWarehousesApi(storeId.value, { status: 'ENABLED' });
   warehouseOptions.value = rows
     .map((item: ApiWarehouseRow) => ({
       id: item.id,
@@ -464,7 +448,7 @@ const loadDetail = async () => {
   formLoading.value = true;
   try {
     const detail = await fetchPurchaseInboundDetailApi(inboundId.value, orgId);
-    applyDetail(detail);
+    await applyDetail(detail);
   } finally {
     formLoading.value = false;
   }
@@ -624,81 +608,10 @@ const handleToolbarAction = async (action: string) => {
     ElMessage.info('当前单据为查看状态，不能编辑');
     return;
   }
-  if (action === '通过模板新建') {
-    const orgId = resolveOrgId();
-    if (!orgId) {
-      ElMessage.warning('请选择门店后再操作');
-      return;
-    }
-    const page = await fetchItemsApi({
-      pageNo: 1,
-      pageSize: 2,
-    }, orgId);
-    const templateItems = page.list.map(mapItemCandidate);
-    rows.value = [
-      {
-        id: rowSeed.value++,
-        itemCode: templateItems[0]?.code ?? '',
-        itemName: templateItems[0]?.name ?? '',
-        spec: templateItems[0]?.spec ?? '',
-        category: templateItems[0]?.category ?? '',
-        warehouse: '中央成品仓',
-        purchaseUnit: templateItems[0]?.purchaseUnit ?? '袋',
-        quantity: 10,
-        inboundPrice: 46.5,
-        amount: 465,
-        gift: false,
-        remark: '',
-      },
-      {
-        id: rowSeed.value++,
-        itemCode: templateItems[1]?.code ?? '',
-        itemName: templateItems[1]?.name ?? '',
-        spec: templateItems[1]?.spec ?? '',
-        category: templateItems[1]?.category ?? '',
-        warehouse: '南区包材仓',
-        purchaseUnit: templateItems[1]?.purchaseUnit ?? '箱',
-        quantity: 6,
-        inboundPrice: 68,
-        amount: 408,
-        gift: false,
-        remark: '',
-      },
-    ];
-    ElMessage.success('已通过模板填充示例物品');
-    return;
-  }
   if (action === '批量选择仓库') {
     batchWarehouse.value = '';
     batchWarehouseDialogVisible.value = true;
     return;
-  }
-  if (action === '批量导入物品') {
-    const orgId = resolveOrgId();
-    if (!orgId) {
-      ElMessage.warning('请选择门店后再操作');
-      return;
-    }
-    const page = await fetchItemsApi({
-      pageNo: 1,
-      pageSize: 2,
-    }, orgId);
-    const imported = page.list.map((item) => ({
-      id: rowSeed.value++,
-      itemCode: item.code,
-      itemName: item.name,
-      spec: item.spec,
-      category: item.category,
-      warehouse: '',
-      purchaseUnit: item.purchaseUnit,
-      quantity: null,
-      inboundPrice: null,
-      amount: null,
-      gift: false,
-      remark: '',
-    }));
-    rows.value.push(...imported);
-    ElMessage.success(`已导入 ${imported.length} 条物品`);
   }
 };
 
@@ -761,7 +674,7 @@ const handleSaveDraft = () => {
     void handleRejectAction();
     return;
   }
-  ElMessage.info('当前版本仅支持直接保存入库单，草稿功能待接入');
+  void handleSave();
 };
 
 const handleSave = async () => {
@@ -945,9 +858,7 @@ watch(
       <div ref="itemSectionRef" class="form-section-block">
         <h3 class="form-section-title">物品信息</h3>
         <div class="table-toolbar">
-          <el-button :disabled="isReadonlyMode" @click="handleToolbarAction('通过模板新建')">通过模板新建</el-button>
           <el-button :disabled="isReadonlyMode" @click="handleToolbarAction('批量选择仓库')">批量选择仓库</el-button>
-          <el-button :disabled="isReadonlyMode" @click="handleToolbarAction('批量导入物品')">批量导入物品</el-button>
         </div>
 
         <el-table :data="rows" border stripe class="erp-table purchase-inbound-item-table" :fit="false">
@@ -993,9 +904,7 @@ watch(
           </el-table-column>
           <el-table-column label="采购单位" min-width="120">
             <template #default="{ row }">
-              <el-select v-model="row.purchaseUnit" placeholder="请选择单位" :disabled="isReadonlyMode">
-                <el-option v-for="option in purchaseUnitOptions" :key="option" :label="option" :value="option" />
-              </el-select>
+              <span>{{ row.purchaseUnit || '-' }}</span>
             </template>
           </el-table-column>
           <el-table-column label="数量" min-width="110">
@@ -1049,11 +958,7 @@ watch(
       keyword-label="物品"
       keyword-placeholder="支持按物品编码和名称查询..."
       status-label="启用状态"
-      :status-options="[
-        { label: '全部', value: '' },
-        { label: '启用', value: '启用' },
-        { label: '停用', value: '停用' },
-      ]"
+      :status-options="normalizedItemStatusOptions"
       :total="itemSelectorTotal"
       :current-page="itemSelectorCurrentPage"
       :page-size="itemSelectorPageSize"

@@ -3,6 +3,7 @@ package com.boboboom.jxc.item.interfaces.rest.request;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+/** 物品与供应商请求参数，承载接口入参。 */
 public record SupplierCategoryCreateRequest(
         @Size(max = 64, message = "类别编码长度不能超过64")
         String categoryCode,

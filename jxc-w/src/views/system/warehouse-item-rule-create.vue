@@ -1,6 +1,5 @@
 ﻿<script setup lang="ts">
-import type { ComponentPublicInstance } from 'vue';
-import { reactive, ref, watch } from 'vue';
+import { reactive, ref, watch, type ComponentPublicInstance } from 'vue';
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 import { useRouter } from 'vue-router';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';

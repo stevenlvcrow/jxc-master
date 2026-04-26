@@ -1,11 +1,12 @@
 package com.boboboom.jxc.identity.domain.repository;
 
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
-import com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView;
-
 import java.util.List;
 import java.util.Optional;
 
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView;
+
+/** 身份与权限仓储接口，定义领域需要的数据访问能力。 */
 public interface UserAccountRepository {
 
     Optional<UserAccountDO> findById(Long id);
@@ -19,6 +20,8 @@ public interface UserAccountRepository {
     List<UserAccountDO> findByIdsOrdered(List<Long> ids);
 
     List<UserAccountDO> findByCreatedGroupScopes(List<Long> groupIds);
+
+    List<UserAccountDO> findByGroupScope(Long groupId);
 
     List<UserAccountDO> findRolelessUsersByCreatedScopes(List<Long> groupIds, List<Long> storeIds);
 

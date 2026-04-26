@@ -28,13 +28,20 @@ export default tseslint.config(
     },
     rules: {
       // TS
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
-        'warn',
+        'error',
         {
           argsIgnorePattern: '^_',
           caughtErrorsIgnorePattern: '^_',
           varsIgnorePattern: '^_',
+        },
+      ],
+      '@typescript-eslint/consistent-type-imports': [
+        'error',
+        {
+          prefer: 'type-imports',
+          fixStyle: 'inline-type-imports',
         },
       ],
 
@@ -43,14 +50,30 @@ export default tseslint.config(
       'prefer-const': 'error',
       'eqeqeq': ['error', 'always', { null: 'ignore' }],
       'curly': ['error', 'all'],
-      'no-irregular-whitespace': 'warn',
-      'no-useless-assignment': 'warn',
-      'no-debugger': 'warn',
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-duplicate-imports': ['error', { includeExports: true }],
+      'no-irregular-whitespace': 'error',
+      'no-useless-assignment': 'error',
+      'no-debugger': 'error',
+      'no-console': ['error', { allow: ['warn', 'error'] }],
 
       // Vue
       'vue/multi-word-component-names': 'off',
-      'vue/no-mutating-props': 'warn',
+      'vue/no-mutating-props': 'error',
+      'vue/no-template-shadow': 'error',
+      'vue/no-unused-components': 'error',
+      'vue/require-explicit-emits': 'error',
+      'vue/html-self-closing': [
+        'error',
+        {
+          html: {
+            void: 'never',
+            normal: 'always',
+            component: 'always',
+          },
+          svg: 'always',
+          math: 'always',
+        },
+      ],
       'vue/no-v-html': 'off',
     },
   },

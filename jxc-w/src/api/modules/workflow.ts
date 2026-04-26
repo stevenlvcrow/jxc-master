@@ -80,6 +80,15 @@ export type WorkflowApprovalNotificationPage = {
   total: number;
   pageNum: number;
   pageSize: number;
+  tabs: WorkflowApprovalNotificationTab[];
+  activeTab: WorkflowApprovalNotificationTabKey | '';
+};
+
+export type WorkflowApprovalNotificationTabKey = 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED_BY_ME' | 'SUBMITTED';
+
+export type WorkflowApprovalNotificationTab = {
+  key: WorkflowApprovalNotificationTabKey;
+  label: string;
 };
 
 type OrgParams = {
@@ -206,10 +215,23 @@ export const bindWorkflowProcessStoresApi = (id: number, storeIds: number[], org
     { params: { orgId } },
   );
 
-export const fetchWorkflowApprovalNotificationsApi = (params: { orgId?: string; pageNum?: number; pageSize?: number }) =>
+export const batchBindWorkflowProcessStoresApi = (processIds: number[], storeIds: number[], orgId?: string) =>
+  apiClient.put<void>(
+    '/api/workflow/processes/batch-bind-stores',
+    { processIds, storeIds },
+    { params: { orgId } },
+  );
+
+export const fetchWorkflowApprovalNotificationsApi = (params: {
+  orgId?: string;
+  tab?: WorkflowApprovalNotificationTabKey | '';
+  pageNum?: number;
+  pageSize?: number;
+}) =>
   apiClient.get<WorkflowApprovalNotificationPage>('/api/workflow/notifications', {
     params: {
       orgId: params.orgId,
+      tab: params.tab || undefined,
       pageNum: params.pageNum,
       pageSize: params.pageSize,
     },

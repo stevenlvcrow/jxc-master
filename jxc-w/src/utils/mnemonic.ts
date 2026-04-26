@@ -1,11 +1,10 @@
-import { pinyin } from 'pinyin-pro';
-
-export const buildMnemonicCode = (value?: string | null) => {
+export const buildMnemonicCode = async (value?: string | null) => {
   const text = String(value ?? '').trim();
   if (!text) {
     return '';
   }
 
+  const { pinyin } = await import('pinyin-pro');
   const initials = pinyin(text, {
     toneType: 'none',
     pattern: 'first',

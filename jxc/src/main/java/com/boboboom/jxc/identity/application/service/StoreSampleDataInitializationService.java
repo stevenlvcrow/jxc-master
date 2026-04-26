@@ -1,5 +1,11 @@
 package com.boboboom.jxc.identity.application.service;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.springframework.stereotype.Service;
+
 import com.boboboom.jxc.identity.domain.repository.UnitRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
 import com.boboboom.jxc.item.domain.repository.ItemCategoryRepository;
@@ -8,12 +14,8 @@ import com.boboboom.jxc.item.domain.repository.ItemTagRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemCategoryDO;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemStatisticsTypeDO;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemTagDO;
-import org.springframework.stereotype.Service;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-
+/** 身份与权限服务，负责相关业务规则和流程协作。 */
 @Service
 public class StoreSampleDataInitializationService {
 
@@ -25,16 +27,18 @@ public class StoreSampleDataInitializationService {
     private final ItemStatisticsTypeRepository itemStatisticsTypeRepository;
     private final ItemTagRepository itemTagRepository;
 
-    public StoreSampleDataInitializationService(UnitRepository unitRepository,
-                                                ItemCategoryRepository itemCategoryRepository,
-                                                ItemStatisticsTypeRepository itemStatisticsTypeRepository,
-                                                ItemTagRepository itemTagRepository) {
-        this.unitRepository = unitRepository;
-        this.itemCategoryRepository = itemCategoryRepository;
-        this.itemStatisticsTypeRepository = itemStatisticsTypeRepository;
-        this.itemTagRepository = itemTagRepository;
+    /** 身份与权限服务，负责相关业务规则和流程协作。 */
+    public StoreSampleDataInitializationService(UnitRepository unitRepositoryValue,
+                                                ItemCategoryRepository itemCategoryRepositoryValue,
+                                                ItemStatisticsTypeRepository itemStatisticsTypeRepositoryValue,
+                                                ItemTagRepository itemTagRepositoryValue) {
+        this.unitRepository = unitRepositoryValue;
+        this.itemCategoryRepository = itemCategoryRepositoryValue;
+        this.itemStatisticsTypeRepository = itemStatisticsTypeRepositoryValue;
+        this.itemTagRepository = itemTagRepositoryValue;
     }
 
+    /** 身份与权限分页数据模型，承载列表数据和分页信息。 */
     public void initializeStoreSampleData(Long storeId) {
         copyUnitSamplesToStore(storeId);
         copyItemCategorySamplesToStore(storeId);
@@ -121,17 +125,12 @@ public class StoreSampleDataInitializationService {
         Set<String> existingCodes = new HashSet<>();
         Set<String> existingNameCategoryPairs = new HashSet<>();
         for (ItemStatisticsTypeDO row : existingRows) {
-            if (row.getCode() != null) {
-                existingCodes.add(row.getCode());
-            }
-            existingNameCategoryPairs.add((row.getName() == null ? "" : row.getName()) + "#" +
-                    (row.getStatisticsCategory() == null ? "" : row.getStatisticsCategory()));
+            collectStatisticsTypeExistingKey(row, existingCodes, existingNameCategoryPairs);
         }
 
         for (ItemStatisticsTypeDO template : templates) {
-            String pair = (template.getName() == null ? "" : template.getName()) + "#" +
-                    (template.getStatisticsCategory() == null ? "" : template.getStatisticsCategory());
-            if (existingCodes.contains(template.getCode()) || existingNameCategoryPairs.contains(pair)) {
+            String pair = statisticsTypeNameCategoryPair(template.getName(), template.getStatisticsCategory());
+            if (statisticsTypeSampleExists(template, existingCodes, existingNameCategoryPairs)) {
                 continue;
             }
             ItemStatisticsTypeDO toInsert = new ItemStatisticsTypeDO();
@@ -145,6 +144,26 @@ public class StoreSampleDataInitializationService {
             existingCodes.add(template.getCode());
             existingNameCategoryPairs.add(pair);
         }
+    }
+
+    private void collectStatisticsTypeExistingKey(ItemStatisticsTypeDO row,
+                                                  Set<String> existingCodes,
+                                                  Set<String> existingNameCategoryPairs) {
+        if (row.getCode() != null) {
+            existingCodes.add(row.getCode());
+        }
+        existingNameCategoryPairs.add(statisticsTypeNameCategoryPair(row.getName(), row.getStatisticsCategory()));
+    }
+
+    private boolean statisticsTypeSampleExists(ItemStatisticsTypeDO template,
+                                               Set<String> existingCodes,
+                                               Set<String> existingNameCategoryPairs) {
+        return existingCodes.contains(template.getCode())
+                || existingNameCategoryPairs.contains(statisticsTypeNameCategoryPair(template.getName(), template.getStatisticsCategory()));
+    }
+
+    private String statisticsTypeNameCategoryPair(String name, String statisticsCategory) {
+        return (name == null ? "" : name) + "#" + (statisticsCategory == null ? "" : statisticsCategory);
     }
 
     private void copyItemTagSamplesToStore(Long storeId) {

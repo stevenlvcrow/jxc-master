@@ -297,20 +297,20 @@ onMounted(async () => {
 
 <template>
   <section class="panel item-main-panel">
-    <CommonQuerySection :model="query">
-      <el-form-item label="统计方式">
+    <CommonQuerySection :model="query" class="purchase-price-query">
+      <el-form-item label="统计方式" class="query-method">
         <el-radio-group v-model="query.statisticMethod">
           <el-radio-button v-for="option in statisticMethodOptions" :key="option" :label="option" />
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item label="明细显示粒度">
+      <el-form-item label="明细显示粒度" class="query-detail">
         <el-radio-group v-model="query.detailGranularity">
           <el-radio v-for="option in detailGranularityOptions" :key="option" :label="option" />
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item label="日期">
+      <el-form-item label="日期" class="query-date">
         <el-date-picker
           v-model="query.dateRange"
           type="daterange"
@@ -318,24 +318,22 @@ onMounted(async () => {
           end-placeholder="结束日期"
           range-separator="至"
           value-format="YYYY-MM-DD"
-          style="width: 260px"
         />
       </el-form-item>
 
-      <el-form-item label="统计周期">
+      <el-form-item label="统计周期" class="query-period">
         <el-radio-group v-model="query.statisticPeriod">
           <el-radio v-for="option in statisticPeriodOptions" :key="option" :label="option" />
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item label="供应商">
+      <el-form-item label="供应商" class="query-supplier">
         <el-select
           v-model="query.supplier"
           :loading="supplierLoading"
           clearable
           filterable
           placeholder="请选择"
-          style="width: 190px"
         >
           <el-option
             v-for="option in supplierSelectOptions"
@@ -346,20 +344,19 @@ onMounted(async () => {
         </el-select>
       </el-form-item>
 
-      <el-form-item label="物品">
+      <el-form-item label="物品" class="query-item">
         <el-select
           v-model="query.itemCode"
           :loading="optionLoading"
           clearable
           filterable
           placeholder="请选择"
-          style="width: 220px"
         >
           <el-option v-for="option in itemOptions" :key="option.value" :label="option.label" :value="option.value" />
         </el-select>
       </el-form-item>
 
-      <el-form-item label="物品类别">
+      <el-form-item label="物品类别" class="query-category">
         <el-tree-select
           v-model="query.itemCategory"
           :data="itemCategoryTree"
@@ -370,17 +367,16 @@ onMounted(async () => {
           check-strictly
           default-expand-all
           placeholder="请选择"
-          style="width: 180px"
         />
       </el-form-item>
 
-      <el-form-item label="时间排序">
+      <el-form-item label="时间排序" class="query-sort">
         <el-radio-group v-model="query.timeSort">
           <el-radio v-for="option in timeSortOptions" :key="option" :label="option" />
         </el-radio-group>
       </el-form-item>
 
-      <el-form-item>
+      <el-form-item class="query-actions">
         <el-button type="primary" :loading="loading" @click="handleSearch">
           <el-icon><Search /></el-icon>
           查询
@@ -472,3 +468,108 @@ onMounted(async () => {
     </div>
   </section>
 </template>
+
+<style scoped>
+:deep(.purchase-price-query) {
+  display: grid;
+  grid-template-columns: 260px 300px minmax(340px, 1.1fr) 300px minmax(260px, 0.9fr);
+  gap: 10px 16px;
+  align-items: center;
+  padding: 10px 12px;
+}
+
+:deep(.purchase-price-query .el-form-item) {
+  min-width: 0;
+}
+
+:deep(.purchase-price-query .el-form-item__label) {
+  flex: 0 0 auto;
+  height: 28px;
+  line-height: 28px;
+  font-size: 12px;
+}
+
+:deep(.purchase-price-query .el-form-item__content) {
+  min-width: 0;
+  min-height: 28px;
+  line-height: 28px;
+}
+
+:deep(.purchase-price-query .el-radio-group) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+:deep(.purchase-price-query .el-radio) {
+  height: 28px;
+  margin-right: 0;
+}
+
+:deep(.purchase-price-query .el-radio-button__inner),
+:deep(.purchase-price-query .el-button) {
+  height: 28px;
+  padding: 0 14px;
+  line-height: 26px;
+}
+
+:deep(.purchase-price-query .el-input),
+:deep(.purchase-price-query .el-select),
+:deep(.purchase-price-query .el-date-editor) {
+  width: 100%;
+  --el-input-height: 28px;
+  font-size: 12px;
+}
+
+:deep(.purchase-price-query .query-method) {
+  grid-column: 1;
+}
+
+:deep(.purchase-price-query .query-detail) {
+  grid-column: 2;
+}
+
+:deep(.purchase-price-query .query-date) {
+  grid-column: 3;
+}
+
+:deep(.purchase-price-query .query-period) {
+  grid-column: 4;
+}
+
+:deep(.purchase-price-query .query-supplier) {
+  grid-column: 5;
+}
+
+:deep(.purchase-price-query .query-item) {
+  grid-column: 1 / span 2;
+}
+
+:deep(.purchase-price-query .query-category) {
+  grid-column: 3;
+}
+
+:deep(.purchase-price-query .query-sort) {
+  grid-column: 4;
+}
+
+:deep(.purchase-price-query .query-actions) {
+  grid-column: 5;
+}
+
+:deep(.purchase-price-query .query-actions .el-form-item__content) {
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+@media (max-width: 1280px) {
+  :deep(.purchase-price-query) {
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
+  }
+
+  :deep(.purchase-price-query .el-form-item) {
+    grid-column: auto;
+  }
+}
+</style>

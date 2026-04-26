@@ -104,7 +104,14 @@ onMounted(async () => {
                   <el-tag type="primary" effect="light">集团</el-tag>
                   <strong>{{ group.name }}</strong>
                 </div>
-                <el-button type="primary" size="small" @click.stop="chooseOrg(group.id)">选择</el-button>
+                <el-button
+                  v-if="group.selectable !== false"
+                  type="primary"
+                  size="small"
+                  @click.stop="chooseOrg(group.id)"
+                >
+                  选择
+                </el-button>
               </div>
               <div class="org-meta">集团号：{{ group.merchantNo }} 机构编码：{{ group.code }}</div>
             </div>

@@ -6,6 +6,7 @@ import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSessionStore } from '@/stores/session';
+import { fetchInventoryProfitLossReportApi } from '@/api/modules/inventory';
 import {
   fetchItemCategoryTreeApi,
   fetchItemsApi,
@@ -260,8 +261,27 @@ const loadOptions = async () => {
 const fetchReport = async () => {
   loading.value = true;
   try {
-    tableRows.value = [];
-    total.value = 0;
+    const orgId = archiveOrgId.value;
+    if (!orgId) {
+      tableRows.value = [];
+      total.value = 0;
+      return;
+    }
+    const page = await fetchInventoryProfitLossReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      warehouse: query.warehouse || undefined,
+      dateRangeStart: query.dateRange[0],
+      dateRangeEnd: query.dateRange[1],
+      itemCategory: query.itemCategory || undefined,
+      statisticsType: query.statisticsType || undefined,
+      itemKeyword: query.itemKeyword || undefined,
+      checkType: query.checkType || undefined,
+      profitLossResult: query.profitLossResult === '全部' ? undefined : query.profitLossResult,
+      unitType: query.unitType,
+    }, orgId);
+    tableRows.value = page.list ?? [];
+    total.value = Number(page.total ?? 0);
   } finally {
     loading.value = false;
   }

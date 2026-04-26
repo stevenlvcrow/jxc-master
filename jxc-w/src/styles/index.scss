@@ -664,6 +664,18 @@ a {
   width: 100%;
 }
 
+.unit-setting-tip {
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d8e4f8;
+  border-radius: 4px;
+  background: #f5f9ff;
+  color: #526173;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
 .supplier-relation-table {
   width: 100%;
 }
@@ -1006,12 +1018,15 @@ a {
 }
 
 .unit-base-tip {
-  white-space: normal;
-  word-break: break-all;
-  overflow-wrap: anywhere;
-  line-height: 1.35;
-  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 2px;
+  background: #edf3ff;
   color: #526173;
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .unit-convert-cell {
@@ -1376,7 +1391,8 @@ a {
 }
 
 .compact-filter-bar .el-input,
-.compact-filter-bar .el-select {
+.compact-filter-bar .el-select,
+.compact-filter-bar .el-date-editor {
   --el-input-height: 22px;
   font-size: 10px;
 }
@@ -1404,6 +1420,42 @@ a {
 
 .compact-filter-bar .el-select__caret,
 .compact-filter-bar .el-input__icon {
+  font-size: 10px;
+}
+
+.compact-filter-bar .el-radio-group {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  white-space: nowrap;
+}
+
+.compact-filter-bar .el-radio-button {
+  height: 22px;
+}
+
+.compact-filter-bar .el-radio-button__inner {
+  height: 22px;
+  min-height: 22px;
+  padding: 0 10px;
+  line-height: 20px;
+  font-size: 10px;
+}
+
+.compact-filter-bar .el-date-editor.el-input__wrapper,
+.compact-filter-bar .el-date-editor .el-input__wrapper {
+  min-height: 22px !important;
+  height: 22px !important;
+}
+
+.compact-filter-bar .el-range-editor.el-input__wrapper {
+  padding: 0 6px;
+}
+
+.compact-filter-bar .el-date-editor .el-range-input,
+.compact-filter-bar .el-date-editor .el-range-separator {
+  height: 20px;
+  line-height: 20px;
   font-size: 10px;
 }
 

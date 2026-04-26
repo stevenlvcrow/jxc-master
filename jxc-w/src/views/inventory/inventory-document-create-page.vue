@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import type { UploadFile, UploadUserFile } from 'element-plus';
+import { ElMessage, ElMessageBox, type UploadFile, type UploadUserFile } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import CommonFormSection from '@/components/CommonFormSection.vue';
 import CommonNumberInput from '@/components/CommonNumberInput.vue';
@@ -26,8 +25,8 @@ import { fetchStoreWarehousesApi, type WarehouseRow, type WarehouseType } from '
 import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 import { useSessionStore } from '@/stores/session';
 import type { InventoryDocumentMeta } from '@/views/inventory/document-meta';
-import { normalizeOrgId, parseStoreId } from '@/utils/org';
 import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 
 const props = defineProps<{
   meta: InventoryDocumentMeta;
@@ -42,6 +41,8 @@ type WarehouseOption = {
 
 type SalesmanOption = {
   userId: number;
+  realName: string;
+  phone: string;
   label: string;
 };
 
@@ -84,9 +85,16 @@ type DocumentItemRow = {
 const router = useRouter();
 const route = useRoute();
 const sessionStore = useSessionStore();
+const { orgId: currentOrgId, storeId } = useRequiredOrgScope();
+const ITEM_STATUS_DICT = 'item.status';
 const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
-const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT]);
+const { optionsOf } = useDictionaryOptions([ITEM_STATUS_DICT, INVENTORY_DOCUMENT_STATUS_DICT]);
+const itemStatusOptions = optionsOf(ITEM_STATUS_DICT, { enabled: true, label: '全部', value: '' });
 const inventoryDocumentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const normalizedItemStatusOptions = computed(() => itemStatusOptions.value.map((item) => ({
+  label: item.itemLabel,
+  value: item.itemCode,
+})));
 const submittedStatus = computed(() => (
   inventoryDocumentStatusOptions.value.find((item) => item.itemKey === 'SUBMITTED')?.itemCode ?? '已提交'
 ));
@@ -105,7 +113,7 @@ const warehouses = ref<WarehouseOption[]>([]);
 const salesmen = ref<SalesmanOption[]>([]);
 const itemSelectorVisible = ref(false);
 const itemSelectorKeyword = ref('');
-const itemSelectorStatus = ref('启用');
+const itemSelectorStatus = ref('');
 const activeItemTreeId = ref<string>('all');
 const itemSelectorCurrentPage = ref(1);
 const itemSelectorPageSize = ref(10);
@@ -173,12 +181,16 @@ const showUpstreamCode = computed(() => props.meta.showUpstreamCode === true);
 const usePurchaseInboundItemTableStyle = computed(() => props.meta.itemTableStyle === 'purchase-inbound');
 const usePurchaseReturnOutboundItemTableStyle = computed(() => props.meta.itemTableStyle === 'purchase-return-outbound');
 const isDepartmentPicking = computed(() => props.meta.type === 'department-picking');
+const isProductionInbound = computed(() => props.meta.type === 'production-inbound');
 const isPurchaseReturnOutbound = computed(() => props.meta.type === 'purchase-return-outbound');
+const itemCodeColumnLabel = computed(() => (isProductionInbound.value ? '加工品编码' : '物品编码'));
+const itemNameColumnLabel = computed(() => (isProductionInbound.value ? '加工品名称' : '物品名称'));
+const itemCategoryColumnLabel = computed(() => (isProductionInbound.value ? '加工品类别' : '物品类别'));
 const unitColumnLabel = computed(() => {
   if (usePurchaseReturnOutboundItemTableStyle.value) {
     return '采购单位';
   }
-  return (isWarehouseOpeningBalance.value || isDepartmentPicking.value) ? '库存单位' : '单位';
+  return (isWarehouseOpeningBalance.value || isDepartmentPicking.value || isProductionInbound.value) ? '库存单位' : '单位';
 });
 const availableQtyColumnLabel = computed(() => (
   usePurchaseReturnOutboundItemTableStyle.value || isDepartmentPicking.value ? '可出库量' : '可用数量'
@@ -190,15 +202,25 @@ const quantityColumnLabel = computed(() => {
   if (isDepartmentPicking.value) {
     return '领料数量';
   }
+  if (isProductionInbound.value) {
+    return '入库数量';
+  }
   return '数量';
 });
 const showUnitRateColumn = computed(() => isWarehouseOpeningBalance.value || isDepartmentPicking.value);
-const showReasonColumn = computed(() => !isWarehouseOpeningBalance.value && !usePurchaseReturnOutboundItemTableStyle.value && !isDepartmentPicking.value);
+const unitPriceColumnLabel = computed(() => (isProductionInbound.value ? '入库单价' : '单价'));
+const showReasonColumn = computed(() =>
+  !isWarehouseOpeningBalance.value
+    && !usePurchaseReturnOutboundItemTableStyle.value
+    && !isDepartmentPicking.value
+    && !isProductionInbound.value,
+);
 const showAttachment = computed(() => props.meta.showAttachment === true);
-const isWarehouseOpeningBalance = computed(() => props.meta.type === 'warehouse-opening-balance');
+const isWarehouseOpeningBalance = computed(() => false);
 const totalQuantity = computed(() => rows.value.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0));
 const totalAmount = computed(() => rows.value.reduce((sum, row) => sum + Number(row.amount ?? 0), 0));
 const totalBaseUnitQuantity = computed(() => rows.value.reduce((sum, row) => sum + Number(row.baseUnitQuantity ?? 0), 0));
+const warehouseOpeningBalanceViewVisible = computed(() => isWarehouseOpeningBalance.value && isViewMode.value);
 const itemTableHeight = computed(() => {
   const headerHeight = 20;
   const rowHeight = 20;
@@ -223,11 +245,14 @@ const form = reactive({
   attachmentName: '',
   attachmentFiles: [] as UploadUserFile[],
   extraFields: {} as Record<string, string>,
+  creator: '',
+  createdAt: '',
+  auditor: '',
+  auditedAt: '',
 });
 
 const rows = ref<DocumentItemRow[]>([]);
 
-const currentOrgId = computed(() => normalizeOrgId(sessionStore.currentOrgId));
 const presetWarehouseId = computed(() => {
   const raw = route.query.warehouseId;
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -298,6 +323,24 @@ const formatWarehouseOpeningBalanceUnitRateText = (row: DocumentItemRow) => {
   }
   return `1${row.unitName}=${formatUnitRateValue(row.unitRate)}${row.baseUnit}`;
 };
+
+const formatWarehouseOpeningBalanceDate = (value: string) => {
+  if (!value) {
+    return '';
+  }
+  return value.replace(/-/g, '/');
+};
+
+const formatWarehouseOpeningBalanceDateTime = (value: string) => {
+  if (!value) {
+    return '';
+  }
+  return value.replace(/^(\d{4})-(\d{2})-(\d{2})/, '$1/$2/$3');
+};
+
+const warehouseOpeningBalanceStatusText = computed(() => (
+  detailStatus.value === approvedStatus.value ? '已完成' : detailStatus.value
+));
 
 const getItemTableSummaries = ({ columns }: { columns: Array<{ property?: string; type?: string }> }) => {
   let summaryLabelFilled = false;
@@ -489,6 +532,14 @@ const resolveUnitRateFromOptions = (unitOptions: ItemUnitOption[], unitName: str
   unitOptions.find((option) => option.value === unitName)?.rate ?? null
 );
 
+const resetRowUnitMeta = (row: DocumentItemRow) => {
+  row.unitName = '';
+  row.unitOptions = [];
+  row.unitRate = null;
+  row.baseUnit = '';
+  row.baseUnitQuantity = null;
+};
+
 const updateWarehouseOpeningBalanceUnit = (row: DocumentItemRow, unitName: string) => {
   row.unitName = unitName;
   row.unitRate = resolveUnitRateFromOptions(row.unitOptions, unitName);
@@ -547,6 +598,7 @@ const applyItemToRow = async (row: DocumentItemRow, item: ItemCandidate) => {
   row.itemName = item.name;
   row.spec = item.spec;
   row.category = item.category;
+  resetRowUnitMeta(row);
   if (isWarehouseOpeningBalance.value || isDepartmentPicking.value) {
     const unitMeta = await resolveItemUnitMeta(item);
     row.baseUnit = unitMeta.baseUnit;
@@ -555,6 +607,15 @@ const applyItemToRow = async (row: DocumentItemRow, item: ItemCandidate) => {
     return;
   }
   row.unitName = item.stockUnit || '';
+};
+
+const handleQuantityValueUpdate = (row: DocumentItemRow, value: number | null) => {
+  row.quantity = value;
+  if (isWarehouseOpeningBalance.value || isDepartmentPicking.value) {
+    syncWarehouseOpeningBalanceQuantities(row);
+    return;
+  }
+  syncRowAmount(row);
 };
 
 const handleItemSelectorConfirm = async (selectedRows: Array<Record<string, unknown>>) => {
@@ -578,13 +639,12 @@ const handleItemSelectorConfirm = async (selectedRows: Array<Record<string, unkn
 };
 
 const loadWarehouses = async () => {
-  const storeId = parseStoreId(currentOrgId.value);
-  if (!storeId || (!props.meta.primaryField && !props.meta.secondaryField)) {
+  if (!storeId.value || (!props.meta.primaryField && !props.meta.secondaryField)) {
     warehouses.value = [];
     return;
   }
   try {
-    const result = await fetchStoreWarehousesApi(storeId, { status: 'ENABLED' });
+    const result = await fetchStoreWarehousesApi(storeId.value, { status: 'ENABLED' });
     warehouses.value = result.map((item: WarehouseRow) => ({
       id: item.id,
       name: item.warehouseName,
@@ -634,14 +694,29 @@ const loadSalesmen = async () => {
     return;
   }
   try {
-    const [salesmanResult] = await Promise.all([
+    const [salesmanResult, roleList] = await Promise.all([
       fetchStoreSalesmenApi(currentOrgId.value),
       fetchCurrentUserRolesApi(currentOrgId.value),
     ]);
-    salesmen.value = salesmanResult.map((item: SalesmanCandidateItem) => ({
-      userId: item.userId,
-      label: `${item.realName}${item.phone ? `（${item.phone}）` : ''}`,
-    }));
+    const isSalesman = roleList.some((role) => role.roleCode === 'SALESMAN');
+    const normalizedSalesmen = Array.from(new Map(
+      salesmanResult.map((item: SalesmanCandidateItem) => [item.userId, {
+        userId: item.userId,
+        realName: item.realName,
+        phone: item.phone,
+        label: `${item.realName}${item.phone ? `（${item.phone}）` : ''}`,
+      } satisfies SalesmanOption]),
+    ).values());
+    salesmen.value = isSalesman
+      ? normalizedSalesmen.filter((item) => item.phone === sessionStore.userPhone)
+      : normalizedSalesmen;
+    if (isCreateMode.value && !isReadonlyMode.value && form.salesmanUserId == null) {
+      const selfCandidate = salesmen.value.find((item) => item.phone && item.phone === sessionStore.userPhone);
+      if (selfCandidate) {
+        form.salesmanUserId = selfCandidate.userId;
+        form.salesmanName = selfCandidate.realName;
+      }
+    }
   } catch {
     salesmen.value = [];
     ElMessage.error('业务员列表加载失败');
@@ -693,6 +768,10 @@ const fillDetail = async () => {
     form.remark = '';
     form.attachmentName = '';
     form.attachmentFiles = [];
+    form.creator = '';
+    form.createdAt = '';
+    form.auditor = '';
+    form.auditedAt = '';
     initExtraFields();
     rows.value = [createEmptyRow()];
     return;
@@ -716,6 +795,10 @@ const fillDetail = async () => {
     form.attachmentFiles = form.attachmentName
       ? [{ name: form.attachmentName, url: detail.extraFields?.attachmentUrl || '' }]
       : [];
+    form.creator = detail.creator;
+    form.createdAt = detail.createdAt;
+    form.auditor = detail.auditor;
+    form.auditedAt = detail.auditedAt;
     initExtraFields();
     Object.entries(detail.extraFields ?? {}).forEach(([key, value]) => {
       form.extraFields[key] = value;
@@ -750,7 +833,7 @@ const fillDetail = async () => {
         remark: item.remark,
       };
     });
-    if (!rows.value.length) {
+    if (!rows.value.length && !warehouseOpeningBalanceViewVisible.value) {
       rows.value = [createEmptyRow()];
     }
   } catch {
@@ -959,7 +1042,7 @@ const handlePrimaryAction = () => {
 
 const updateSalesmanName = (userId?: number) => {
   const target = salesmen.value.find((item) => item.userId === userId);
-  form.salesmanName = target?.label.split('（')[0] ?? '';
+  form.salesmanName = target?.realName ?? '';
 };
 
 const reloadPageContext = async () => {
@@ -967,7 +1050,7 @@ const reloadPageContext = async () => {
   rows.value = [createEmptyRow()];
   itemSelectorVisible.value = false;
   itemSelectorKeyword.value = '';
-  itemSelectorStatus.value = '启用';
+  itemSelectorStatus.value = '';
   activeItemTreeId.value = 'all';
   itemSelectorCurrentPage.value = 1;
   itemSelectorPageSize.value = 10;
@@ -995,7 +1078,101 @@ onMounted(async () => {
 
 <template>
   <div class="item-create-page">
-    <section v-loading="loading" class="panel form-panel inventory-document-create-page">
+    <section
+      v-if="warehouseOpeningBalanceViewVisible"
+      v-loading="loading"
+      class="panel warehouse-opening-balance-view"
+    >
+      <div class="warehouse-opening-view-header">
+        <el-button text class="warehouse-opening-back" @click="handleCancel">
+          <span class="warehouse-opening-back-icon">&lt;</span>
+        </el-button>
+        <span class="warehouse-opening-title">查看</span>
+      </div>
+
+      <div class="warehouse-opening-info-grid">
+        <div class="warehouse-opening-info-item warehouse-opening-info-wide">
+          <span class="warehouse-opening-info-label">仓库：</span>
+          <span>{{ form.primaryName }}</span>
+        </div>
+        <div class="warehouse-opening-info-item">
+          <span class="warehouse-opening-info-label">期初设置状态：</span>
+          <span>{{ warehouseOpeningBalanceStatusText }}</span>
+        </div>
+        <div class="warehouse-opening-info-item">
+          <span class="warehouse-opening-info-label">期初日期：</span>
+          <span>{{ formatWarehouseOpeningBalanceDate(form.documentDate) }}</span>
+        </div>
+        <div class="warehouse-opening-info-item">
+          <span class="warehouse-opening-info-label">业务员：</span>
+          <span>{{ form.salesmanName }}</span>
+        </div>
+        <div class="warehouse-opening-info-item">
+          <span class="warehouse-opening-info-label">备注：</span>
+          <span>{{ form.remark }}</span>
+        </div>
+        <div class="warehouse-opening-info-item">
+          <span class="warehouse-opening-info-label">入库单号：</span>
+          <span class="warehouse-opening-code">{{ form.documentCode }}</span>
+        </div>
+        <div class="warehouse-opening-info-item">
+          <span class="warehouse-opening-info-label">创建人：</span>
+          <span>{{ form.creator }}</span>
+        </div>
+        <div class="warehouse-opening-info-item">
+          <span class="warehouse-opening-info-label">创建时间：</span>
+          <span>{{ formatWarehouseOpeningBalanceDateTime(form.createdAt) }}</span>
+        </div>
+        <div class="warehouse-opening-info-item">
+          <span class="warehouse-opening-info-label">审核人：</span>
+          <span>{{ form.auditor }}</span>
+        </div>
+        <div class="warehouse-opening-info-item">
+          <span class="warehouse-opening-info-label">审核时间：</span>
+          <span>{{ formatWarehouseOpeningBalanceDateTime(form.auditedAt) }}</span>
+        </div>
+      </div>
+
+      <el-table
+        :data="rows"
+        border
+        stripe
+        class="warehouse-opening-detail-table"
+        :fit="false"
+        show-summary
+        :summary-method="getItemTableSummaries"
+      >
+        <el-table-column type="index" label="序号" width="60" fixed="left" />
+        <el-table-column prop="itemCode" label="物品编码" min-width="130" />
+        <el-table-column prop="itemName" label="物品名称" min-width="140" />
+        <el-table-column prop="spec" label="规格型号" min-width="120" />
+        <el-table-column prop="unitName" label="库存单位" min-width="100" />
+        <el-table-column prop="unitRate" label="库存单位换算率" min-width="160">
+          <template #default="{ row }">
+            {{ formatWarehouseOpeningBalanceUnitRateText(row) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="quantity" label="入库数量" min-width="110">
+          <template #default="{ row }">
+            {{ row.quantity != null ? Number(row.quantity).toFixed(4) : '' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="amount" label="金额" min-width="110">
+          <template #default="{ row }">
+            {{ row.amount != null ? Number(row.amount).toFixed(2) : '' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="baseUnit" label="基准单位" min-width="100" />
+        <el-table-column prop="baseUnitQuantity" label="基准单位数量" min-width="130">
+          <template #default="{ row }">
+            {{ row.baseUnitQuantity != null ? Number(row.baseUnitQuantity).toFixed(4) : '' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="160" />
+      </el-table>
+    </section>
+
+    <section v-else v-loading="loading" class="panel form-panel inventory-document-create-page">
       <FixedActionBreadcrumb
         :navs="navs"
         :active-key="activeNav"
@@ -1145,7 +1322,29 @@ onMounted(async () => {
             </el-col>
             <el-col v-for="field in props.meta.extraFields ?? []" :key="field.key" :span="8">
               <el-form-item :label="field.label">
-                <el-input v-model="form.extraFields[field.key]" :disabled="isReadonlyMode" clearable />
+                <el-select
+                  v-if="field.kind === 'warehouse'"
+                  v-model="form.extraFields[field.key]"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  placeholder="请选择"
+                  style="width: 100%"
+                >
+                  <el-option v-for="item in getWarehouseOptions(field)" :key="item.id" :label="item.label" :value="item.name" />
+                </el-select>
+                <el-select
+                  v-else-if="field.kind === 'select'"
+                  v-model="form.extraFields[field.key]"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  :placeholder="`请选择${field.label}`"
+                  style="width: 100%"
+                >
+                  <el-option v-for="item in field.options ?? []" :key="item" :label="item" :value="item" />
+                </el-select>
+                <el-input v-else v-model="form.extraFields[field.key]" :disabled="isReadonlyMode" clearable />
               </el-form-item>
             </el-col>
             <el-col v-if="showUpstreamCode" :span="8">
@@ -1200,7 +1399,7 @@ onMounted(async () => {
               <el-button text :disabled="isReadonlyMode" @click="removeRow($index)">-</el-button>
             </template>
           </el-table-column>
-          <el-table-column prop="itemCode" label="物品编码" min-width="130">
+          <el-table-column prop="itemCode" :label="itemCodeColumnLabel" min-width="130">
             <template #default="{ row, $index }">
               <el-input
                 :model-value="row.itemCode"
@@ -1212,7 +1411,7 @@ onMounted(async () => {
               />
             </template>
           </el-table-column>
-          <el-table-column prop="itemName" label="物品名称" min-width="140">
+          <el-table-column prop="itemName" :label="itemNameColumnLabel" min-width="140">
             <template #default="{ row }">
               {{ row.itemName || '-' }}
             </template>
@@ -1222,7 +1421,7 @@ onMounted(async () => {
               {{ row.spec || '-' }}
             </template>
           </el-table-column>
-          <el-table-column v-if="!isWarehouseOpeningBalance" prop="category" label="物品类别" min-width="120">
+          <el-table-column v-if="!isWarehouseOpeningBalance" prop="category" :label="itemCategoryColumnLabel" min-width="120">
             <template #default="{ row }">
               {{ row.category || '-' }}
             </template>
@@ -1262,15 +1461,16 @@ onMounted(async () => {
           <el-table-column prop="quantity" :label="quantityColumnLabel" min-width="100">
             <template #default="{ row }">
               <CommonNumberInput
-                v-model="row.quantity"
+                :model-value="row.quantity"
                 :disabled="isReadonlyMode"
                 :precision="4"
                 :min="0"
-                @change="(isWarehouseOpeningBalance || isDepartmentPicking) ? syncWarehouseOpeningBalanceQuantities(row) : syncRowAmount(row)"
+                @update:model-value="handleQuantityValueUpdate(row, $event)"
+                @change="handleQuantityValueUpdate(row, $event)"
               />
             </template>
           </el-table-column>
-          <el-table-column v-if="!isWarehouseOpeningBalance" prop="unitPrice" label="单价" min-width="100">
+          <el-table-column v-if="!isWarehouseOpeningBalance" prop="unitPrice" :label="unitPriceColumnLabel" min-width="100">
             <template #default="{ row }">
               <CommonNumberInput v-model="row.unitPrice" :disabled="isReadonlyMode" :precision="4" :min="0" @change="syncRowAmount(row)" />
             </template>
@@ -1334,11 +1534,7 @@ onMounted(async () => {
       keyword-label="物品"
       keyword-placeholder="支持按物品编码和名称查询..."
       status-label="启用状态"
-      :status-options="[
-        { label: '全部', value: '' },
-        { label: '启用', value: '启用' },
-        { label: '停用', value: '停用' },
-      ]"
+      :status-options="normalizedItemStatusOptions"
       :total="itemSelectorTotal"
       :current-page="itemSelectorCurrentPage"
       :page-size="itemSelectorPageSize"
@@ -1358,6 +1554,85 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.warehouse-opening-balance-view {
+  min-height: calc(100vh - 96px);
+  padding: 0;
+  background: #fff;
+}
+
+.warehouse-opening-view-header {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 16px;
+  border-bottom: 1px solid #ebeef5;
+  color: #303133;
+}
+
+.warehouse-opening-back {
+  width: 28px;
+  height: 28px;
+  margin-right: 4px;
+  padding: 0;
+  color: #606266;
+}
+
+.warehouse-opening-back-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.warehouse-opening-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.warehouse-opening-info-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr 1fr;
+  row-gap: 14px;
+  column-gap: 24px;
+  padding: 18px 18px 16px;
+  font-size: 13px;
+  color: #303133;
+}
+
+.warehouse-opening-info-wide {
+  grid-column: span 2;
+}
+
+.warehouse-opening-info-item {
+  display: flex;
+  min-width: 0;
+  line-height: 20px;
+}
+
+.warehouse-opening-info-label {
+  flex: 0 0 auto;
+  color: #606266;
+}
+
+.warehouse-opening-code {
+  color: #f56c6c;
+}
+
+.warehouse-opening-detail-table {
+  width: calc(100% - 36px);
+  margin: 0 18px 18px;
+}
+
+:deep(.warehouse-opening-detail-table .el-table__header-wrapper th.el-table__cell),
+:deep(.warehouse-opening-detail-table .el-table__body-wrapper td.el-table__cell),
+:deep(.warehouse-opening-detail-table .el-table__footer-wrapper td.el-table__cell) {
+  height: 32px;
+  padding: 0;
+}
+
+:deep(.warehouse-opening-detail-table .cell) {
+  font-size: 12px;
+  line-height: 32px;
 }
 
 .purchase-inbound-summary-row {

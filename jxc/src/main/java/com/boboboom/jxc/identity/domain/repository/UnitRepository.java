@@ -1,9 +1,10 @@
 package com.boboboom.jxc.identity.domain.repository;
 
-import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
-
 import java.util.List;
 
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UnitDO;
+
+/** 身份与权限仓储接口，定义领域需要的数据访问能力。 */
 public interface UnitRepository {
 
     List<UnitDO> findByScope(String scopeType, Long scopeId);

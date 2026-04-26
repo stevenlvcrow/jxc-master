@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import type { UploadFile } from 'element-plus';
-import type { ComponentPublicInstance } from 'vue';
-import { ElMessage } from 'element-plus';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { ElMessage, type UploadFile } from 'element-plus';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, type ComponentPublicInstance } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSessionStore } from '@/stores/session';
 import {
@@ -12,7 +10,17 @@ import {
   type ItemCreatePayload,
   updateItemApi,
 } from '@/api/modules/item';
+import {
+  fetchSupplierCategoryTreeApi,
+  fetchSuppliersApi,
+  type SupplierCategoryTreeNode,
+  type SupplierListRow,
+} from '@/api/modules/supplier';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
+import CommonSelectorDialog, {
+  type SelectorColumn,
+  type SelectorTreeNode,
+} from '@/components/CommonSelectorDialog.vue';
 import CommonNumberInput from '@/components/CommonNumberInput.vue';
 import CommonMnemonicField from '@/components/CommonMnemonicField.vue';
 import { requireItemOrgId } from './org';
@@ -122,6 +130,15 @@ type SupplierRelationRow = {
   contact: string;
   phone: string;
 };
+type SupplierCandidate = {
+  id: number;
+  supplierCode: string;
+  supplierName: string;
+  supplierCategory: string;
+  contactPerson: string;
+  contactPhone: string;
+  status: string;
+};
 type IntroImageItem = {
   id: number;
   name: string;
@@ -181,6 +198,18 @@ const defaultSupplierRowKey = ref(1);
 const supplierRelationRows = ref<SupplierRelationRow[]>([
   { key: 1, supplier: '', contact: '', phone: '' },
 ]);
+const supplierSelectorVisible = ref(false);
+const supplierSelectorKeyword = ref('');
+const supplierSelectorStatus = ref('');
+const supplierSelectorCurrentPage = ref(1);
+const supplierSelectorPageSize = ref(10);
+const supplierSelectorLoading = ref(false);
+const supplierSelectorTotal = ref(0);
+const activeSupplierTreeId = ref<string>('all');
+const selectingSupplierRowIndex = ref<number | null>(null);
+const selectedSupplierCandidates = ref<Array<Record<string, unknown>>>([]);
+const supplierTreeData = ref<SelectorTreeNode[]>([]);
+const supplierCandidateSource = ref<SupplierCandidate[]>([]);
 const introImages = ref<IntroImageItem[]>([]);
 const introImageSeed = ref(1);
 const nutritionSeed = ref(3);
@@ -224,6 +253,14 @@ const businessSwitchFields: BusinessSwitchField[] = [
   { key: 'allowLossReport', label: '是否可报损' },
   { key: 'allowTransfer', label: '是否可调拨' },
   { key: 'enablePrepare', label: '是否制备' },
+];
+const supplierTableColumns: SelectorColumn[] = [
+  { prop: 'supplierCode', label: '供应商编码', minWidth: 130 },
+  { prop: 'supplierName', label: '供应商名称', minWidth: 150 },
+  { prop: 'supplierCategory', label: '供应商分类', minWidth: 140 },
+  { prop: 'contactPerson', label: '联系人', minWidth: 110 },
+  { prop: 'contactPhone', label: '联系电话', minWidth: 130 },
+  { prop: 'status', label: '状态', minWidth: 90 },
 ];
 const sectionRefs = ref<Record<string, HTMLElement | null>>({});
 const activeSectionKey = ref('basic');
@@ -299,6 +336,98 @@ const removeSupplierRelationRow = (index: number) => {
   if (removedRow && removedRow.key === defaultSupplierRowKey.value) {
     defaultSupplierRowKey.value = supplierRelationRows.value[0]?.key ?? 0;
   }
+};
+
+const normalizeSupplierTreeNodes = (nodes: SupplierCategoryTreeNode[]): SelectorTreeNode[] => nodes.map((node) => ({
+  id: String(node.id ?? 'all'),
+  label: String(node.label ?? ''),
+  children: Array.isArray(node.children) ? normalizeSupplierTreeNodes(node.children) : undefined,
+}));
+
+const mapSupplierCandidate = (row: SupplierListRow): SupplierCandidate => ({
+  id: row.id,
+  supplierCode: row.supplierCode,
+  supplierName: row.supplierName,
+  supplierCategory: row.supplierCategory,
+  contactPerson: row.contactPerson ?? '',
+  contactPhone: row.contactPhone ?? '',
+  status: row.status,
+});
+
+const loadSupplierTree = async () => {
+  const tree = await fetchSupplierCategoryTreeApi(resolveItemOrgId());
+  if (!Array.isArray(tree) || !tree.length) {
+    supplierTreeData.value = [{ id: 'all', label: '全部' }];
+    return;
+  }
+  supplierTreeData.value = [{ id: 'all', label: '全部', children: normalizeSupplierTreeNodes(tree) }];
+};
+
+const loadSupplierCandidates = async () => {
+  supplierSelectorLoading.value = true;
+  try {
+    const page = await fetchSuppliersApi({
+      pageNo: supplierSelectorCurrentPage.value,
+      pageSize: supplierSelectorPageSize.value,
+      supplierInfo: supplierSelectorKeyword.value.trim() || undefined,
+      status: (supplierSelectorStatus.value || undefined) as '启用' | '停用' | undefined,
+      treeNode: activeSupplierTreeId.value === 'all' ? undefined : activeSupplierTreeId.value,
+    }, resolveItemOrgId());
+    supplierCandidateSource.value = (page.list ?? []).map(mapSupplierCandidate);
+    supplierSelectorTotal.value = Number(page.total ?? 0);
+  } finally {
+    supplierSelectorLoading.value = false;
+  }
+};
+
+const openSupplierSelector = async (index: number) => {
+  selectingSupplierRowIndex.value = index;
+  selectedSupplierCandidates.value = [];
+  if (!supplierTreeData.value.length) {
+    await loadSupplierTree();
+  }
+  await loadSupplierCandidates();
+  supplierSelectorVisible.value = true;
+};
+
+const handleSupplierSelectorSearch = (payload: { keyword: string; status: string }) => {
+  supplierSelectorKeyword.value = payload.keyword;
+  supplierSelectorStatus.value = payload.status;
+  supplierSelectorCurrentPage.value = 1;
+  loadSupplierCandidates();
+};
+
+const handleSupplierNodeChange = (node: SelectorTreeNode | null) => {
+  activeSupplierTreeId.value = String(node?.id ?? 'all');
+  supplierSelectorCurrentPage.value = 1;
+  loadSupplierCandidates();
+};
+
+const handleSupplierSelectionChange = (rows: Array<Record<string, unknown>>) => {
+  selectedSupplierCandidates.value = rows;
+};
+
+const handleSupplierClear = () => {
+  selectedSupplierCandidates.value = [];
+};
+
+const handleSupplierSelectorConfirm = (rows: Array<Record<string, unknown>>) => {
+  const picked = rows as SupplierCandidate[];
+  if (!picked.length) {
+    ElMessage.warning('请至少选择一个供应商');
+    return;
+  }
+  const targetIndex = selectingSupplierRowIndex.value ?? 0;
+  const targetRow = supplierRelationRows.value[targetIndex];
+  if (!targetRow) {
+    ElMessage.warning('未找到目标行，请重试');
+    return;
+  }
+  const supplier = picked[0];
+  targetRow.supplier = supplier.supplierName;
+  targetRow.contact = supplier.contactPerson;
+  targetRow.phone = supplier.contactPhone;
+  supplierSelectorVisible.value = false;
 };
 
 const readFileAsDataUrl = (file: File) => (
@@ -563,6 +692,15 @@ watch(stocktakeUnitOptions, (options) => {
   form.defaultCostUnit = normalizeSingle(form.defaultCostUnit);
 }, { immediate: true });
 
+watch(() => sessionStore.currentOrgId, () => {
+  supplierTreeData.value = [];
+  supplierCandidateSource.value = [];
+  supplierSelectorTotal.value = 0;
+  activeSupplierTreeId.value = 'all';
+  supplierSelectorCurrentPage.value = 1;
+  selectedSupplierCandidates.value = [];
+});
+
 onMounted(() => {
   contentScrollEl.value = document.querySelector('.content');
   contentScrollEl.value?.addEventListener('scroll', updateActiveSectionByScroll, { passive: true });
@@ -619,6 +757,7 @@ const applyDetailPayload = (payload: ItemCreatePayload) => {
       phone: row.phone ?? '',
     }))
     : [{ key: 1, supplier: '', contact: '', phone: '' }];
+  supplierRowSeed.value = Math.max(...supplierRelationRows.value.map((row) => row.key), 0) + 1;
 
   defaultSupplierRowKey.value = payload.defaultSupplierRowKey ?? supplierRelationRows.value[0]?.key ?? 1;
 
@@ -830,6 +969,9 @@ const loadDetailIfEditMode = async () => {
           <div class="form-section-title">单位价格</div>
           <div class="item-form-grid">
             <el-form-item label="单位设置" class="unit-setting-form-item">
+              <div class="unit-setting-tip">
+                {{ unitSettingTip }}
+              </div>
               <el-table :data="unitSettingRows" border stripe class="unit-setting-table">
                 <el-table-column label="序号" width="46">
                   <template #default="{ $index }">
@@ -878,8 +1020,8 @@ const loadDetailIfEditMode = async () => {
                 </el-table-column>
                 <el-table-column label="单位换算" width="320">
                   <template #default="{ row, $index }">
-                    <div v-if="$index === 0" class="unit-base-tip" :title="unitSettingTip">
-                      {{ unitSettingTip }}
+                    <div v-if="$index === 0" class="unit-base-tip">
+                      基准单位无需换算
                     </div>
                     <div v-else class="unit-convert-cell">
                       <span class="unit-convert-group">
@@ -1039,8 +1181,17 @@ const loadDetailIfEditMode = async () => {
                   </template>
                 </el-table-column>
                 <el-table-column label="供应商" min-width="160">
-                  <template #default="{ row }">
-                    <el-input v-model="row.supplier" placeholder="请输入供应商" />
+                  <template #default="{ row, $index }">
+                    <el-input
+                      :model-value="row.supplier"
+                      placeholder="请选择供应商"
+                      readonly
+                      @click="openSupplierSelector($index)"
+                    >
+                      <template #append>
+                        <el-button @click="openSupplierSelector($index)">选择</el-button>
+                      </template>
+                    </el-input>
                   </template>
                 </el-table-column>
                 <el-table-column label="联系人" min-width="120">
@@ -1352,5 +1503,37 @@ const loadDetailIfEditMode = async () => {
         <el-button type="primary" @click="confirmCropImage">确认裁剪</el-button>
       </template>
     </el-dialog>
+
+    <CommonSelectorDialog
+      v-model="supplierSelectorVisible"
+      title="选择供应商"
+      :tree-data="supplierTreeData"
+      :table-data="supplierCandidateSource"
+      :loading="supplierSelectorLoading"
+      :columns="supplierTableColumns"
+      row-key="id"
+      selected-label-key="supplierName"
+      :selected-rows="selectedSupplierCandidates"
+      :keyword-value="supplierSelectorKeyword"
+      :status-value="supplierSelectorStatus"
+      keyword-label="供应商"
+      keyword-placeholder="支持按供应商名称和编码查询..."
+      status-label="启用状态"
+      :status-options="[
+        { label: '全部', value: '' },
+        { label: '启用', value: '启用' },
+        { label: '停用', value: '停用' },
+      ]"
+      :total="supplierSelectorTotal"
+      :current-page="supplierSelectorCurrentPage"
+      :page-size="supplierSelectorPageSize"
+      @search="handleSupplierSelectorSearch"
+      @node-change="handleSupplierNodeChange"
+      @selection-change="handleSupplierSelectionChange"
+      @clear-selection="handleSupplierClear"
+      @page-change="(p) => { supplierSelectorCurrentPage = p; loadSupplierCandidates(); }"
+      @page-size-change="(s) => { supplierSelectorPageSize = s; supplierSelectorCurrentPage = 1; loadSupplierCandidates(); }"
+      @confirm="handleSupplierSelectorConfirm"
+    />
   </div>
 </template>

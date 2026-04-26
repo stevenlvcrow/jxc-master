@@ -25,10 +25,13 @@ import {
   fetchWorkflowApprovalNotificationsApi,
   fetchWorkflowPendingNotificationCountApi,
   type WorkflowApprovalNotificationItem,
+  type WorkflowApprovalNotificationTab,
+  type WorkflowApprovalNotificationTabKey,
 } from '@/api/modules/workflow';
 import { useAppStore } from '@/stores/app';
 import { useMenuStore } from '@/stores/menu';
 import { useSessionStore, type OrgNode } from '@/stores/session';
+import { syncRuntimeMenuRoutes } from '@/router';
 
 const route = useRoute();
 const router = useRouter();
@@ -85,7 +88,10 @@ const fallbackHomePath = computed(() => {
 });
 
 const activeMenu = computed(() => String(route.meta.activeMenu ?? route.path));
-const openMenus = computed(() => (route.meta.openKeys as string[] | undefined) ?? []);
+const openMenus = computed(() => {
+  const firstRootMenu = menuItems.value.find((item) => item.children?.length);
+  return firstRootMenu ? [firstRootMenu.key] : [];
+});
 const activeTab = computed(() => route.path);
 const orgDialogVisible = ref(false);
 const workflowNoticeDialogVisible = ref(false);
@@ -107,6 +113,8 @@ const workflowNoticePageSize = ref(8);
 const workflowNoticeTotal = ref(0);
 const workflowNoticeBadgeCount = ref(0);
 const workflowNoticeRows = ref<WorkflowApprovalNotificationItem[]>([]);
+const workflowNoticeTabs = ref<WorkflowApprovalNotificationTab[]>([]);
+const workflowNoticeActiveTab = ref<WorkflowApprovalNotificationTabKey | ''>('');
 const currentUserRoles = ref<CurrentUserRole[]>([]);
 
 const cityOptions = computed(() => Array.from(new Set(sessionStore.flatOrgs.map((item) => item.city))));
@@ -194,7 +202,11 @@ const handleSelect = (path: string) => {
   if (!normalizedPath.startsWith('/')) {
     return;
   }
-  const resolved = router.resolve(normalizedPath);
+  let resolved = router.resolve(normalizedPath);
+  if (!resolved.matched.length && menuStore.menuItems.length) {
+    syncRuntimeMenuRoutes(menuStore.menuItems);
+    resolved = router.resolve(normalizedPath);
+  }
   if (!resolved.matched.length) {
     ElMessage.info('该菜单页面尚未配置路由');
     return;
@@ -400,9 +412,12 @@ const loadWorkflowNotifications = async (pageNum = workflowNoticePageNum.value) 
   try {
     const result = await fetchWorkflowApprovalNotificationsApi({
       orgId,
+      tab: workflowNoticeActiveTab.value,
       pageNum,
       pageSize: workflowNoticePageSize.value,
     });
+    workflowNoticeTabs.value = result.tabs ?? [];
+    workflowNoticeActiveTab.value = result.activeTab || workflowNoticeTabs.value[0]?.key || '';
     workflowNoticeRows.value = result.list ?? [];
     workflowNoticeTotal.value = Number(result.total ?? 0);
     workflowNoticePageNum.value = result.pageNum ?? pageNum;
@@ -410,6 +425,11 @@ const loadWorkflowNotifications = async (pageNum = workflowNoticePageNum.value) 
   } finally {
     workflowNoticeLoading.value = false;
   }
+};
+
+const handleWorkflowNoticeTabChange = async () => {
+  workflowNoticePageNum.value = 1;
+  await loadWorkflowNotifications(1);
 };
 
 const loadWorkflowNoticeBadgeCount = async () => {
@@ -444,9 +464,6 @@ const resolveWorkflowNoticeRoute = (row: WorkflowApprovalNotificationItem) => {
   if (row.routePath) {
     return row.routePath;
   }
-  if (row.businessCode === 'PURCHASE_INBOUND') {
-    return `/inventory/purchase-inbounds/view/${row.businessId}`;
-  }
   return '';
 };
 
@@ -460,7 +477,7 @@ const handleWorkflowNoticeRowClick = (row: WorkflowApprovalNotificationItem) => 
   const resolved = router.resolve(targetPath);
   router.push({
     path: resolved.path,
-    query: row.result === '待审核'
+    query: workflowNoticeActiveTab.value === 'PENDING_REVIEW'
       ? { ...resolved.query, approvalMode: '1' }
       : resolved.query,
   });
@@ -572,6 +589,7 @@ watch(
     }
     try {
       await menuStore.loadMenus(targetOrgId || undefined);
+      syncRuntimeMenuRoutes(menuStore.menuItems);
       const allowedPaths = new Set(flattenMenuPaths(menuStore.menuItems));
       if (route.path !== '/select-org' && route.path !== '/login' && route.path !== '/profile' && !allowedPaths.has(route.path)) {
         if (sessionStore.requiresOrgSelection && !sessionStore.hasSelectedOrg) {
@@ -878,8 +896,21 @@ onBeforeUnmount(() => {
     width="1120px"
     class="workflow-notice-dialog"
     append-to-body
-  >
+    >
     <div class="workflow-notice-content">
+      <el-tabs
+        v-if="workflowNoticeTabs.length"
+        v-model="workflowNoticeActiveTab"
+        class="workflow-notice-tabs"
+        @tab-change="handleWorkflowNoticeTabChange"
+      >
+        <el-tab-pane
+          v-for="tab in workflowNoticeTabs"
+          :key="tab.key"
+          :name="tab.key"
+          :label="tab.label"
+        />
+      </el-tabs>
       <el-table
         :data="workflowNoticeRows"
         border
@@ -1064,6 +1095,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.workflow-notice-tabs {
+  margin-bottom: -8px;
 }
 
 .workflow-notice-table :deep(.workflow-notice-row) {

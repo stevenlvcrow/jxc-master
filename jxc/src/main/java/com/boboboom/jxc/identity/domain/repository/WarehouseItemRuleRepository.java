@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+/** 身份与权限仓储接口，定义领域需要的数据访问能力。 */
 public interface WarehouseItemRuleRepository {
 
     List<RuleSummary> findRuleSummariesByGroupId(Long groupId);
@@ -23,6 +24,9 @@ public interface WarehouseItemRuleRepository {
 
     List<String> findAllRuleCodes();
 
+    /**
+     * 仓库规则摘要。
+     */
     record RuleSummary(Long id,
                        String ruleCode,
                        String ruleName,
@@ -34,6 +38,9 @@ public interface WarehouseItemRuleRepository {
                        LocalDateTime updatedAt) {
     }
 
+    /**
+     * 仓库规则主记录。
+     */
     record RuleRecord(Long id,
                       Long groupId,
                       String ruleCode,
@@ -49,12 +56,18 @@ public interface WarehouseItemRuleRepository {
                       LocalDateTime updatedAt) {
     }
 
+    /**
+     * 仓库规则详情。
+     */
     record RuleDetailData(RuleRecord rule,
                           List<RuleItemData> items,
                           List<RuleCategoryData> categories,
                           List<RuleWarehouseData> warehouses) {
     }
 
+    /**
+     * 规则物品范围。
+     */
     record RuleItemData(Long id,
                         String itemCode,
                         String itemName,
@@ -62,6 +75,9 @@ public interface WarehouseItemRuleRepository {
                         String itemCategory) {
     }
 
+    /**
+     * 规则类别范围。
+     */
     record RuleCategoryData(Long id,
                             String categoryCode,
                             String categoryName,
@@ -69,6 +85,9 @@ public interface WarehouseItemRuleRepository {
                             String childCategory) {
     }
 
+    /**
+     * 规则仓库范围。
+     */
     record RuleWarehouseData(Long id,
                              Long warehouseId,
                              String warehouseName) {

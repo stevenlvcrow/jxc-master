@@ -2,6 +2,7 @@ package com.boboboom.jxc.identity.application.dto;
 
 import java.util.List;
 
+/** 身份与权限响应模型，承载接口返回数据。 */
 public class LoginResponse {
 
     private String token;
@@ -11,51 +12,63 @@ public class LoginResponse {
     private Boolean firstLoginChangedPwd;
     private List<ScopeOptionDTO> scopes;
 
+    /** 获取Token。 */
     public String getToken() {
         return token;
     }
 
-    public void setToken(String token) {
-        this.token = token;
+    /** 设置Token。 */
+    public void setToken(String tokenValue) {
+        this.token = tokenValue;
     }
 
+    /** 获取UserId。 */
     public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(Long userId) {
-        this.userId = userId;
+    /** 设置UserId。 */
+    public void setUserId(Long userIdValue) {
+        this.userId = userIdValue;
     }
 
+    /** 获取Phone。 */
     public String getPhone() {
         return phone;
     }
 
-    public void setPhone(String phone) {
-        this.phone = phone;
+    /** 设置Phone。 */
+    public void setPhone(String phoneValue) {
+        this.phone = phoneValue;
     }
 
+    /** 获取RealName。 */
     public String getRealName() {
         return realName;
     }
 
-    public void setRealName(String realName) {
-        this.realName = realName;
+    /** 设置RealName。 */
+    public void setRealName(String realNameValue) {
+        this.realName = realNameValue;
     }
 
+    /** 获取FirstLoginChangedPwd。 */
     public Boolean getFirstLoginChangedPwd() {
         return firstLoginChangedPwd;
     }
 
-    public void setFirstLoginChangedPwd(Boolean firstLoginChangedPwd) {
-        this.firstLoginChangedPwd = firstLoginChangedPwd;
+    /** 设置FirstLoginChangedPwd。 */
+    public void setFirstLoginChangedPwd(Boolean firstLoginChangedPwdValue) {
+        this.firstLoginChangedPwd = firstLoginChangedPwdValue;
     }
 
+    /** 获取Scopes。 */
     public List<ScopeOptionDTO> getScopes() {
         return scopes;
     }
 
-    public void setScopes(List<ScopeOptionDTO> scopes) {
-        this.scopes = scopes;
+    /** 设置Scopes。 */
+    public void setScopes(List<ScopeOptionDTO> scopesValue) {
+        this.scopes = scopesValue;
     }
 }

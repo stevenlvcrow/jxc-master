@@ -2,7 +2,8 @@ package com.boboboom.jxc.identity.infrastructure.persistence.dataobject;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 
-@TableName("dev.sys_user_password_log")
+/** 身份与权限数据对象，映射数据库表记录。 */
+@TableName("sys_user_password_log")
 public class UserPasswordLogDO extends BaseCreateDO {
 
     private Long userId;
@@ -11,44 +12,54 @@ public class UserPasswordLogDO extends BaseCreateDO {
     private String passwordHash;
     private String remark;
 
+    /** 获取UserId。 */
     public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(Long userId) {
-        this.userId = userId;
+    /** 设置UserId。 */
+    public void setUserId(Long userIdValue) {
+        this.userId = userIdValue;
     }
 
+    /** 获取OperationType。 */
     public String getOperationType() {
         return operationType;
     }
 
-    public void setOperationType(String operationType) {
-        this.operationType = operationType;
+    /** 设置OperationType。 */
+    public void setOperationType(String operationTypeValue) {
+        this.operationType = operationTypeValue;
     }
 
+    /** 获取OperatorUserId。 */
     public Long getOperatorUserId() {
         return operatorUserId;
     }
 
-    public void setOperatorUserId(Long operatorUserId) {
-        this.operatorUserId = operatorUserId;
+    /** 设置OperatorUserId。 */
+    public void setOperatorUserId(Long operatorUserIdValue) {
+        this.operatorUserId = operatorUserIdValue;
     }
 
+    /** 获取PasswordHash。 */
     public String getPasswordHash() {
         return passwordHash;
     }
 
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
+    /** 设置PasswordHash。 */
+    public void setPasswordHash(String passwordHashValue) {
+        this.passwordHash = passwordHashValue;
     }
 
+    /** 获取Remark。 */
     public String getRemark() {
         return remark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    /** 设置Remark。 */
+    public void setRemark(String remarkValue) {
+        this.remark = remarkValue;
     }
 }
 

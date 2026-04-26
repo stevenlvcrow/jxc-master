@@ -1,5 +1,18 @@
 package com.boboboom.jxc.item.application.service;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
 import com.boboboom.jxc.common.BusinessCodeGenerator;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.dictionary.DictionaryCodes;
@@ -11,21 +24,13 @@ import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemTagDO;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemTagBatchImportRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemTagCreateRequest;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemTagUpdateRequest;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.Set;
-
+/** 物品标签业务服务，负责标签分页、创建、编辑和导入。 */
 @Service
 public class ItemTagApplicationService {
+
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 200;
 
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
     private static final String TAG_CODE_PREFIX = "BQBM";
@@ -35,16 +40,18 @@ public class ItemTagApplicationService {
     private final BusinessCodeGenerator businessCodeGenerator;
     private final DictionaryLookupService dictionaryLookupService;
 
-    public ItemTagApplicationService(ItemTagRepository itemTagRepository,
-                                     OrgScopeService orgScopeService,
-                                     BusinessCodeGenerator businessCodeGenerator,
-                                     DictionaryLookupService dictionaryLookupService) {
-        this.itemTagRepository = itemTagRepository;
-        this.orgScopeService = orgScopeService;
-        this.businessCodeGenerator = businessCodeGenerator;
-        this.dictionaryLookupService = dictionaryLookupService;
+    /** 物品标签业务服务，负责标签分页、创建、编辑和导入。 */
+    public ItemTagApplicationService(ItemTagRepository itemTagRepositoryValue,
+                                     OrgScopeService orgScopeServiceValue,
+                                     BusinessCodeGenerator businessCodeGeneratorValue,
+                                     DictionaryLookupService dictionaryLookupServiceValue) {
+        this.itemTagRepository = itemTagRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.businessCodeGenerator = businessCodeGeneratorValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
     }
 
+    /** 分页查询业务列表。 */
     public PageData<ItemTagRow> list(Integer pageNo,
                                      Integer pageSize,
                                      String tagCode,
@@ -53,7 +60,7 @@ public class ItemTagApplicationService {
                                      String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
-        int safePageSize = pageSize == null || pageSize < 1 ? 10 : Math.min(pageSize, 200);
+        int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
         int offset = (safePageNo - 1) * safePageSize;
 
         List<ItemTagDO> allRows = itemTagRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId());
@@ -81,6 +88,7 @@ public class ItemTagApplicationService {
         return new PageData<>(list, total == null ? 0 : total, safePageNo, safePageSize);
     }
 
+    /** 创建业务记录。 */
     @Transactional
     public IdPayload create(String orgId,
                             ItemTagCreateRequest request) {
@@ -103,6 +111,7 @@ public class ItemTagApplicationService {
         return new IdPayload(row.getId());
     }
 
+    /** 更新业务记录。 */
     @Transactional
     public void update(Long id,
                        String orgId,
@@ -121,6 +130,7 @@ public class ItemTagApplicationService {
         itemTagRepository.update(existing);
     }
 
+    /** 删除业务记录。 */
     @Transactional
     public void delete(Long id,
                        String orgId) {
@@ -129,6 +139,7 @@ public class ItemTagApplicationService {
         itemTagRepository.deleteById(id);
     }
 
+    /** 批量导入业务数据。 */
     @Transactional
     public BatchImportResult batchImport(String orgId,
                                          ItemTagBatchImportRequest request) {
@@ -260,12 +271,14 @@ public class ItemTagApplicationService {
         return businessCodeGenerator.allocator(TAG_CODE_PREFIX, existingCodes);
     }
 
+    /** 物品与供应商分页数据模型，承载列表数据和分页信息。 */
     public record PageData<T>(List<T> list,
                               long total,
                               int pageNo,
                               int pageSize) {
     }
 
+    /** 物品与供应商行数据模型，承载列表或报表明细。 */
     public record ItemTagRow(Long id,
                              int index,
                              String tagCode,
@@ -275,9 +288,11 @@ public class ItemTagApplicationService {
                              String updatedAt) {
     }
 
+    /** 物品与供应商载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id) {
     }
 
+    /** 物品与供应商结果模型，承载业务处理结果。 */
     public record BatchImportResult(int totalCount,
                                     int insertedCount,
                                     int skippedCount) {

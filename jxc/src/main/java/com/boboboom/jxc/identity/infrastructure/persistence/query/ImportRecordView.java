@@ -2,6 +2,7 @@ package com.boboboom.jxc.identity.infrastructure.persistence.query;
 
 import java.time.LocalDateTime;
 
+/** 身份与权限视图模型，承载页面展示数据。 */
 public class ImportRecordView {
 
     private Long id;
@@ -16,92 +17,114 @@ public class ImportRecordView {
     private String linkedUserStatus;
     private LocalDateTime createdAt;
 
+    /** 获取Id。 */
     public Long getId() {
         return id;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    /** 设置Id。 */
+    public void setId(Long idValue) {
+        this.id = idValue;
     }
 
+    /** 获取BatchId。 */
     public Long getBatchId() {
         return batchId;
     }
 
-    public void setBatchId(Long batchId) {
-        this.batchId = batchId;
+    /** 设置BatchId。 */
+    public void setBatchId(Long batchIdValue) {
+        this.batchId = batchIdValue;
     }
 
+    /** 获取SourceRecordId。 */
     public String getSourceRecordId() {
         return sourceRecordId;
     }
 
-    public void setSourceRecordId(String sourceRecordId) {
-        this.sourceRecordId = sourceRecordId;
+    /** 设置SourceRecordId。 */
+    public void setSourceRecordId(String sourceRecordIdValue) {
+        this.sourceRecordId = sourceRecordIdValue;
     }
 
+    /** 获取RealName。 */
     public String getRealName() {
         return realName;
     }
 
-    public void setRealName(String realName) {
-        this.realName = realName;
+    /** 设置RealName。 */
+    public void setRealName(String realNameValue) {
+        this.realName = realNameValue;
     }
 
+    /** 获取Phone。 */
     public String getPhone() {
         return phone;
     }
 
-    public void setPhone(String phone) {
-        this.phone = phone;
+    /** 设置Phone。 */
+    public void setPhone(String phoneValue) {
+        this.phone = phoneValue;
     }
 
+    /** 获取ValidateStatus。 */
     public String getValidateStatus() {
         return validateStatus;
     }
 
-    public void setValidateStatus(String validateStatus) {
-        this.validateStatus = validateStatus;
+    /** 设置ValidateStatus。 */
+    public void setValidateStatus(String validateStatusValue) {
+        this.validateStatus = validateStatusValue;
     }
 
+    /** 获取ProcessStatus。 */
     public String getProcessStatus() {
         return processStatus;
     }
 
-    public void setProcessStatus(String processStatus) {
-        this.processStatus = processStatus;
+    /** 设置ProcessStatus。 */
+    public void setProcessStatus(String processStatusValue) {
+        this.processStatus = processStatusValue;
     }
 
+    /** 获取FailureReason。 */
     public String getFailureReason() {
         return failureReason;
     }
 
-    public void setFailureReason(String failureReason) {
-        this.failureReason = failureReason;
+    /** 设置FailureReason。 */
+    public void setFailureReason(String failureReasonValue) {
+        this.failureReason = failureReasonValue;
     }
 
+    /** 获取UserId。 */
     public Long getUserId() {
         return userId;
     }
 
-    public void setUserId(Long userId) {
-        this.userId = userId;
+    /** 设置UserId。 */
+    public void setUserId(Long userIdValue) {
+        this.userId = userIdValue;
     }
 
+    /** 获取LinkedUserStatus。 */
     public String getLinkedUserStatus() {
         return linkedUserStatus;
     }
 
-    public void setLinkedUserStatus(String linkedUserStatus) {
-        this.linkedUserStatus = linkedUserStatus;
+    /** 设置LinkedUserStatus。 */
+    public void setLinkedUserStatus(String linkedUserStatusValue) {
+        this.linkedUserStatus = linkedUserStatusValue;
     }
 
+    /** 获取CreatedAt。 */
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    /** 设置CreatedAt。 */
+    public void setCreatedAt(LocalDateTime createdAtValue) {
+        this.createdAt = createdAtValue;
     }
 }
 

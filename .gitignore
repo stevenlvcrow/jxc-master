@@ -2,3 +2,4 @@
 /.idea/
 /.codebuddy/
 /.dev/
+*.log

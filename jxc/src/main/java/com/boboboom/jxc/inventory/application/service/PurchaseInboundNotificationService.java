@@ -1,10 +1,10 @@
 package com.boboboom.jxc.inventory.application.service;
 
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
+import java.time.LocalDateTime;
+
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
 
 /**
  * 采购入库通知记录协作服务。
@@ -14,8 +14,9 @@ public class PurchaseInboundNotificationService {
 
     private final InventoryDocumentNotificationService inventoryDocumentNotificationService;
 
-    public PurchaseInboundNotificationService(InventoryDocumentNotificationService inventoryDocumentNotificationService) {
-        this.inventoryDocumentNotificationService = inventoryDocumentNotificationService;
+    /** 库存服务，负责相关业务规则和流程协作。 */
+    public PurchaseInboundNotificationService(InventoryDocumentNotificationService inventoryDocumentNotificationServiceValue) {
+        this.inventoryDocumentNotificationService = inventoryDocumentNotificationServiceValue;
     }
 
     /**

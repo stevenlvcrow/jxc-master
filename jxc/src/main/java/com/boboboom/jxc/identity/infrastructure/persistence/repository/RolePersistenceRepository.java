@@ -1,17 +1,20 @@
 package com.boboboom.jxc.identity.infrastructure.persistence.repository;
 
+import org.springframework.stereotype.Repository;
+
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.mapper.RoleMapper;
-import org.springframework.stereotype.Repository;
 
+/** 身份与权限持久化仓储，封装基础 CRUD 能力。 */
 @Repository
 public class RolePersistenceRepository extends AbstractMpRepository<RoleDO> {
 
     private final RoleMapper mapper;
 
-    public RolePersistenceRepository(RoleMapper mapper) {
-        this.mapper = mapper;
+    /** 身份与权限持久化仓储，封装基础 CRUD 能力。 */
+    public RolePersistenceRepository(RoleMapper mapperValue) {
+        this.mapper = mapperValue;
     }
 
     @Override

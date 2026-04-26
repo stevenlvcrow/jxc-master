@@ -1,5 +1,6 @@
 package com.boboboom.jxc.identity.infrastructure.persistence.query;
 
+/** 身份与权限类型，负责集团门店汇总相关处理。 */
 public class GroupStoreSummary {
 
     private Long id;
@@ -8,44 +9,54 @@ public class GroupStoreSummary {
     private String status;
     private Long storeCount;
 
+    /** 获取Id。 */
     public Long getId() {
         return id;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    /** 设置Id。 */
+    public void setId(Long idValue) {
+        this.id = idValue;
     }
 
+    /** 获取GroupCode。 */
     public String getGroupCode() {
         return groupCode;
     }
 
-    public void setGroupCode(String groupCode) {
-        this.groupCode = groupCode;
+    /** 设置GroupCode。 */
+    public void setGroupCode(String groupCodeValue) {
+        this.groupCode = groupCodeValue;
     }
 
+    /** 获取GroupName。 */
     public String getGroupName() {
         return groupName;
     }
 
-    public void setGroupName(String groupName) {
-        this.groupName = groupName;
+    /** 设置GroupName。 */
+    public void setGroupName(String groupNameValue) {
+        this.groupName = groupNameValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 
+    /** 获取StoreCount。 */
     public Long getStoreCount() {
         return storeCount;
     }
 
-    public void setStoreCount(Long storeCount) {
-        this.storeCount = storeCount;
+    /** 设置StoreCount。 */
+    public void setStoreCount(Long storeCountValue) {
+        this.storeCount = storeCountValue;
     }
 }
 

@@ -1,5 +1,12 @@
 package com.boboboom.jxc.identity.application.service;
 
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.LoginSession;
@@ -10,39 +17,39 @@ import com.boboboom.jxc.identity.application.auth.UnauthorizedException;
 import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.query.UserRoleView;
-import com.boboboom.jxc.identity.interfaces.rest.request.CurrentUserAccountChangeRequest;
-import com.boboboom.jxc.identity.interfaces.rest.response.AuthLoginResult;
-import com.boboboom.jxc.identity.interfaces.rest.response.AuthRefreshResult;
-import com.boboboom.jxc.identity.interfaces.rest.response.CurrentUserResult;
 import com.boboboom.jxc.identity.interfaces.rest.request.AuthLoginRequest;
+import com.boboboom.jxc.identity.interfaces.rest.request.CurrentUserAccountChangeRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.CurrentUserPasswordChangeRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.CurrentUserPhoneChangeRequest;
 import com.boboboom.jxc.identity.interfaces.rest.request.RefreshTokenRequest;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.stereotype.Service;
+import com.boboboom.jxc.identity.interfaces.rest.response.AuthLoginResult;
+import com.boboboom.jxc.identity.interfaces.rest.response.AuthRefreshResult;
+import com.boboboom.jxc.identity.interfaces.rest.response.CurrentUserResult;
 
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-
+/** 认证业务服务，负责登录、刷新令牌和当前用户信息组装。 */
 @Service
 public class AuthApplicationService {
+
+    private static final int MIN_PASSWORD_LENGTH = 6;
+    private static final int MAX_PASSWORD_LENGTH = 32;
 
     private final UserAccountRepository userAccountRepository;
     private final TokenService tokenService;
     private final OrgScopeService orgScopeService;
     private final IdentityAdminLookupService identityAdminLookupService;
 
-    public AuthApplicationService(UserAccountRepository userAccountRepository,
-                                  TokenService tokenService,
-                                  OrgScopeService orgScopeService,
-                                  IdentityAdminLookupService identityAdminLookupService) {
-        this.userAccountRepository = userAccountRepository;
-        this.tokenService = tokenService;
-        this.orgScopeService = orgScopeService;
-        this.identityAdminLookupService = identityAdminLookupService;
+    /** 认证业务服务，负责登录、刷新令牌和当前用户信息组装。 */
+    public AuthApplicationService(UserAccountRepository userAccountRepositoryValue,
+                                  TokenService tokenServiceValue,
+                                  OrgScopeService orgScopeServiceValue,
+                                  IdentityAdminLookupService identityAdminLookupServiceValue) {
+        this.userAccountRepository = userAccountRepositoryValue;
+        this.tokenService = tokenServiceValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.identityAdminLookupService = identityAdminLookupServiceValue;
     }
 
+    /** 处理用户登录请求。 */
     public AuthLoginResult login(AuthLoginRequest request) {
         String account = normalizeAccount(request.getAccount());
         UserAccountDO user = userAccountRepository.findLoginUserByAccount(account).orElse(null);
@@ -64,6 +71,7 @@ public class AuthApplicationService {
         return result;
     }
 
+    /** 刷新登录令牌。 */
     public AuthRefreshResult refresh(RefreshTokenRequest request) {
         LoginSession oldSession = tokenService.getSessionByRefreshToken(request.getRefreshToken());
         if (oldSession == null) {
@@ -82,12 +90,14 @@ public class AuthApplicationService {
         return result;
     }
 
+    /** 查询当前登录用户信息。 */
     public CurrentUserResult me() {
         LoginSession session = AuthContextHolder.require();
         UserAccountDO user = requireEnabledUser(session.getUserId());
         return toCurrentUserResult(user);
     }
 
+    /** 处理change当前密码。 */
     @Transactional
     public void changeCurrentPassword(CurrentUserPasswordChangeRequest request) {
         LoginSession session = AuthContextHolder.require();
@@ -106,6 +116,7 @@ public class AuthApplicationService {
         tokenService.removeSession(session.getToken());
     }
 
+    /** 处理change当前手机号。 */
     @Transactional
     public CurrentUserResult changeCurrentPhone(CurrentUserPhoneChangeRequest request) {
         LoginSession session = AuthContextHolder.require();
@@ -123,6 +134,7 @@ public class AuthApplicationService {
         return toCurrentUserResult(user);
     }
 
+    /** 处理change当前账号。 */
     @Transactional
     public CurrentUserResult changeCurrentAccount(CurrentUserAccountChangeRequest request) {
         LoginSession session = AuthContextHolder.require();
@@ -140,6 +152,7 @@ public class AuthApplicationService {
         return toCurrentUserResult(user);
     }
 
+    /** 处理me角色。 */
     public List<CurrentUserRoleResult> meRoles(String orgId) {
         LoginSession session = AuthContextHolder.require();
         List<UserRoleView> allRoles = userAccountRepository.findUserRoles(session.getUserId());
@@ -153,6 +166,7 @@ public class AuthApplicationService {
         return roles;
     }
 
+    /** 退出当前登录会话。 */
     public void logout() {
         LoginSession session = AuthContextHolder.require();
         tokenService.removeSession(session.getToken());
@@ -167,7 +181,7 @@ public class AuthApplicationService {
         if (value.isEmpty()) {
             throw new BusinessException(emptyMessage);
         }
-        if (value.length() < 6 || value.length() > 32) {
+        if (value.length() < MIN_PASSWORD_LENGTH || value.length() > MAX_PASSWORD_LENGTH) {
             throw new BusinessException("密码长度需为6-32位");
         }
         return value;
@@ -218,7 +232,6 @@ public class AuthApplicationService {
             return false;
         }
         String roleScopeType = role.getScopeType();
-        Long roleScopeId = role.getScopeId();
         if (roleScopeType == null) {
             return false;
         }
@@ -226,17 +239,30 @@ public class AuthApplicationService {
             return "PLATFORM".equalsIgnoreCase(roleScopeType);
         }
         if ("GROUP".equalsIgnoreCase(scope.scopeType())) {
-            return "PLATFORM".equalsIgnoreCase(roleScopeType)
-                    || ("GROUP".equalsIgnoreCase(roleScopeType) && Objects.equals(roleScopeId, scope.scopeId()));
+            return matchesGroupSelectedScope(role, scope);
         }
         if ("STORE".equalsIgnoreCase(scope.scopeType())) {
-            return "PLATFORM".equalsIgnoreCase(roleScopeType)
-                    || ("STORE".equalsIgnoreCase(roleScopeType) && Objects.equals(roleScopeId, scope.scopeId()))
-                    || ("GROUP".equalsIgnoreCase(roleScopeType) && Objects.equals(roleScopeId, scope.groupId()));
+            return matchesStoreSelectedScope(role, scope);
         }
         return false;
     }
 
+    private boolean matchesGroupSelectedScope(UserRoleView role, OrgScopeService.AccessibleScope scope) {
+        return "PLATFORM".equalsIgnoreCase(role.getScopeType())
+                || matchesRoleScope(role, "GROUP", scope.scopeId());
+    }
+
+    private boolean matchesStoreSelectedScope(UserRoleView role, OrgScopeService.AccessibleScope scope) {
+        return "PLATFORM".equalsIgnoreCase(role.getScopeType())
+                || matchesRoleScope(role, "STORE", scope.scopeId())
+                || matchesRoleScope(role, "GROUP", scope.groupId());
+    }
+
+    private boolean matchesRoleScope(UserRoleView role, String scopeType, Long scopeId) {
+        return scopeType.equalsIgnoreCase(role.getScopeType()) && Objects.equals(role.getScopeId(), scopeId);
+    }
+
+    /** 身份与权限结果模型，承载业务处理结果。 */
     public record CurrentUserRoleResult(String roleCode,
                                         String roleName,
                                         String scopeType,

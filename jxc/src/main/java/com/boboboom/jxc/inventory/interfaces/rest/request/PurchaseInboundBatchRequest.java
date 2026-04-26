@@ -1,11 +1,12 @@
 package com.boboboom.jxc.inventory.interfaces.rest.request;
 
+import java.util.List;
+
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
-import java.util.List;
-
+/** 库存请求参数，承载接口入参。 */
 public record PurchaseInboundBatchRequest(
         @NotEmpty(message = "单据ID不能为空")
         @Size(max = 200, message = "单次最多支持200条")

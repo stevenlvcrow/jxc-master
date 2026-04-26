@@ -3,9 +3,9 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox, type ElTable } from 'element-plus';
 import {
+  batchBindWorkflowProcessStoresApi,
   bindWorkflowProcessStoresApi,
   createWorkflowProcessApi,
-  deleteWorkflowProcessApi,
   deleteWorkflowConfigApi,
   fetchWorkflowProcessStoresApi,
   fetchWorkflowProcessesApi,
@@ -48,6 +48,8 @@ const storeOptions = ref<WorkflowProcessStoreOption[]>([]);
 const bindStoreSearch = ref('');
 const bindStoreSelectedRows = ref<WorkflowProcessStoreOption[]>([]);
 const bindStoreTableRef = ref<InstanceType<typeof ElTable> | null>(null);
+const selectedBusinesses = ref<WorkflowProcessItem[]>([]);
+const bindStoreMode = ref<'single' | 'batch'>('single');
 const preferredBusinessCode = computed(() => String(route.query.businessCode ?? '').trim());
 const preferredWorkflowCode = computed(() => String(route.query.workflowCode ?? '').trim());
 
@@ -100,6 +102,13 @@ const filteredRows = computed(() => {
 });
 
 const getHistoryRows = (businessCode: string) => historyMap.value.get(businessCode) ?? [];
+
+const selectedBusinessIds = computed(() => selectedBusinesses.value.map((item) => item.id));
+
+const formatStoreNames = (storeNames?: string[]) => {
+  const names = Array.isArray(storeNames) ? storeNames.filter(Boolean) : [];
+  return names.length ? names.join('、') : '-';
+};
 
 const syncExpandedRows = () => {
   const routeBusinessCode = String(route.query.businessCode ?? '').trim();
@@ -195,22 +204,6 @@ const submitBusinessForm = async () => {
   }
 };
 
-const removeBusiness = async (business: WorkflowProcessItem) => {
-  try {
-    await ElMessageBox.confirm(`确认删除业务“${business.businessName}”吗？`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-    });
-  } catch {
-    return;
-  }
-  await deleteWorkflowProcessApi(business.id, sessionStore.currentOrgId);
-  delete adoptedTemplateMap[business.process_code];
-  ElMessage.success('业务删除成功');
-  await loadRows();
-};
-
 const loadRows = async () => {
   loading.value = true;
   try {
@@ -297,7 +290,32 @@ const publishConfig = async (business: WorkflowProcessItem, row: WorkflowPublish
   }
 };
 
+const removeConfig = async (business: WorkflowProcessItem, row: WorkflowPublishHistoryManageItem) => {
+  if (adoptedTemplateMap[business.process_code] === row.workflowCode) {
+    ElMessage.warning('正在使用的流程版本不允许删除');
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(`确认删除流程版本“${row.workflowCode}”吗？`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    });
+  } catch {
+    return;
+  }
+  deletingConfigId.value = row.id;
+  try {
+    await deleteWorkflowConfigApi(row.id, sessionStore.currentOrgId);
+    ElMessage.success('流程版本删除成功');
+    await loadRows();
+  } finally {
+    deletingConfigId.value = null;
+  }
+};
+
 const openBindStores = async (business: WorkflowProcessItem) => {
+  bindStoreMode.value = 'single';
   bindingStoreBusinessId.value = business.id;
   bindStoreSearch.value = '';
   if (!storeOptions.value.length) {
@@ -315,19 +333,48 @@ const openBindStores = async (business: WorkflowProcessItem) => {
   }
 };
 
+const openBatchBindStores = async () => {
+  if (!selectedBusinesses.value.length) {
+    ElMessage.warning('请先选择要绑定门店的业务');
+    return;
+  }
+  bindStoreMode.value = 'batch';
+  bindingStoreBusinessId.value = null;
+  bindStoreSearch.value = '';
+  if (!storeOptions.value.length) {
+    await loadStoreOptions();
+  }
+  bindStoreSelectedRows.value = [];
+  bindStoreDialogVisible.value = true;
+  await nextTick();
+  bindStoreTableRef.value?.clearSelection();
+};
+
 const onBindStoreSelectionChange = (rows: WorkflowProcessStoreOption[]) => {
   bindStoreSelectedRows.value = rows;
 };
 
+const onBusinessSelectionChange = (selection: WorkflowProcessItem[]) => {
+  selectedBusinesses.value = selection;
+};
+
 const submitBindStores = async () => {
-  if (!bindingStoreBusinessId.value) {
+  if (bindStoreMode.value === 'single' && !bindingStoreBusinessId.value) {
+    return;
+  }
+  if (bindStoreMode.value === 'batch' && !selectedBusinessIds.value.length) {
     return;
   }
   const storeIds = bindStoreSelectedRows.value.map((s) => s.storeId);
   bindStoreSubmitting.value = true;
   try {
-    await bindWorkflowProcessStoresApi(bindingStoreBusinessId.value, storeIds, sessionStore.currentOrgId);
-    ElMessage.success('门店绑定成功');
+    if (bindStoreMode.value === 'batch') {
+      await batchBindWorkflowProcessStoresApi(selectedBusinessIds.value, storeIds, sessionStore.currentOrgId);
+      ElMessage.success('门店批量绑定成功');
+    } else {
+      await bindWorkflowProcessStoresApi(bindingStoreBusinessId.value!, storeIds, sessionStore.currentOrgId);
+      ElMessage.success('门店绑定成功');
+    }
     bindStoreDialogVisible.value = false;
     await loadRows();
   } finally {
@@ -360,36 +407,6 @@ const adoptTemplate = async (business: WorkflowProcessItem, workflowCode: string
   }
 };
 
-const removeConfig = async (business: WorkflowProcessItem, row: WorkflowPublishHistoryManageItem) => {
-  try {
-    await ElMessageBox.confirm("确认删除流程模板 " + row.workflowCode + " 吗?", "删除确认", {
-      type: "warning",
-      confirmButtonText: "删除",
-      cancelButtonText: "取消",
-    });
-  } catch {
-    return;
-  }
-  deletingConfigId.value = row.id;
-  try {
-    await deleteWorkflowConfigApi(row.id, sessionStore.currentOrgId);
-    if ((adoptedTemplateMap[business.process_code] ?? '') === row.workflowCode) {
-      await updateWorkflowProcessApi(business.id, {
-        orgId: sessionStore.currentOrgId,
-        process_code: business.process_code,
-        businessName: business.businessName,
-        templateId: undefined,
-      });
-      adoptedTemplateMap[business.process_code] = '';
-      business.templateId = undefined;
-    }
-    ElMessage.success('流程模板删除成功');
-    await loadRows();
-  } finally {
-    deletingConfigId.value = null;
-  }
-};
-
 onMounted(() => {
   void loadRows();
 });
@@ -408,6 +425,7 @@ watch(
       <div class="toolbar">
         <el-input v-model="query.keyword" placeholder="搜索业务编码/业务名称/流程编码/流程版本" clearable style="width: 360px" />
         <div class="toolbar-actions">
+          <el-button @click="openBatchBindStores">批量绑定门店</el-button>
           <el-button type="primary" @click="openCreateBusiness">新增</el-button>
           <el-button @click="loadRows">刷新</el-button>
         </div>
@@ -423,7 +441,9 @@ watch(
         class="erp-table"
         @row-dblclick="toggleExpandedRow"
         @expand-change="handleExpandChange"
+        @selection-change="onBusinessSelectionChange"
       >
+        <el-table-column type="selection" width="50" align="center" />
         <el-table-column type="expand" width="48">
           <template #default="{ row: business }">
             <el-table :data="getHistoryRows(business.process_code)" border size="small" class="expand-table">
@@ -465,7 +485,13 @@ watch(
                   >
                     发布
                   </el-button>
-                  <el-button text type="danger" :loading="deletingConfigId === row.id" @click="removeConfig(business, row)">
+                  <el-button
+                    v-if="adoptedTemplateMap[business.process_code] !== row.workflowCode"
+                    text
+                    type="danger"
+                    :loading="deletingConfigId === row.id"
+                    @click="removeConfig(business, row)"
+                  >
                     删除
                   </el-button>
                 </template>
@@ -480,7 +506,7 @@ watch(
         <el-table-column prop="businessName" label="业务名称" width="180" show-overflow-tooltip />
         <el-table-column prop="storeNames" label="关联门店" width="220" show-overflow-tooltip>
           <template #default="{ row }">
-            <span>{{ row.storeNames || '-' }}</span>
+            <span>{{ formatStoreNames(row.storeNames) }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="createdAt" label="业务添加时间" width="160" />
@@ -489,7 +515,6 @@ watch(
             <el-button text type="primary" @click="openWorkflowConfig({ businessCode: row.process_code })">新增流程</el-button>
             <el-button text @click="openEditBusiness(row)">编辑</el-button>
             <el-button text @click="openBindStores(row)">绑定门店</el-button>
-            <el-button text type="danger" @click="removeBusiness(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -527,11 +552,14 @@ watch(
 
       <el-dialog
         v-model="bindStoreDialogVisible"
-        title="绑定门店"
+        :title="bindStoreMode === 'batch' ? '批量绑定门店' : '绑定门店'"
         width="680px"
         append-to-body
         destroy-on-close
       >
+        <div v-if="bindStoreMode === 'batch'" class="batch-bind-summary">
+          已选择 {{ selectedBusinessIds.length }} 个业务，保存后会统一覆盖这些业务的关联门店。
+        </div>
         <div style="margin-bottom: 10px">
           <el-input v-model="bindStoreSearch" placeholder="搜索门店名称/编码" clearable style="width: 260px" />
         </div>
@@ -568,6 +596,12 @@ watch(
 .toolbar-actions {
   display: flex;
   gap: 8px;
+}
+
+.batch-bind-summary {
+  margin-bottom: 10px;
+  color: #606266;
+  font-size: 13px;
 }
 
 .expand-table {

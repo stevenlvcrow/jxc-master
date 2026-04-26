@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.inventory.infrastructure.persistence.mapper.InventoryBalanceMapper">
+
+    <resultMap id="InventoryBalanceDOResultMap" type="com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO">
+        <id property="id" column="id"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="warehouseName" column="warehouse_name"/>
+        <result property="itemCode" column="item_code"/>
+        <result property="itemName" column="item_name"/>
+        <result property="quantity" column="quantity"/>
+        <result property="costAmount" column="cost_amount"/>
+        <result property="avgCost" column="avg_cost"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectForUpdate" resultMap="InventoryBalanceDOResultMap">
+        select id, scope_type, scope_id, warehouse_name, item_code, item_name, quantity,
+               cost_amount, avg_cost, created_at, updated_at
+        from inventory_balance
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and warehouse_name = #{warehouseName}
+          and item_code = #{itemCode}
+        for update
+    </select>
+</mapper>

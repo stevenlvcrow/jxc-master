@@ -1,5 +1,12 @@
 package com.boboboom.jxc.workflow.application.service;
 
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
@@ -9,12 +16,6 @@ import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessStoreBindingRe
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessStoreBindingDO;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
 
 /**
  * 流程绑定解析服务。
@@ -29,15 +30,19 @@ public class WorkflowBindingResolverService {
     private final WorkflowDefinitionConfigRepository definitionConfigRepository;
     private final WorkflowProcessStoreBindingRepository processStoreBindingRepository;
     private final DictionaryLookupService dictionaryLookupService;
+    private final InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService;
 
-    public WorkflowBindingResolverService(WorkflowProcessRegistryRepository processRegistryRepository,
-                                           WorkflowDefinitionConfigRepository definitionConfigRepository,
-                                           WorkflowProcessStoreBindingRepository processStoreBindingRepository,
-                                           DictionaryLookupService dictionaryLookupService) {
-        this.processRegistryRepository = processRegistryRepository;
-        this.definitionConfigRepository = definitionConfigRepository;
-        this.processStoreBindingRepository = processStoreBindingRepository;
-        this.dictionaryLookupService = dictionaryLookupService;
+    /** 审批流程服务，负责相关业务规则和流程协作。 */
+    public WorkflowBindingResolverService(WorkflowProcessRegistryRepository processRegistryRepositoryValue,
+                                           WorkflowDefinitionConfigRepository definitionConfigRepositoryValue,
+                                           WorkflowProcessStoreBindingRepository processStoreBindingRepositoryValue,
+                                           DictionaryLookupService dictionaryLookupServiceValue,
+                                           InventoryWorkflowBootstrapService inventoryWorkflowBootstrapServiceValue) {
+        this.processRegistryRepository = processRegistryRepositoryValue;
+        this.definitionConfigRepository = definitionConfigRepositoryValue;
+        this.processStoreBindingRepository = processStoreBindingRepositoryValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
+        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapServiceValue;
     }
 
     /**
@@ -55,29 +60,23 @@ public class WorkflowBindingResolverService {
                                                                     Long groupId,
                                                                     String businessCode,
                                                                     String workflowLabel) {
-        if (!SCOPE_GROUP.equalsIgnoreCase(scopeType) && !SCOPE_STORE.equalsIgnoreCase(scopeType)) {
+        if (isInvalidBindingRequest(scopeType, groupId, businessCode)) {
             return Optional.empty();
         }
-        if (groupId == null || !StringUtils.hasText(businessCode)) {
-            return Optional.empty();
-        }
-        WorkflowProcessRegistryDO registry = processRegistryRepository
-                .findByScopeAndProcessCode(SCOPE_GROUP, groupId, businessCode)
-                .orElse(null);
+        WorkflowProcessRegistryDO registry = findRegistry(groupId, businessCode);
         if (registry == null) {
             return Optional.empty();
         }
-        if (SCOPE_STORE.equalsIgnoreCase(scopeType) && scopeId != null) {
-            List<WorkflowProcessStoreBindingDO> bindings = processStoreBindingRepository
-                    .findByGroupAndProcessRegistryId(groupId, registry.getId());
-            if (!bindings.isEmpty() && bindings.stream().noneMatch(item -> scopeId.equals(item.getStoreId()))) {
-                return Optional.empty();
-            }
+        if (!matchesStoreBinding(scopeType, scopeId, groupId, registry)) {
+            return Optional.empty();
         }
 
         String workflowCode = trimToNull(registry.getTemplateId());
         if (!StringUtils.hasText(workflowCode)) {
             throw new BusinessException(workflowLabel + "尚未绑定模板，请先在流程管理中绑定模板");
+        }
+        if (InventoryWorkflowBootstrapService.DEFAULT_WORKFLOW_CODE.equals(workflowCode)) {
+            inventoryWorkflowBootstrapService.ensureDefaultWorkflowConfig(groupId, null, registry, registry.getBusinessName());
         }
         WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, registry.getProcessCode(), workflowCode);
         if (config == null || !publishedStatus().equals(config.getStatus())) {
@@ -95,6 +94,29 @@ public class WorkflowBindingResolverService {
                 config.getProcessDefinitionKey(),
                 config.getProcessDefinitionId()
         ));
+    }
+
+    private boolean isInvalidBindingRequest(String scopeType, Long groupId, String businessCode) {
+        return !isSupportedScope(scopeType) || groupId == null || !StringUtils.hasText(businessCode);
+    }
+
+    private boolean isSupportedScope(String scopeType) {
+        return SCOPE_GROUP.equalsIgnoreCase(scopeType) || SCOPE_STORE.equalsIgnoreCase(scopeType);
+    }
+
+    private WorkflowProcessRegistryDO findRegistry(Long groupId, String businessCode) {
+        return processRegistryRepository
+                .findByScopeAndProcessCode(SCOPE_GROUP, groupId, businessCode)
+                .orElse(null);
+    }
+
+    private boolean matchesStoreBinding(String scopeType, Long scopeId, Long groupId, WorkflowProcessRegistryDO registry) {
+        if (!SCOPE_STORE.equalsIgnoreCase(scopeType) || scopeId == null) {
+            return true;
+        }
+        List<WorkflowProcessStoreBindingDO> bindings = processStoreBindingRepository
+                .findByGroupAndProcessRegistryId(groupId, registry.getId());
+        return bindings.isEmpty() || bindings.stream().anyMatch(item -> scopeId.equals(item.getStoreId()));
     }
 
     private WorkflowDefinitionConfigDO findConfig(String scopeType,
@@ -138,6 +160,7 @@ public class WorkflowBindingResolverService {
         return dictionaryLookupService.codeOf(DictionaryCodes.WORKFLOW_DEFINITION_STATUS, DictionaryCodes.PUBLISHED);
     }
 
+    /** 审批流程数据模型，承载Resolved流程绑定关系数据。 */
     public record ResolvedWorkflowBinding(Long processRegistryId,
                                           String processCode,
                                           String workflowCode,

@@ -1,40 +1,46 @@
 package com.boboboom.jxc.common;
 
-import org.springframework.stereotype.Component;
-
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.springframework.stereotype.Component;
+
+/** 业务编码生成器，按业务前缀和作用域生成连续编码。 */
 @Component
 public class BusinessCodeGenerator {
 
     private static final int DEFAULT_SERIAL_LENGTH = 6;
+    private static final int BUSINESS_PREFIX_LENGTH = 4;
 
+    /** 创建指定前缀的业务编码分配器。 */
     public CodeAllocator allocator(String prefix, Collection<String> existingCodes) {
         return new CodeAllocator(normalizePrefix(prefix), existingCodes, DEFAULT_SERIAL_LENGTH);
     }
 
+    /** 生成下一个业务编码。 */
     public String nextCode(String prefix, Collection<String> existingCodes) {
         return allocator(prefix, existingCodes).nextCode();
     }
 
+    /**
+     * 业务编码流水分配器。
+     */
     public static final class CodeAllocator {
         private final String prefix;
         private final int serialLength;
         private final Set<String> usedCodes;
         private int nextSerial;
 
-        private CodeAllocator(String prefix, Collection<String> existingCodes, int serialLength) {
-            this.prefix = prefix;
-            this.serialLength = serialLength;
+        private CodeAllocator(String prefixValue, Collection<String> existingCodes, int serialLengthValue) {
+            this.prefix = prefixValue;
+            this.serialLength = serialLengthValue;
             this.usedCodes = new LinkedHashSet<>();
             int maxSerial = 0;
-            Pattern pattern = Pattern.compile("^" + Pattern.quote(prefix) + "(\\d+)$");
+            Pattern pattern = Pattern.compile("^" + Pattern.quote(prefixValue) + "(\\d+)$");
             if (existingCodes != null) {
                 for (String rawCode : existingCodes) {
                     if (rawCode == null || rawCode.isBlank()) {
@@ -55,6 +61,7 @@ public class BusinessCodeGenerator {
             this.nextSerial = maxSerial + 1;
         }
 
+        /** 生成下一个业务编码。 */
         public String nextCode() {
             while (true) {
                 String candidate = prefix + String.format(Locale.ROOT, "%0" + serialLength + "d", nextSerial++);
@@ -78,7 +85,7 @@ public class BusinessCodeGenerator {
             throw new IllegalArgumentException("编码前缀不能为空");
         }
         String normalized = prefix.trim().toUpperCase(Locale.ROOT);
-        if (normalized.length() != 4) {
+        if (normalized.length() != BUSINESS_PREFIX_LENGTH) {
             throw new IllegalArgumentException("编码前缀必须为4位大写字母");
         }
         for (int i = 0; i < normalized.length(); i++) {

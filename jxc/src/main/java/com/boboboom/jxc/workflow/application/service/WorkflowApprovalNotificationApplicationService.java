@@ -1,12 +1,5 @@
 package com.boboboom.jxc.workflow.application.service;
 
-import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
-import com.boboboom.jxc.identity.application.auth.OrgScopeService;
-import com.boboboom.jxc.workflow.domain.repository.WorkflowApprovalNotificationRepository;
-import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowApprovalNotificationDO;
-import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
-
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -14,6 +7,17 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
+import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
+
+import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
+import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowApprovalNotificationRepository;
+import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
+import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowApprovalNotificationDO;
+import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
+
+/** 审批通知业务服务，负责待办、已办和通知阅读状态维护。 */
 @Service
 public class WorkflowApprovalNotificationApplicationService {
 
@@ -22,23 +26,29 @@ public class WorkflowApprovalNotificationApplicationService {
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
     private final WorkflowApprovalNotificationRepository notificationRepository;
+    private final WorkflowDefinitionConfigRepository definitionConfigRepository;
     private final OrgScopeService orgScopeService;
     private final WorkflowActionService workflowActionService;
 
-    public WorkflowApprovalNotificationApplicationService(WorkflowApprovalNotificationRepository notificationRepository,
-                                                         OrgScopeService orgScopeService,
-                                                         WorkflowActionService workflowActionService) {
-        this.notificationRepository = notificationRepository;
-        this.orgScopeService = orgScopeService;
-        this.workflowActionService = workflowActionService;
+    /** 审批通知业务服务，负责待办、已办和通知阅读状态维护。 */
+    public WorkflowApprovalNotificationApplicationService(WorkflowApprovalNotificationRepository notificationRepositoryValue,
+                                                         WorkflowDefinitionConfigRepository definitionConfigRepositoryValue,
+                                                         OrgScopeService orgScopeServiceValue,
+                                                         WorkflowActionService workflowActionServiceValue) {
+        this.notificationRepository = notificationRepositoryValue;
+        this.definitionConfigRepository = definitionConfigRepositoryValue;
+        this.orgScopeService = orgScopeServiceValue;
+        this.workflowActionService = workflowActionServiceValue;
     }
 
+    /** 记录业务通知或审计数据。 */
     public void record(String scopeType,
                        Long scopeId,
                        String businessCode,
                        String businessName,
                        Long businessId,
                        String approvalNo,
+                       Long approverUserId,
                        String approverName,
                        String approverRole,
                        Long targetApproverUserId,
@@ -48,7 +58,7 @@ public class WorkflowApprovalNotificationApplicationService {
                        String result,
                        String remark,
                        String routePath) {
-        if (!StringUtils.hasText(scopeType) || scopeId == null || businessId == null || !StringUtils.hasText(approvalNo)) {
+        if (isInvalidRecordRequest(scopeType, scopeId, businessId, approvalNo)) {
             return;
         }
         WorkflowApprovalNotificationDO notification = notificationRepository.findLatestByScopeAndBusiness(
@@ -61,31 +71,26 @@ public class WorkflowApprovalNotificationApplicationService {
             notification = new WorkflowApprovalNotificationDO();
             notification.setScopeType(scopeType);
             notification.setScopeId(scopeId);
-            notification.setBusinessCode(StringUtils.hasText(businessCode) ? businessCode : "");
+            notification.setBusinessCode(defaultText(businessCode, ""));
             notification.setBusinessId(businessId);
             notification.setApprovalNo(approvalNo);
         }
         notification.setScopeType(scopeType);
         notification.setScopeId(scopeId);
-        notification.setBusinessCode(StringUtils.hasText(businessCode) ? businessCode : "");
-        notification.setBusinessName(StringUtils.hasText(businessName) ? businessName : "");
+        notification.setBusinessCode(defaultText(businessCode, ""));
+        notification.setBusinessName(defaultText(businessName, ""));
         notification.setBusinessId(businessId);
         notification.setApprovalNo(approvalNo);
-        notification.setApproverName(StringUtils.hasText(approverName) ? approverName : "system");
-        notification.setApproverRole(StringUtils.hasText(approverRole) ? approverRole : "普通审核");
-        if (targetApproverUserId != null) {
-            notification.setTargetApproverUserId(targetApproverUserId);
-        }
-        if (StringUtils.hasText(targetApproverRoleCode)) {
-            notification.setTargetApproverRoleCode(targetApproverRoleCode);
-        }
-        if (StringUtils.hasText(targetApproverRoleName)) {
-            notification.setTargetApproverRoleName(targetApproverRoleName);
-        }
-        notification.setAuditedAt(auditedAt == null ? LocalDateTime.now() : auditedAt);
-        notification.setResult(StringUtils.hasText(result) ? result : "通过");
-        notification.setRemark(StringUtils.hasText(remark) ? remark : "");
-        notification.setRoutePath(StringUtils.hasText(routePath) ? routePath : "");
+        notification.setApproverUserId(approverUserId);
+        notification.setApproverName(defaultText(approverName, "system"));
+        notification.setApproverRole(defaultText(approverRole, "普通审核"));
+        notification.setTargetApproverUserId(targetApproverUserId);
+        notification.setTargetApproverRoleCode(nullableText(targetApproverRoleCode));
+        notification.setTargetApproverRoleName(nullableText(targetApproverRoleName));
+        notification.setAuditedAt(defaultAuditTime(auditedAt));
+        notification.setResult(defaultText(result, "通过"));
+        notification.setRemark(defaultText(remark, ""));
+        notification.setRoutePath(defaultText(routePath, ""));
         if (notification.getId() == null) {
             notificationRepository.save(notification);
             return;
@@ -93,6 +98,26 @@ public class WorkflowApprovalNotificationApplicationService {
         notificationRepository.update(notification);
     }
 
+    private boolean isInvalidRecordRequest(String scopeType, Long scopeId, Long businessId, String approvalNo) {
+        return !StringUtils.hasText(scopeType)
+                || scopeId == null
+                || businessId == null
+                || !StringUtils.hasText(approvalNo);
+    }
+
+    private String defaultText(String value, String defaultValue) {
+        return StringUtils.hasText(value) ? value : defaultValue;
+    }
+
+    private String nullableText(String value) {
+        return StringUtils.hasText(value) ? value : null;
+    }
+
+    private LocalDateTime defaultAuditTime(LocalDateTime auditedAt) {
+        return auditedAt == null ? LocalDateTime.now() : auditedAt;
+    }
+
+    /** 统计当前用户待处理通知数量。 */
     public long pendingCount(String orgId) {
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, orgId);
@@ -112,23 +137,26 @@ public class WorkflowApprovalNotificationApplicationService {
                 .count();
     }
 
-    public PageData<WorkflowApprovalNotificationView> page(String orgId, Integer pageNum, Integer pageSize) {
-        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(
-                AuthContextHolder.requireUserId("登录已失效，请重新登录"),
-                orgId
-        );
+    /** 分页查询业务数据。 */
+    public NotificationPageData<WorkflowApprovalNotificationView> page(String orgId, String tab, Integer pageNum, Integer pageSize) {
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(operatorId, orgId);
+        List<NotificationTabView> tabs = resolveVisibleTabs(operatorId, scope);
+        String activeTab = resolveActiveTab(tab, tabs);
         int safePageNum = pageNum == null || pageNum < 1 ? 1 : pageNum;
         int safePageSize = pageSize == null || pageSize < 1 ? DEFAULT_PAGE_SIZE : Math.min(pageSize, MAX_PAGE_SIZE);
-        List<WorkflowApprovalNotificationDO> rows = loadAccessibleNotifications(scope);
+        List<WorkflowApprovalNotificationDO> rows = loadAccessibleNotifications(scope).stream()
+                .filter(row -> isVisibleToOperator(row, operatorId, scope, activeTab))
+                .toList();
         if (rows.isEmpty()) {
-            return new PageData<>(List.of(), 0, safePageNum, safePageSize);
+            return new NotificationPageData<>(List.of(), 0, safePageNum, safePageSize, tabs, activeTab);
         }
         int start = Math.min((safePageNum - 1) * safePageSize, rows.size());
         int end = Math.min(start + safePageSize, rows.size());
         List<WorkflowApprovalNotificationView> list = rows.subList(start, end).stream()
                 .map(this::toView)
                 .toList();
-        return new PageData<>(list, rows.size(), safePageNum, safePageSize);
+        return new NotificationPageData<>(list, rows.size(), safePageNum, safePageSize, tabs, activeTab);
     }
 
     private WorkflowApprovalNotificationView toView(WorkflowApprovalNotificationDO row) {
@@ -160,6 +188,103 @@ public class WorkflowApprovalNotificationApplicationService {
 
     private boolean isPendingNotification(WorkflowApprovalNotificationDO row) {
         return row != null && "待审核".equals(row.getResult());
+    }
+
+    private boolean isVisibleToOperator(WorkflowApprovalNotificationDO row,
+                                        Long operatorId,
+                                        OrgScopeService.AccessibleScope scope,
+                                        String tab) {
+        if (row == null || !StringUtils.hasText(tab)) {
+            return false;
+        }
+        if ("PENDING_REVIEW".equals(tab)) {
+            return isPendingNotification(row)
+                    && workflowActionService.matchesApprovalTarget(
+                    operatorId,
+                    scope.scopeType(),
+                    scope.scopeId(),
+                    scope.groupId(),
+                    toApprovalTarget(row)
+            );
+        }
+        if ("APPROVED".equals(tab)) {
+            return "通过".equals(row.getResult());
+        }
+        if ("REJECTED_BY_ME".equals(tab)) {
+            return "拒绝".equals(row.getResult()) && operatorId.equals(row.getApproverUserId());
+        }
+        if ("SUBMITTED".equals(tab)) {
+            return isPendingNotification(row)
+                    && workflowActionService.hasAnyNormalNodePermission(
+                    row.getBusinessCode(),
+                    scope.scopeType(),
+                    scope.scopeId(),
+                    scope.groupId(),
+                    operatorId
+            );
+        }
+        return false;
+    }
+
+    private List<NotificationTabView> resolveVisibleTabs(Long operatorId, OrgScopeService.AccessibleScope scope) {
+        if (scope == null || scope.scopeType() == null || scope.scopeId() == null) {
+            return List.of();
+        }
+        List<String> businessCodes = loadAccessiblePublishedBusinessCodes(scope);
+        boolean canReview = businessCodes.stream().anyMatch(businessCode -> workflowActionService.hasConditionNodePermission(
+                businessCode,
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                operatorId
+        ));
+        if (canReview) {
+            return List.of(
+                    new NotificationTabView("PENDING_REVIEW", "待审核记录"),
+                    new NotificationTabView("APPROVED", "已审核记录"),
+                    new NotificationTabView("REJECTED_BY_ME", "我驳回的记录")
+            );
+        }
+        boolean canSubmit = businessCodes.stream().anyMatch(businessCode -> workflowActionService.hasAnyNormalNodePermission(
+                businessCode,
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                operatorId
+        ));
+        if (canSubmit) {
+            return List.of(new NotificationTabView("SUBMITTED", "已提交记录"));
+        }
+        return List.of();
+    }
+
+    private List<String> loadAccessiblePublishedBusinessCodes(OrgScopeService.AccessibleScope scope) {
+        if (scope == null || scope.scopeType() == null || scope.scopeId() == null) {
+            return List.of();
+        }
+        List<WorkflowDefinitionConfigDO> configs = new ArrayList<>(
+                definitionConfigRepository.findPublishedByScope(scope.scopeType(), scope.scopeId())
+        );
+        if ("STORE".equalsIgnoreCase(scope.scopeType()) && scope.groupId() != null) {
+            configs.addAll(definitionConfigRepository.findPublishedByScope(OrgScopeService.SCOPE_GROUP, scope.groupId()));
+        }
+        return configs.stream()
+                .map(WorkflowDefinitionConfigDO::getBusinessCode)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+    }
+
+    private String resolveActiveTab(String tab, List<NotificationTabView> tabs) {
+        if (tabs == null || tabs.isEmpty()) {
+            return "";
+        }
+        String normalized = StringUtils.hasText(tab) ? tab.trim().toUpperCase(Locale.ROOT) : "";
+        return tabs.stream()
+                .map(NotificationTabView::key)
+                .filter(key -> key.equals(normalized))
+                .findFirst()
+                .orElse(tabs.get(0).key());
     }
 
     private List<WorkflowApprovalNotificationDO> loadAccessibleNotifications(OrgScopeService.AccessibleScope scope) {
@@ -210,9 +335,24 @@ public class WorkflowApprovalNotificationApplicationService {
         );
     }
 
+    /** 审批流程分页数据模型，承载列表数据和分页信息。 */
     public record PageData<T>(List<T> list, long total, int pageNum, int pageSize) {
     }
 
+    /** 审批流程分页数据模型，承载列表数据和分页信息。 */
+    public record NotificationPageData<T>(List<T> list,
+                                          long total,
+                                          int pageNum,
+                                          int pageSize,
+                                          List<NotificationTabView> tabs,
+                                          String activeTab) {
+    }
+
+    /** 审批流程视图模型，承载页面展示数据。 */
+    public record NotificationTabView(String key, String label) {
+    }
+
+    /** 审批流程视图模型，承载页面展示数据。 */
     public record WorkflowApprovalNotificationView(Long id,
                                                    String approvalNo,
                                                    String workflowName,

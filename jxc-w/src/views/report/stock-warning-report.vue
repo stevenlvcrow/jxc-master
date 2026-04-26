@@ -6,6 +6,7 @@ import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSessionStore } from '@/stores/session';
+import { fetchStockWarningReportApi } from '@/api/modules/inventory';
 import {
   fetchItemCategoryTreeApi,
   fetchItemsApi,
@@ -167,8 +168,25 @@ const loadOptions = async () => {
 const fetchReport = async () => {
   loading.value = true;
   try {
-    tableRows.value = [];
-    total.value = 0;
+    const orgId = resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
+    if (!orgId) {
+      tableRows.value = [];
+      total.value = 0;
+      return;
+    }
+    const page = await fetchStockWarningReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      statisticDimension: query.statisticDimension,
+      warehouse: query.warehouse || undefined,
+      itemCategory: query.itemCategory || undefined,
+      itemCode: query.itemCode || undefined,
+      itemStatus: query.itemStatus,
+      warningStatus: query.warningStatus === '全部' ? undefined : query.warningStatus,
+      unitType: query.unitType,
+    }, orgId);
+    tableRows.value = page.list ?? [];
+    total.value = Number(page.total ?? 0);
   } finally {
     loading.value = false;
   }

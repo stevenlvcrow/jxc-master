@@ -41,251 +41,313 @@ public class InventoryDocumentHeader {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
+    /** 获取Id。 */
     public Long getId() {
         return id;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    /** 设置Id。 */
+    public void setId(Long idValue) {
+        this.id = idValue;
     }
 
+    /** 获取ScopeType。 */
     public String getScopeType() {
         return scopeType;
     }
 
-    public void setScopeType(String scopeType) {
-        this.scopeType = scopeType;
+    /** 设置ScopeType。 */
+    public void setScopeType(String scopeTypeValue) {
+        this.scopeType = scopeTypeValue;
     }
 
+    /** 获取ScopeId。 */
     public Long getScopeId() {
         return scopeId;
     }
 
-    public void setScopeId(Long scopeId) {
-        this.scopeId = scopeId;
+    /** 设置ScopeId。 */
+    public void setScopeId(Long scopeIdValue) {
+        this.scopeId = scopeIdValue;
     }
 
+    /** 获取DocumentCode。 */
     public String getDocumentCode() {
         return documentCode;
     }
 
-    public void setDocumentCode(String documentCode) {
-        this.documentCode = documentCode;
+    /** 设置DocumentCode。 */
+    public void setDocumentCode(String documentCodeValue) {
+        this.documentCode = documentCodeValue;
     }
 
+    /** 获取DocumentDate。 */
     public LocalDate getDocumentDate() {
         return documentDate;
     }
 
-    public void setDocumentDate(LocalDate documentDate) {
-        this.documentDate = documentDate;
+    /** 设置DocumentDate。 */
+    public void setDocumentDate(LocalDate documentDateValue) {
+        this.documentDate = documentDateValue;
     }
 
+    /** 获取PrimaryName。 */
     public String getPrimaryName() {
         return primaryName;
     }
 
-    public void setPrimaryName(String primaryName) {
-        this.primaryName = primaryName;
+    /** 设置PrimaryName。 */
+    public void setPrimaryName(String primaryNameValue) {
+        this.primaryName = primaryNameValue;
     }
 
+    /** 获取SecondaryName。 */
     public String getSecondaryName() {
         return secondaryName;
     }
 
-    public void setSecondaryName(String secondaryName) {
-        this.secondaryName = secondaryName;
+    /** 设置SecondaryName。 */
+    public void setSecondaryName(String secondaryNameValue) {
+        this.secondaryName = secondaryNameValue;
     }
 
+    /** 获取CounterpartyName。 */
     public String getCounterpartyName() {
         return counterpartyName;
     }
 
-    public void setCounterpartyName(String counterpartyName) {
-        this.counterpartyName = counterpartyName;
+    /** 设置CounterpartyName。 */
+    public void setCounterpartyName(String counterpartyNameValue) {
+        this.counterpartyName = counterpartyNameValue;
     }
 
+    /** 获取CounterpartyName2。 */
     public String getCounterpartyName2() {
         return counterpartyName2;
     }
 
-    public void setCounterpartyName2(String counterpartyName2) {
-        this.counterpartyName2 = counterpartyName2;
+    /** 设置CounterpartyName2。 */
+    public void setCounterpartyName2(String counterpartyName2Value) {
+        this.counterpartyName2 = counterpartyName2Value;
     }
 
+    /** 获取Reason。 */
     public String getReason() {
         return reason;
     }
 
-    public void setReason(String reason) {
-        this.reason = reason;
+    /** 设置Reason。 */
+    public void setReason(String reasonValue) {
+        this.reason = reasonValue;
     }
 
+    /** 获取UpstreamCode。 */
     public String getUpstreamCode() {
         return upstreamCode;
     }
 
-    public void setUpstreamCode(String upstreamCode) {
-        this.upstreamCode = upstreamCode;
+    /** 设置UpstreamCode。 */
+    public void setUpstreamCode(String upstreamCodeValue) {
+        this.upstreamCode = upstreamCodeValue;
     }
 
+    /** 获取SalesmanUserId。 */
     public Long getSalesmanUserId() {
         return salesmanUserId;
     }
 
-    public void setSalesmanUserId(Long salesmanUserId) {
-        this.salesmanUserId = salesmanUserId;
+    /** 设置SalesmanUserId。 */
+    public void setSalesmanUserId(Long salesmanUserIdValue) {
+        this.salesmanUserId = salesmanUserIdValue;
     }
 
+    /** 获取SalesmanName。 */
     public String getSalesmanName() {
         return salesmanName;
     }
 
-    public void setSalesmanName(String salesmanName) {
-        this.salesmanName = salesmanName;
+    /** 设置SalesmanName。 */
+    public void setSalesmanName(String salesmanNameValue) {
+        this.salesmanName = salesmanNameValue;
     }
 
+    /** 获取TotalAmount。 */
     public BigDecimal getTotalAmount() {
         return totalAmount;
     }
 
-    public void setTotalAmount(BigDecimal totalAmount) {
-        this.totalAmount = totalAmount;
+    /** 设置TotalAmount。 */
+    public void setTotalAmount(BigDecimal totalAmountValue) {
+        this.totalAmount = totalAmountValue;
     }
 
+    /** 获取Status。 */
     public String getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
-        this.status = status;
+    /** 设置Status。 */
+    public void setStatus(String statusValue) {
+        this.status = statusValue;
     }
 
+    /** 获取WorkflowProcessCode。 */
     public String getWorkflowProcessCode() {
         return workflowProcessCode;
     }
 
-    public void setWorkflowProcessCode(String workflowProcessCode) {
-        this.workflowProcessCode = workflowProcessCode;
+    /** 设置WorkflowProcessCode。 */
+    public void setWorkflowProcessCode(String workflowProcessCodeValue) {
+        this.workflowProcessCode = workflowProcessCodeValue;
     }
 
+    /** 获取WorkflowDefinitionKey。 */
     public String getWorkflowDefinitionKey() {
         return workflowDefinitionKey;
     }
 
-    public void setWorkflowDefinitionKey(String workflowDefinitionKey) {
-        this.workflowDefinitionKey = workflowDefinitionKey;
+    /** 设置WorkflowDefinitionKey。 */
+    public void setWorkflowDefinitionKey(String workflowDefinitionKeyValue) {
+        this.workflowDefinitionKey = workflowDefinitionKeyValue;
     }
 
+    /** 获取WorkflowDefinitionId。 */
     public String getWorkflowDefinitionId() {
         return workflowDefinitionId;
     }
 
-    public void setWorkflowDefinitionId(String workflowDefinitionId) {
-        this.workflowDefinitionId = workflowDefinitionId;
+    /** 设置WorkflowDefinitionId。 */
+    public void setWorkflowDefinitionId(String workflowDefinitionIdValue) {
+        this.workflowDefinitionId = workflowDefinitionIdValue;
     }
 
+    /** 获取WorkflowInstanceId。 */
     public String getWorkflowInstanceId() {
         return workflowInstanceId;
     }
 
-    public void setWorkflowInstanceId(String workflowInstanceId) {
-        this.workflowInstanceId = workflowInstanceId;
+    /** 设置WorkflowInstanceId。 */
+    public void setWorkflowInstanceId(String workflowInstanceIdValue) {
+        this.workflowInstanceId = workflowInstanceIdValue;
     }
 
+    /** 获取WorkflowTaskId。 */
     public String getWorkflowTaskId() {
         return workflowTaskId;
     }
 
-    public void setWorkflowTaskId(String workflowTaskId) {
-        this.workflowTaskId = workflowTaskId;
+    /** 设置WorkflowTaskId。 */
+    public void setWorkflowTaskId(String workflowTaskIdValue) {
+        this.workflowTaskId = workflowTaskIdValue;
     }
 
+    /** 获取WorkflowTaskName。 */
     public String getWorkflowTaskName() {
         return workflowTaskName;
     }
 
-    public void setWorkflowTaskName(String workflowTaskName) {
-        this.workflowTaskName = workflowTaskName;
+    /** 设置WorkflowTaskName。 */
+    public void setWorkflowTaskName(String workflowTaskNameValue) {
+        this.workflowTaskName = workflowTaskNameValue;
     }
 
+    /** 获取WorkflowStatus。 */
     public String getWorkflowStatus() {
         return workflowStatus;
     }
 
-    public void setWorkflowStatus(String workflowStatus) {
-        this.workflowStatus = workflowStatus;
+    /** 设置WorkflowStatus。 */
+    public void setWorkflowStatus(String workflowStatusValue) {
+        this.workflowStatus = workflowStatusValue;
     }
 
+    /** 获取PendingOperation。 */
     public String getPendingOperation() {
         return pendingOperation;
     }
 
-    public void setPendingOperation(String pendingOperation) {
-        this.pendingOperation = pendingOperation;
+    /** 设置PendingOperation。 */
+    public void setPendingOperation(String pendingOperationValue) {
+        this.pendingOperation = pendingOperationValue;
     }
 
+    /** 获取Remark。 */
     public String getRemark() {
         return remark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    /** 设置Remark。 */
+    public void setRemark(String remarkValue) {
+        this.remark = remarkValue;
     }
 
+    /** 获取RejectionReason。 */
     public String getRejectionReason() {
         return rejectionReason;
     }
 
-    public void setRejectionReason(String rejectionReason) {
-        this.rejectionReason = rejectionReason;
+    /** 设置RejectionReason。 */
+    public void setRejectionReason(String rejectionReasonValue) {
+        this.rejectionReason = rejectionReasonValue;
     }
 
+    /** 获取ExtraJson。 */
     public String getExtraJson() {
         return extraJson;
     }
 
-    public void setExtraJson(String extraJson) {
-        this.extraJson = extraJson;
+    /** 设置ExtraJson。 */
+    public void setExtraJson(String extraJsonValue) {
+        this.extraJson = extraJsonValue;
     }
 
+    /** 获取CreatedBy。 */
     public Long getCreatedBy() {
         return createdBy;
     }
 
-    public void setCreatedBy(Long createdBy) {
-        this.createdBy = createdBy;
+    /** 设置CreatedBy。 */
+    public void setCreatedBy(Long createdByValue) {
+        this.createdBy = createdByValue;
     }
 
+    /** 获取ApprovedBy。 */
     public Long getApprovedBy() {
         return approvedBy;
     }
 
-    public void setApprovedBy(Long approvedBy) {
-        this.approvedBy = approvedBy;
+    /** 设置ApprovedBy。 */
+    public void setApprovedBy(Long approvedByValue) {
+        this.approvedBy = approvedByValue;
     }
 
+    /** 获取ApprovedAt。 */
     public LocalDateTime getApprovedAt() {
         return approvedAt;
     }
 
-    public void setApprovedAt(LocalDateTime approvedAt) {
-        this.approvedAt = approvedAt;
+    /** 设置ApprovedAt。 */
+    public void setApprovedAt(LocalDateTime approvedAtValue) {
+        this.approvedAt = approvedAtValue;
     }
 
+    /** 获取CreatedAt。 */
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
 
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
+    /** 设置CreatedAt。 */
+    public void setCreatedAt(LocalDateTime createdAtValue) {
+        this.createdAt = createdAtValue;
     }
 
+    /** 获取UpdatedAt。 */
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
     }
 
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
+    /** 设置UpdatedAt。 */
+    public void setUpdatedAt(LocalDateTime updatedAtValue) {
+        this.updatedAt = updatedAtValue;
     }
 }

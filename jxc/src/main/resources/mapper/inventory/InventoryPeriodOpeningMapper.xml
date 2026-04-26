@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.inventory.infrastructure.persistence.mapper.InventoryPeriodOpeningMapper">
+
+    <resultMap id="InventoryPeriodOpeningDOResultMap" type="com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryPeriodOpeningDO">
+        <id property="id" column="id"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="documentCode" column="document_code"/>
+        <result property="warehouseName" column="warehouse_name"/>
+        <result property="periodType" column="period_type"/>
+        <result property="periodStartDate" column="period_start_date"/>
+        <result property="periodEndDate" column="period_end_date"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="status" column="status"/>
+        <result property="workflowProcessCode" column="workflow_process_code"/>
+        <result property="workflowDefinitionKey" column="workflow_definition_key"/>
+        <result property="workflowDefinitionId" column="workflow_definition_id"/>
+        <result property="workflowInstanceId" column="workflow_instance_id"/>
+        <result property="workflowTaskId" column="workflow_task_id"/>
+        <result property="workflowTaskName" column="workflow_task_name"/>
+        <result property="workflowStatus" column="workflow_status"/>
+        <result property="pendingOperation" column="pending_operation"/>
+        <result property="totalQuantity" column="total_quantity"/>
+        <result property="totalAmount" column="total_amount"/>
+        <result property="remark" column="remark"/>
+        <result property="rejectionReason" column="rejection_reason"/>
+        <result property="createdBy" column="created_by"/>
+        <result property="approvedBy" column="approved_by"/>
+        <result property="approvedAt" column="approved_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="InventoryPeriodOpeningColumns">
+        id, scope_type, scope_id, document_code, warehouse_name, period_type, period_start_date, period_end_date,
+        source_type, status, workflow_process_code, workflow_definition_key, workflow_definition_id,
+        workflow_instance_id, workflow_task_id, workflow_task_name, workflow_status, pending_operation,
+        total_quantity, total_amount, remark, rejection_reason, created_by, approved_by, approved_at, created_at, updated_at
+    </sql>
+
+    <select id="selectByScopeOrdered" resultMap="InventoryPeriodOpeningDOResultMap">
+        select
+        <include refid="InventoryPeriodOpeningColumns"/>
+        from inventory_period_opening
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+        order by period_start_date desc, id desc
+    </select>
+
+    <select id="selectByScopeAndId" resultMap="InventoryPeriodOpeningDOResultMap">
+        select
+        <include refid="InventoryPeriodOpeningColumns"/>
+        from inventory_period_opening
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and id = #{id}
+    </select>
+
+    <select id="selectByPeriod" resultMap="InventoryPeriodOpeningDOResultMap">
+        select
+        <include refid="InventoryPeriodOpeningColumns"/>
+        from inventory_period_opening
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and warehouse_name = #{warehouseName}
+          and period_type = #{periodType}
+          and period_start_date = #{periodStartDate}
+        order by id desc
+        limit 1
+    </select>
+</mapper>

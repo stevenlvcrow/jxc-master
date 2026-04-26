@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+/** 系统用户命令模型，承载Create用户命令写操作参数。 */
 public record CreateUserCommand(
         @NotBlank(message = "用户名不能为空")
         @Size(max = 32, message = "用户名长度不能超过32")

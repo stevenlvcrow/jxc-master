@@ -1,13 +1,5 @@
 package com.boboboom.jxc.item.interfaces.rest;
 
-import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
-import com.boboboom.jxc.item.application.service.SupplierApplicationService;
-import com.boboboom.jxc.item.application.service.SupplierApplicationService.IdPayload;
-import com.boboboom.jxc.item.application.service.SupplierApplicationService.PageData;
-import com.boboboom.jxc.item.application.service.SupplierApplicationService.SupplierDetailResponse;
-import com.boboboom.jxc.item.application.service.SupplierApplicationService.SupplierListRow;
-import com.boboboom.jxc.item.interfaces.rest.request.SupplierCreateRequest;
-import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,12 +11,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Validated
-@RestController
-@RequestMapping("/api/items/suppliers")
+import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.item.application.service.SupplierApplicationService;
+import com.boboboom.jxc.item.application.service.SupplierApplicationService.IdPayload;
+import com.boboboom.jxc.item.application.service.SupplierApplicationService.PageData;
+import com.boboboom.jxc.item.application.service.SupplierApplicationService.SupplierDetailResponse;
+import com.boboboom.jxc.item.application.service.SupplierApplicationService.SupplierListRow;
+import com.boboboom.jxc.item.interfaces.rest.request.SupplierCreateRequest;
+
+import jakarta.validation.Valid;
+
 /**
  * 供应商管理接口，负责供应商列表、详情、新建和修改。
  */
+@Validated
+@RestController
+@RequestMapping("/api/items/suppliers")
 public class SupplierController {
 
     private final SupplierApplicationService supplierApplicationService;
@@ -32,10 +34,10 @@ public class SupplierController {
     /**
      * 构造供应商管理接口。
      *
-     * @param supplierApplicationService 供应商服务
+     * @param supplierApplicationServiceValue 供应商服务
      */
-    public SupplierController(SupplierApplicationService supplierApplicationService) {
-        this.supplierApplicationService = supplierApplicationService;
+    public SupplierController(SupplierApplicationService supplierApplicationServiceValue) {
+        this.supplierApplicationService = supplierApplicationServiceValue;
     }
 
     /**
@@ -67,8 +69,6 @@ public class SupplierController {
         return CodeDataResponse.ok(supplierApplicationService.list(pageNo, pageSize, supplierInfo, status, bindStatus, source, supplyRelation, treeNode, orgId));
     }
 
-    @PostMapping
-    @PreAuthorize("@requestPermissionGuard.authenticated()")
     /**
      * 新建供应商。
      *
@@ -76,6 +76,8 @@ public class SupplierController {
      * @param request 新增请求
      * @return 新建结果
      */
+    @PostMapping
+    @PreAuthorize("@requestPermissionGuard.authenticated()")
     public CodeDataResponse<IdPayload> create(@RequestParam(required = false) String orgId,
                                               @Valid @RequestBody SupplierCreateRequest request) {
         return CodeDataResponse.ok(supplierApplicationService.create(orgId, request));

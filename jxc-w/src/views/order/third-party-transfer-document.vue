@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { Plus, RefreshRight, Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import { useSessionStore } from '@/stores/session';
 
@@ -15,11 +14,10 @@ const orgTree = computed<TreeNode[]>(() => sessionStore.rootGroups.map((node) =>
 const query = reactive({ timeType: '调拨日期', startDate: '', endDate: '', documentCode: '', documentStatus: '', supplierOrg: '', inboundStore: '', createType: '全部', item: '', remark: '', printStatus: '全部' });
 const currentPage = ref(1);
 const pageSize = ref(10);
-const tableData = ref<Row[]>([{ id: 1, documentCode: 'TP-202604-001', transferDate: '2026-04-24', documentStatus: '已提交', supplierOrg: '华东配送中心', inboundStore: '朝阳门店', amount: 980, createType: '按单调拨', creator: '张敏', createdAt: '2026-04-24 10:20:00', printStatus: '未打印', remark: '三方门店调拨' }]);
+const tableData = ref<Row[]>([]);
 const filteredRows = computed(() => tableData.value.filter((row) => (!query.documentCode || row.documentCode.includes(query.documentCode)) && (!query.documentStatus || row.documentStatus === query.documentStatus) && (query.printStatus === '全部' || row.printStatus === query.printStatus)));
 const pagedRows = computed(() => filteredRows.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value));
 const reset = () => Object.assign(query, { timeType: '调拨日期', startDate: '', endDate: '', documentCode: '', documentStatus: '', supplierOrg: '', inboundStore: '', createType: '全部', item: '', remark: '', printStatus: '全部' });
-const action = (name: string) => ElMessage.info(`${name}功能待接入`);
 </script>
 
 <template>
@@ -38,9 +36,9 @@ const action = (name: string) => ElMessage.info(`${name}功能待接入`);
       <el-form-item label="打印状态"><el-select v-model="query.printStatus" style="width:120px"><el-option v-for="x in printOptions" :key="x" :label="x" :value="x" /></el-select></el-form-item>
       <el-form-item><el-button type="primary" @click="currentPage=1"><el-icon><Search /></el-icon>查询</el-button><el-button @click="reset"><el-icon><RefreshRight /></el-icon>重置</el-button></el-form-item>
     </CommonQuerySection>
-    <div class="table-toolbar"><el-button type="primary" @click="action('新增-按单调拨')"><el-icon><Plus /></el-icon>新增-按单调拨</el-button></div>
+    <div class="table-toolbar"><el-button type="primary" disabled><el-icon><Plus /></el-icon>新增-按单调拨</el-button></div>
     <el-table :data="pagedRows" border stripe class="erp-table" :fit="false" height="460">
-      <el-table-column type="index" label="序号" width="56" fixed="left" /><el-table-column prop="documentCode" label="单据编号" min-width="150" fixed="left" /><el-table-column prop="transferDate" label="调拨日期" min-width="120" /><el-table-column prop="documentStatus" label="单据状态" min-width="100" /><el-table-column prop="supplierOrg" label="供货机构" min-width="140" /><el-table-column prop="inboundStore" label="调入门店" min-width="130" /><el-table-column label="金额" min-width="110" align="right"><template #default="{ row }">{{ row.amount.toFixed(2) }}</template></el-table-column><el-table-column prop="createType" label="创建类型" min-width="110" /><el-table-column prop="creator" label="创建人" min-width="100" /><el-table-column prop="createdAt" label="创建日期" min-width="170" /><el-table-column prop="printStatus" label="打印状态" min-width="100" /><el-table-column prop="remark" label="备注" min-width="160" /><el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button type="primary" link @click="action(`查看：${row.documentCode}`)">查看</el-button></template></el-table-column>
+      <el-table-column type="index" label="序号" width="56" fixed="left" /><el-table-column prop="documentCode" label="单据编号" min-width="150" fixed="left" /><el-table-column prop="transferDate" label="调拨日期" min-width="120" /><el-table-column prop="documentStatus" label="单据状态" min-width="100" /><el-table-column prop="supplierOrg" label="供货机构" min-width="140" /><el-table-column prop="inboundStore" label="调入门店" min-width="130" /><el-table-column label="金额" min-width="110" align="right"><template #default="{ row }">{{ row.amount.toFixed(2) }}</template></el-table-column><el-table-column prop="createType" label="创建类型" min-width="110" /><el-table-column prop="creator" label="创建人" min-width="100" /><el-table-column prop="createdAt" label="创建日期" min-width="170" /><el-table-column prop="printStatus" label="打印状态" min-width="100" /><el-table-column prop="remark" label="备注" min-width="160" />
     </el-table>
     <div class="table-pagination"><el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :total="filteredRows.length" :page-sizes="[10,20,50]" background small layout="total, sizes, prev, pager, next, jumper" /></div>
   </section>

@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import type { UploadUserFile } from 'element-plus';
-import type { ComponentPublicInstance } from 'vue';
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, type UploadUserFile } from 'element-plus';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, type ComponentPublicInstance } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
   type CreateSupplierPayload,

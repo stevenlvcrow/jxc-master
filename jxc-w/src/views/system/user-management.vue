@@ -86,6 +86,7 @@ const createForm = reactive({
   realName: '',
   phone: '',
   status: 'ENABLED',
+  groupIds: [] as number[],
 });
 
 const queryForm = reactive({
@@ -101,17 +102,30 @@ const roleTypeScopeMap: Record<string, string> = {
   STORE: 'STORE',
 };
 const currentOrgId = computed(() => sessionStore.currentOrgId || undefined);
+const isPlatformContext = computed(() => sessionStore.platformAdminMode || !currentOrgId.value);
 
 const roleOptions = computed(() => roles.value.map((item) => ({
   label: `${item.roleName}（${item.roleCode}）`,
   value: item.id,
 })));
-const userCodePreview = computed(() => {
-  const mnemonic = buildMnemonicCode(createForm.realName).toLowerCase();
-  const phone = createForm.phone.trim();
-  const suffix = phone.length <= 4 ? phone : phone.slice(-4);
-  return `${mnemonic}${suffix}`;
-});
+const ROLE_PREVIEW_LIMIT = 2;
+const userCodePreview = ref('');
+let userCodePreviewRequestId = 0;
+
+watch(
+  () => [createForm.realName, createForm.phone] as const,
+  async ([realName, phone]) => {
+    const requestId = ++userCodePreviewRequestId;
+    const mnemonic = (await buildMnemonicCode(realName)).toLowerCase();
+    if (requestId !== userCodePreviewRequestId) {
+      return;
+    }
+    const normalizedPhone = phone.trim();
+    const suffix = normalizedPhone.length <= 4 ? normalizedPhone : normalizedPhone.slice(-4);
+    userCodePreview.value = `${mnemonic}${suffix}`;
+  },
+  { immediate: true },
+);
 const userDialogTitle = computed(() => (editingUser.value ? '编辑用户' : '新增用户'));
 const pagedUsers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
@@ -122,6 +136,7 @@ const groupScopeOptions = computed(() => groups.value.map((group) => ({
   value: group.id,
 })));
 const groupNameMap = computed(() => new Map(groups.value.map((group) => [group.id, group.groupName])));
+const groupMemberRole = computed(() => roles.value.find((role) => role.roleCode === 'GROUP_MEMBER' && role.roleType === 'GROUP'));
 const storeScopeOptions = computed(() => stores.value.map((store) => ({
   label: `${groupNameMap.value.get(store.groupId) ?? '集团'} / ${store.storeName}（${store.storeCode}）`,
   value: store.id,
@@ -139,6 +154,9 @@ const formatDateTime = (value?: string | null) => {
   const [, year, month, day, hour, minute, second] = match;
   return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
 };
+const formatRoleDisplay = (role: RoleAssignment) => `${role.roleName}${role.scopeName ? ` / ${role.scopeName}` : ''}`;
+const getPreviewRoles = (userRoles: RoleAssignment[]) => userRoles.slice(0, ROLE_PREVIEW_LIMIT);
+const getRemainingRoleCount = (userRoles: RoleAssignment[]) => Math.max(userRoles.length - ROLE_PREVIEW_LIMIT, 0);
 const buildCopySourceStoreOptions = (usersToScan: UserAdminItem[]) => {
   const seen = new Map<number, RoleAssignment>();
   usersToScan.forEach((user) => {
@@ -209,12 +227,16 @@ const resetCreateForm = () => {
   createForm.realName = '';
   createForm.phone = '';
   createForm.status = enabledStatus.value;
+  createForm.groupIds = [];
   editingUser.value = null;
 };
 
 const openCreateDialog = () => {
   editingUser.value = null;
   resetCreateForm();
+  if (isPlatformContext.value) {
+    void ensureManagedScopesLoaded();
+  }
   createDialogVisible.value = true;
 };
 
@@ -223,6 +245,10 @@ const openEditDialog = (row: UserAdminItem) => {
   createForm.realName = row.realName;
   createForm.phone = row.phone;
   createForm.status = row.status;
+  createForm.groupIds = row.groups?.map((group) => group.groupId) ?? [];
+  if (isPlatformContext.value) {
+    void ensureManagedScopesLoaded();
+  }
   createDialogVisible.value = true;
 };
 
@@ -274,9 +300,17 @@ const submitUserForm = async () => {
     };
     if (editingUser.value) {
       await updateAdminUserApi(editingUser.value.id, payload);
+      if (isPlatformContext.value) {
+        await savePlatformUserGroups(editingUser.value);
+      }
       ElMessage.success('用户更新成功');
     } else {
-      await createAdminUserApi(payload, currentOrgId.value);
+      const created = await createAdminUserApi(payload, currentOrgId.value);
+      if (isPlatformContext.value && createForm.groupIds.length) {
+        await savePlatformUserGroups({
+          id: created.id,
+        });
+      }
       ElMessage.success('新增用户成功');
     }
     createDialogVisible.value = false;
@@ -285,6 +319,23 @@ const submitUserForm = async () => {
   } finally {
     submitting.value = false;
   }
+};
+
+const savePlatformUserGroups = async (target: Pick<UserAdminItem, 'id'>) => {
+  if (!isPlatformContext.value) {
+    return;
+  }
+  if (!groupMemberRole.value) {
+    ElMessage.warning('平台缺少集团成员角色，无法划拨集团');
+    return;
+  }
+  const selectedGroupIds = Array.from(new Set(createForm.groupIds));
+  const groupAssignments = selectedGroupIds.map((groupId) => ({
+    roleId: groupMemberRole.value!.id,
+    scopeType: 'GROUP',
+    scopeId: groupId,
+  }));
+  await assignAdminUserRolesApi(target.id, dedupeAssignments(groupAssignments));
 };
 
 const handleDeleteUser = async (row: UserAdminItem) => {
@@ -680,18 +731,52 @@ watch(
         <el-table-column prop="username" label="用户编码" min-width="160" />
         <el-table-column prop="realName" label="姓名" min-width="140" />
         <el-table-column prop="phone" label="手机号" min-width="140" />
-        <el-table-column label="拥有角色" min-width="280">
+        <el-table-column v-if="isPlatformContext" label="所属集团" min-width="220">
           <template #default="{ row }">
-            <el-space wrap>
+            <el-space v-if="row.groups?.length" wrap>
               <el-tag
-                v-for="role in row.roles"
-                :key="`${role.roleId}-${role.scopeType}-${role.scopeId ?? 'null'}`"
+                v-for="group in row.groups"
+                :key="group.groupId"
                 size="small"
               >
-                {{ role.roleName }}{{ role.scopeName ? ` / ${role.scopeName}` : '' }}
+                {{ group.groupName }}
               </el-tag>
-              <span v-if="!row.roles.length">-</span>
             </el-space>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="拥有角色" min-width="320">
+          <template #default="{ row }">
+            <div v-if="row.roles.length" class="user-role-cell">
+              <el-tag
+                v-for="role in getPreviewRoles(row.roles)"
+                :key="`${role.roleId}-${role.scopeType}-${role.scopeId ?? 'null'}`"
+                size="small"
+                class="user-role-cell__tag"
+              >
+                {{ formatRoleDisplay(role) }}
+              </el-tag>
+              <el-tooltip
+                v-if="getRemainingRoleCount(row.roles) > 0"
+                placement="top-start"
+              >
+                <template #content>
+                  <div class="user-role-tooltip">
+                    <div
+                      v-for="role in row.roles"
+                      :key="`${role.roleId}-${role.scopeType}-${role.scopeId ?? 'null'}-tooltip`"
+                      class="user-role-tooltip__item"
+                    >
+                      {{ formatRoleDisplay(role) }}
+                    </div>
+                  </div>
+                </template>
+                <el-tag size="small" type="info" effect="plain" class="user-role-cell__tag">
+                  +{{ getRemainingRoleCount(row.roles) }}
+                </el-tag>
+              </el-tooltip>
+            </div>
+            <span v-else>-</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="110">
@@ -751,6 +836,24 @@ watch(
               :key="option.itemCode"
               :label="option.itemLabel"
               :value="option.itemCode"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="isPlatformContext" label="所属集团">
+          <el-select
+            v-model="createForm.groupIds"
+            multiple
+            filterable
+            clearable
+            :loading="scopeLoading"
+            placeholder="请选择集团，可多选"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="item in groupScopeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
             />
           </el-select>
         </el-form-item>
@@ -937,3 +1040,27 @@ watch(
     </el-dialog>
   </div>
 </template>
+
+<style scoped lang="scss">
+.user-role-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.user-role-cell__tag {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-role-tooltip {
+  max-width: 420px;
+}
+
+.user-role-tooltip__item {
+  line-height: 1.6;
+  word-break: break-all;
+}
+</style>
