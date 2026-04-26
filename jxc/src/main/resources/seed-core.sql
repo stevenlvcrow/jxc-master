@@ -411,12 +411,12 @@ SELECT 'GROUP',
        'DRAFT',
        0,
        '[
-  {"nodeKey":"start_node","nodeName":"开始","x":88,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"START","conditionExpression":"[{\"to\":\"business_fill\",\"expression\":\"\"}]","triggerActions":[]},
-  {"nodeKey":"business_fill","nodeName":"业务填报","x":340,"y":76,"approverRoleCode":"SALESMAN","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"NORMAL","conditionExpression":"[{\"to\":\"finance_approval\",\"expression\":\"\"}]","triggerActions":["CREATE","UPDATE","DELETE"]},
-  {"nodeKey":"finance_approval","nodeName":"财务审批","x":632,"y":76,"approverRoleCode":"FINANCE","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"CONDITION","conditionExpression":"[{\"to\":\"success_node\",\"expression\":\"$.result==true\"},{\"to\":\"fail_node\",\"expression\":\"$.result==false\"}]","triggerActions":[]},
-  {"nodeKey":"success_node","nodeName":"成功","x":924,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"SUCCESS","conditionExpression":"[{\"to\":\"end_node\",\"expression\":\"\"}]","triggerActions":[]},
-  {"nodeKey":"fail_node","nodeName":"失败","x":632,"y":324,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"FAIL","conditionExpression":"[{\"to\":\"end_node\",\"expression\":\"\"}]","triggerActions":[]},
-  {"nodeKey":"end_node","nodeName":"结束","x":722,"y":324,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"END","conditionExpression":"","triggerActions":[]}
+  {"nodeKey":"start_node","nodeName":"开始","x":88,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"START","conditionExpression":"[{\"to\":\"node_2\",\"expression\":\"\"}]","triggerActions":[]},
+  {"nodeKey":"node_2","nodeName":"数据填报","x":302,"y":75,"approverRoleCode":"SALESMAN","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"NORMAL","conditionExpression":"[{\"to\":\"node_3\",\"expression\":\"\"}]","triggerActions":[]},
+  {"nodeKey":"node_3","nodeName":"财务审核","x":514,"y":75,"approverRoleCode":"FINANCE","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"CONDITION","conditionExpression":"[{\"to\":\"node_4\",\"expression\":\"$.result==true\"},{\"to\":\"node_5\",\"expression\":\"$.result==false\"}]","triggerActions":[]},
+  {"nodeKey":"node_4","nodeName":"成功","x":764,"y":100,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"SUCCESS","conditionExpression":"[{\"to\":\"node_6\",\"expression\":\"\"}]","triggerActions":[]},
+  {"nodeKey":"node_5","nodeName":"失败","x":521,"y":280,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"FAIL","conditionExpression":"[{\"to\":\"node_2\",\"expression\":\"\"}]","triggerActions":[]},
+  {"nodeKey":"node_6","nodeName":"结束","x":978,"y":100,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"END","conditionExpression":"","triggerActions":[]}
 ]',
        NULL,
        NULL

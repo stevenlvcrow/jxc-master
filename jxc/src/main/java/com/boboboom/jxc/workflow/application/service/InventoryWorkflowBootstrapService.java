@@ -83,6 +83,28 @@ public class InventoryWorkflowBootstrapService {
         }
     }
 
+    /**
+     * 删除并重建库存单据默认流程配置。
+     *
+     * @param groupId    集团 ID
+     * @param operatorId 操作人 ID
+     */
+    @Transactional
+    public void rebuildDefaults(Long groupId, Long operatorId) {
+        if (groupId == null) {
+            return;
+        }
+        for (WorkflowProcessSeed seed : EXTRA_PROCESS_SEEDS) {
+            WorkflowProcessRegistryDO registry = ensureProcessRegistry(groupId, operatorId, seed.processCode(), seed.businessName());
+            rebuildDefaultWorkflowConfig(groupId, operatorId, registry, seed.businessName());
+        }
+
+        for (InventoryDocumentType type : InventoryDocumentType.workflowTypes()) {
+            WorkflowProcessRegistryDO registry = ensureProcessRegistry(groupId, operatorId, type.getBusinessCode(), type.getBusinessName() + "流程");
+            rebuildDefaultWorkflowConfig(groupId, operatorId, registry, type.getBusinessName() + "流程");
+        }
+    }
+
     /** 审批流程配置类，注册框架组件和运行参数。 */
     @Transactional
     public void ensureDefaultWorkflowConfig(Long groupId,
@@ -98,29 +120,43 @@ public class InventoryWorkflowBootstrapService {
                 registry.getProcessCode(),
                 DEFAULT_WORKFLOW_CODE
         ).orElse(null);
+        if (existing != null && requiresDefaultWorkflowRefresh(existing)) {
+            workflowDefinitionConfigRepository.deleteByScopeBusinessAndWorkflow(
+                    SCOPE_GROUP,
+                    groupId,
+                    registry.getProcessCode(),
+                    DEFAULT_WORKFLOW_CODE
+            );
+            existing = null;
+        }
         if (existing == null) {
-            WorkflowDefinitionConfigDO config = new WorkflowDefinitionConfigDO();
-            config.setScopeType(SCOPE_GROUP);
-            config.setScopeId(groupId);
-            config.setBusinessCode(registry.getProcessCode());
-            config.setWorkflowCode(DEFAULT_WORKFLOW_CODE);
-            config.setWorkflowName(StringUtils.hasText(workflowName) ? workflowName : DEFAULT_WORKFLOW_NAME);
-            config.setNodeConfigJson(DEFAULT_NODE_CONFIG_JSON);
-            config.setStatus(draftStatus());
-            config.setVersionNo(0);
-            config.setCreatedBy(operatorId);
-            config.setUpdatedBy(operatorId);
+            WorkflowDefinitionConfigDO config = buildDefaultConfig(groupId, operatorId, registry.getProcessCode(), workflowName);
             workflowDefinitionConfigRepository.save(config);
             publishDefaultConfig(config, operatorId);
-        } else if (!publishedStatus().equals(existing.getStatus())
-                || !StringUtils.hasText(existing.getProcessDefinitionKey())
-                || !StringUtils.hasText(existing.getProcessDefinitionId())
-                || requiresDefaultWorkflowRefresh(existing.getNodeConfigJson())) {
-            existing.setWorkflowName(StringUtils.hasText(workflowName) ? workflowName : DEFAULT_WORKFLOW_NAME);
-            existing.setNodeConfigJson(DEFAULT_NODE_CONFIG_JSON);
-            existing.setUpdatedBy(operatorId);
-            publishDefaultConfig(existing, operatorId);
         }
+        bindDefaultTemplate(registry, operatorId);
+    }
+
+    private void rebuildDefaultWorkflowConfig(Long groupId,
+                                              Long operatorId,
+                                              WorkflowProcessRegistryDO registry,
+                                              String workflowName) {
+        if (isInvalidDefaultWorkflowRequest(groupId, registry)) {
+            return;
+        }
+        workflowDefinitionConfigRepository.deleteByScopeBusinessAndWorkflow(
+                SCOPE_GROUP,
+                groupId,
+                registry.getProcessCode(),
+                DEFAULT_WORKFLOW_CODE
+        );
+        WorkflowDefinitionConfigDO config = buildDefaultConfig(groupId, operatorId, registry.getProcessCode(), workflowName);
+        workflowDefinitionConfigRepository.save(config);
+        publishDefaultConfig(config, operatorId);
+        bindDefaultTemplate(registry, operatorId);
+    }
+
+    private void bindDefaultTemplate(WorkflowProcessRegistryDO registry, Long operatorId) {
         if (!DEFAULT_WORKFLOW_CODE.equals(trimToNull(registry.getTemplateId()))) {
             registry.setTemplateId(DEFAULT_WORKFLOW_CODE);
             registry.setUpdatedBy(operatorId);
@@ -130,6 +166,21 @@ public class InventoryWorkflowBootstrapService {
 
     private boolean isInvalidDefaultWorkflowRequest(Long groupId, WorkflowProcessRegistryDO registry) {
         return groupId == null || registry == null || !StringUtils.hasText(registry.getProcessCode());
+    }
+
+    private WorkflowDefinitionConfigDO buildDefaultConfig(Long groupId, Long operatorId, String processCode, String workflowName) {
+        WorkflowDefinitionConfigDO config = new WorkflowDefinitionConfigDO();
+        config.setScopeType(SCOPE_GROUP);
+        config.setScopeId(groupId);
+        config.setBusinessCode(processCode);
+        config.setWorkflowCode(DEFAULT_WORKFLOW_CODE);
+        config.setWorkflowName(StringUtils.hasText(workflowName) ? workflowName : DEFAULT_WORKFLOW_NAME);
+        config.setNodeConfigJson(DEFAULT_NODE_CONFIG_JSON);
+        config.setStatus(draftStatus());
+        config.setVersionNo(0);
+        config.setCreatedBy(operatorId);
+        config.setUpdatedBy(operatorId);
+        return config;
     }
 
     private WorkflowProcessRegistryDO ensureProcessRegistry(Long groupId,
@@ -188,6 +239,18 @@ public class InventoryWorkflowBootstrapService {
         workflowDefinitionConfigRepository.update(config);
     }
 
+    private boolean requiresDefaultWorkflowRefresh(WorkflowDefinitionConfigDO existing) {
+        if (existing == null) {
+            return true;
+        }
+        if (!publishedStatus().equals(existing.getStatus())
+                || !StringUtils.hasText(existing.getProcessDefinitionKey())
+                || !StringUtils.hasText(existing.getProcessDefinitionId())) {
+            return true;
+        }
+        return requiresDefaultWorkflowRefresh(existing.getNodeConfigJson());
+    }
+
     private boolean requiresDefaultWorkflowRefresh(String nodeConfigJson) {
         if (!StringUtils.hasText(nodeConfigJson)) {
             return true;
@@ -198,12 +261,14 @@ public class InventoryWorkflowBootstrapService {
                 return true;
             }
             for (JsonNode node : nodes) {
-                if (!"finance_approval".equals(trimToNull(node.path("nodeKey").asText(null)))) {
+                if (!"node_3".equals(trimToNull(node.path("nodeKey").asText(null)))) {
                     continue;
                 }
                 String nodeType = trimToNull(node.path("nodeType").asText(null));
+                String nodeName = trimToNull(node.path("nodeName").asText(null));
                 String expression = trimToNull(node.path("conditionExpression").asText(null));
                 return !"CONDITION".equalsIgnoreCase(nodeType)
+                        || !"财务审核".equals(nodeName)
                         || !StringUtils.hasText(expression)
                         || !expression.contains(WorkflowBpmnModelSupport.CONDITION_TRUE_EXPRESSION)
                         || !expression.contains(WorkflowBpmnModelSupport.CONDITION_FALSE_EXPRESSION);

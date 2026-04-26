@@ -52,6 +52,7 @@ const selectedBusinesses = ref<WorkflowProcessItem[]>([]);
 const bindStoreMode = ref<'single' | 'batch'>('single');
 const preferredBusinessCode = computed(() => String(route.query.businessCode ?? '').trim());
 const preferredWorkflowCode = computed(() => String(route.query.workflowCode ?? '').trim());
+const activeBusinessCode = ref('');
 
 const filteredStoreOptions = computed(() => {
   const kw = bindStoreSearch.value.trim().toLowerCase();
@@ -112,26 +113,57 @@ const formatStoreNames = (storeNames?: string[]) => {
 
 const syncExpandedRows = () => {
   const routeBusinessCode = String(route.query.businessCode ?? '').trim();
+  const targetBusinessCode = routeBusinessCode || activeBusinessCode.value;
   if (!rows.value.length) {
     expandedRowKeys.value = [];
+    activeBusinessCode.value = '';
     return;
   }
-  if (!routeBusinessCode) {
+  if (!targetBusinessCode) {
     expandedRowKeys.value = [rows.value[0].id];
+    activeBusinessCode.value = rows.value[0].process_code;
     return;
   }
-  const matched = rows.value.find((item) => item.process_code === routeBusinessCode);
-  expandedRowKeys.value = matched ? [matched.id] : [rows.value[0].id];
+  const matched = rows.value.find((item) => item.process_code === targetBusinessCode);
+  if (matched) {
+    expandedRowKeys.value = [matched.id];
+    activeBusinessCode.value = matched.process_code;
+    return;
+  }
+  expandedRowKeys.value = [rows.value[0].id];
+  activeBusinessCode.value = rows.value[0].process_code;
 };
 
-const toggleExpandedRow = (business: WorkflowProcessItem) => {
+const syncRouteContext = async (businessCode?: string, workflowCode?: string) => {
+  const nextBusinessCode = String(businessCode ?? '').trim();
+  const nextWorkflowCode = String(workflowCode ?? '').trim();
+  const currentBusinessCode = String(route.query.businessCode ?? '').trim();
+  const currentWorkflowCode = String(route.query.workflowCode ?? '').trim();
+  if (nextBusinessCode === currentBusinessCode && nextWorkflowCode === currentWorkflowCode) {
+    return;
+  }
+  await router.replace({
+    path: route.path,
+    query: {
+      ...route.query,
+      businessCode: nextBusinessCode || undefined,
+      workflowCode: nextWorkflowCode || undefined,
+    },
+  });
+};
+
+const toggleExpandedRow = async (business: WorkflowProcessItem) => {
   const isExpanded = expandedRowKeys.value.includes(business.id);
   expandedRowKeys.value = isExpanded ? [] : [business.id];
+  activeBusinessCode.value = isExpanded ? '' : business.process_code;
+  await syncRouteContext(isExpanded ? '' : business.process_code, preferredWorkflowCode.value);
 };
 
-const handleExpandChange = (business: WorkflowProcessItem, expandedRows: WorkflowProcessItem[]) => {
+const handleExpandChange = async (business: WorkflowProcessItem, expandedRows: WorkflowProcessItem[]) => {
   const isExpanded = expandedRows.some((item) => item.id === business.id);
   expandedRowKeys.value = isExpanded ? [business.id] : [];
+  activeBusinessCode.value = isExpanded ? business.process_code : '';
+  await syncRouteContext(isExpanded ? business.process_code : '', preferredWorkflowCode.value);
 };
 
 const resetProcessForm = () => {
@@ -251,13 +283,21 @@ const loadStoreOptions = async () => {
 };
 
 const openWorkflowConfig = (payload?: { businessCode?: string; copyFromWorkflowCode?: string; viewWorkflowCode?: string }) => {
+  const businessCode = payload?.businessCode ? String(payload.businessCode).trim() : '';
+  const workflowCode = payload?.viewWorkflowCode
+    ? String(payload.viewWorkflowCode).trim()
+    : payload?.copyFromWorkflowCode
+      ? String(payload.copyFromWorkflowCode).trim()
+      : '';
+  activeBusinessCode.value = businessCode;
   router.push({
     path: '/group/workflow-config',
-    query: payload?.businessCode
+    query: businessCode
       ? {
-          businessCode: payload.businessCode,
-          copyFromWorkflowCode: payload.copyFromWorkflowCode,
-          viewWorkflowCode: payload.viewWorkflowCode,
+          businessCode,
+          workflowCode: workflowCode || undefined,
+          copyFromWorkflowCode: payload?.copyFromWorkflowCode,
+          viewWorkflowCode: payload?.viewWorkflowCode,
         }
       : undefined,
   });
@@ -278,6 +318,8 @@ const publishConfig = async (business: WorkflowProcessItem, row: WorkflowPublish
   }
   publishingConfigId.value = row.id;
   try {
+    activeBusinessCode.value = business.process_code;
+    await syncRouteContext(business.process_code, row.workflowCode);
     await publishWorkflowConfigApi({
       orgId: sessionStore.currentOrgId,
       businessCode: business.process_code,
@@ -306,6 +348,8 @@ const removeConfig = async (business: WorkflowProcessItem, row: WorkflowPublishH
   }
   deletingConfigId.value = row.id;
   try {
+    activeBusinessCode.value = business.process_code;
+    await syncRouteContext(business.process_code);
     await deleteWorkflowConfigApi(row.id, sessionStore.currentOrgId);
     ElMessage.success('流程版本删除成功');
     await loadRows();
@@ -412,7 +456,7 @@ onMounted(() => {
 });
 
 watch(
-  () => route.query.businessCode,
+  () => [route.query.businessCode, route.query.workflowCode],
   () => {
     syncExpandedRows();
   },

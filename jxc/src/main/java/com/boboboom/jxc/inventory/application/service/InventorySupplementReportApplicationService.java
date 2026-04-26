@@ -8,11 +8,13 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -43,10 +45,12 @@ import com.boboboom.jxc.inventory.domain.repository.InventoryCheckRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryDocumentRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryPeriodOpeningRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryTransactionRepository;
+import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryPeriodOpeningDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryPeriodOpeningLineDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryTransactionDO;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
 import com.boboboom.jxc.item.domain.repository.ItemProfileRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemProfileDO;
 import com.boboboom.jxc.item.interfaces.rest.request.ItemCreateRequest;
@@ -76,9 +80,12 @@ public class InventorySupplementReportApplicationService {
     private final WarehouseRepository warehouseRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final InventoryPeriodOpeningRepository inventoryPeriodOpeningRepository;
+    private final PurchaseInboundRepository purchaseInboundRepository;
     private final DataScopeAccessService dataScopeAccessService;
     private final DictionaryLookupService dictionaryLookupService;
     private final ObjectMapper objectMapper;
+    private final InventoryDocumentPermissionService inventoryDocumentPermissionService;
+    private final PurchaseInboundPermissionService purchaseInboundPermissionService;
 
     /** 库存补充报表业务服务，负责预警、周转、跨组织调拨等扩展报表计算。 */
     public InventorySupplementReportApplicationService(OrgScopeService orgScopeServiceValue,
@@ -90,9 +97,12 @@ public class InventorySupplementReportApplicationService {
                                                        WarehouseRepository warehouseRepositoryValue,
                                                        InventoryTransactionRepository inventoryTransactionRepositoryValue,
                                                        InventoryPeriodOpeningRepository inventoryPeriodOpeningRepositoryValue,
+                                                       PurchaseInboundRepository purchaseInboundRepositoryValue,
                                                        DataScopeAccessService dataScopeAccessServiceValue,
                                                        DictionaryLookupService dictionaryLookupServiceValue,
-                                                       ObjectMapper objectMapperValue) {
+                                                       ObjectMapper objectMapperValue,
+                                                       InventoryDocumentPermissionService inventoryDocumentPermissionServiceValue,
+                                                       PurchaseInboundPermissionService purchaseInboundPermissionServiceValue) {
         this.orgScopeService = orgScopeServiceValue;
         this.inventoryBalanceRepository = inventoryBalanceRepositoryValue;
         this.inventoryDocumentRepository = inventoryDocumentRepositoryValue;
@@ -102,9 +112,12 @@ public class InventorySupplementReportApplicationService {
         this.warehouseRepository = warehouseRepositoryValue;
         this.inventoryTransactionRepository = inventoryTransactionRepositoryValue;
         this.inventoryPeriodOpeningRepository = inventoryPeriodOpeningRepositoryValue;
+        this.purchaseInboundRepository = purchaseInboundRepositoryValue;
         this.dataScopeAccessService = dataScopeAccessServiceValue;
         this.dictionaryLookupService = dictionaryLookupServiceValue;
         this.objectMapper = objectMapperValue;
+        this.inventoryDocumentPermissionService = inventoryDocumentPermissionServiceValue;
+        this.purchaseInboundPermissionService = purchaseInboundPermissionServiceValue;
     }
 
     /** 查询滞销库存报表。 */
@@ -1776,8 +1789,10 @@ public class InventorySupplementReportApplicationService {
     private List<InventoryDocumentHeader> loadVisibleDocumentHeaders(InventoryDocumentType type, InventoryScope scope) {
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         boolean viewAll = canViewScopeData(scope, operatorId);
+        boolean canReview = type.isWorkflowEnabled()
+                && inventoryDocumentPermissionService.canReview(type, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
         return inventoryDocumentRepository.findHeadersByScopeOrdered(type, scope.scopeType(), scope.scopeId()).stream()
-                .filter(header -> viewAll || belongsToOperator(header.getCreatedBy(), header.getSalesmanUserId(), operatorId))
+                .filter(header -> viewAll || canReview || belongsToOperator(header.getCreatedBy(), header.getSalesmanUserId(), operatorId))
                 .toList();
     }
 
@@ -1786,31 +1801,50 @@ public class InventorySupplementReportApplicationService {
         if (canViewScopeData(scope, operatorId)) {
             return transactions;
         }
-        Map<String, List<InventoryDocumentHeader>> documentHeaderMap = loadVisibleDocumentHeadersByBusinessCode(scope);
+        Map<String, Set<Long>> visibleBizIds = loadVisibleBizIdsByBusinessCode(scope);
         return transactions.stream()
-                .filter(transaction -> isVisibleTransaction(transaction, documentHeaderMap, operatorId))
+                .filter(transaction -> isVisibleTransaction(transaction, visibleBizIds, operatorId))
                 .toList();
     }
 
-    private Map<String, List<InventoryDocumentHeader>> loadVisibleDocumentHeadersByBusinessCode(InventoryScope scope) {
-        Map<String, List<InventoryDocumentHeader>> result = new LinkedHashMap<>();
+    private Map<String, Set<Long>> loadVisibleBizIdsByBusinessCode(InventoryScope scope) {
+        Map<String, Set<Long>> result = new LinkedHashMap<>();
         for (InventoryDocumentType type : InventoryDocumentType.values()) {
-            result.put(type.getBusinessCode(), loadVisibleDocumentHeaders(type, scope));
-            result.put(type.getBusinessCode() + "_APPROVE", result.get(type.getBusinessCode()));
-            result.put(type.getBusinessCode() + "_CONFIRM", result.get(type.getBusinessCode()));
-            result.put(type.getBusinessCode() + "_UNAPPROVE", result.get(type.getBusinessCode()));
+            Set<Long> visibleIds = loadVisibleDocumentHeaders(type, scope).stream()
+                    .map(InventoryDocumentHeader::getId)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            result.put(type.getBusinessCode(), visibleIds);
+            result.put(type.getBusinessCode() + "_APPROVE", visibleIds);
+            result.put(type.getBusinessCode() + "_CONFIRM", visibleIds);
+            result.put(type.getBusinessCode() + "_UNAPPROVE", visibleIds);
         }
+        Set<Long> purchaseInboundIds = loadVisiblePurchaseInboundHeaders(scope).stream()
+                .map(PurchaseInboundDO::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        result.put(InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode(), purchaseInboundIds);
+        result.put(InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode() + "_APPROVE", purchaseInboundIds);
+        result.put(InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode() + "_CONFIRM", purchaseInboundIds);
+        result.put(InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode() + "_UNAPPROVE", purchaseInboundIds);
         return result;
     }
 
     private boolean isVisibleTransaction(InventoryTransactionDO transaction,
-                                         Map<String, List<InventoryDocumentHeader>> documentHeaderMap,
+                                         Map<String, Set<Long>> visibleBizIds,
                                          Long operatorId) {
         if (Objects.equals(transaction.getOperatorId(), operatorId)) {
             return true;
         }
-        List<InventoryDocumentHeader> headers = documentHeaderMap.getOrDefault(defaultIfBlank(transaction.getBizType(), ""), List.of());
-        return headers.stream().anyMatch(header -> Objects.equals(header.getId(), transaction.getBizId()));
+        return visibleBizIds.getOrDefault(defaultIfBlank(transaction.getBizType(), ""), Set.of())
+                .contains(transaction.getBizId());
+    }
+
+    private List<PurchaseInboundDO> loadVisiblePurchaseInboundHeaders(InventoryScope scope) {
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        boolean viewAll = canViewScopeData(scope, operatorId);
+        boolean canReview = purchaseInboundPermissionService.canReview(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
+        return purchaseInboundRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
+                .filter(header -> viewAll || canReview || belongsToOperator(header.getCreatedBy(), header.getSalesmanUserId(), operatorId))
+                .toList();
     }
 
     private boolean canViewScopeData(InventoryScope scope, Long operatorId) {

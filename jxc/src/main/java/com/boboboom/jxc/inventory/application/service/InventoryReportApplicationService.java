@@ -8,10 +8,12 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -71,6 +73,8 @@ public class InventoryReportApplicationService {
     private final DataScopeAccessService dataScopeAccessService;
     private final DictionaryLookupService dictionaryLookupService;
     private final ObjectMapper objectMapper;
+    private final InventoryDocumentPermissionService inventoryDocumentPermissionService;
+    private final PurchaseInboundPermissionService purchaseInboundPermissionService;
 
     /** 库存报表业务服务，负责库存查询、出入库统计和报表行组装。 */
     public InventoryReportApplicationService(OrgScopeService orgScopeServiceValue,
@@ -86,7 +90,9 @@ public class InventoryReportApplicationService {
                                              InventoryTransactionRepository inventoryTransactionRepositoryValue,
                                              DataScopeAccessService dataScopeAccessServiceValue,
                                              DictionaryLookupService dictionaryLookupServiceValue,
-                                             ObjectMapper objectMapperValue) {
+                                             ObjectMapper objectMapperValue,
+                                             InventoryDocumentPermissionService inventoryDocumentPermissionServiceValue,
+                                             PurchaseInboundPermissionService purchaseInboundPermissionServiceValue) {
         this.orgScopeService = orgScopeServiceValue;
         this.groupRepository = groupRepositoryValue;
         this.storeRepository = storeRepositoryValue;
@@ -101,6 +107,8 @@ public class InventoryReportApplicationService {
         this.dataScopeAccessService = dataScopeAccessServiceValue;
         this.dictionaryLookupService = dictionaryLookupServiceValue;
         this.objectMapper = objectMapperValue;
+        this.inventoryDocumentPermissionService = inventoryDocumentPermissionServiceValue;
+        this.purchaseInboundPermissionService = purchaseInboundPermissionServiceValue;
     }
 
     /** 查询菜品消耗出库报表。 */
@@ -651,9 +659,41 @@ public class InventoryReportApplicationService {
         if (dataScopeAccessService.canViewScopeData(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId)) {
             return transactions;
         }
+        Map<String, Set<Long>> visibleBizIds = loadVisibleBizIdsByBusinessCode(scope);
         return transactions.stream()
-                .filter(transaction -> Objects.equals(transaction.getOperatorId(), operatorId))
+                .filter(transaction -> isVisibleTransaction(transaction, visibleBizIds, operatorId))
                 .toList();
+    }
+
+    private Map<String, Set<Long>> loadVisibleBizIdsByBusinessCode(InventoryScope scope) {
+        Map<String, Set<Long>> result = new LinkedHashMap<>();
+        for (InventoryDocumentType type : InventoryDocumentType.values()) {
+            Set<Long> visibleIds = loadVisibleDocumentHeaders(type, scope).stream()
+                    .map(InventoryDocumentHeader::getId)
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+            result.put(type.getBusinessCode(), visibleIds);
+            result.put(type.getBusinessCode() + "_APPROVE", visibleIds);
+            result.put(type.getBusinessCode() + "_CONFIRM", visibleIds);
+            result.put(type.getBusinessCode() + "_UNAPPROVE", visibleIds);
+        }
+        Set<Long> purchaseInboundIds = loadVisiblePurchaseInboundHeaders(scope).stream()
+                .map(PurchaseInboundDO::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        result.put(InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode(), purchaseInboundIds);
+        result.put(InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode() + "_APPROVE", purchaseInboundIds);
+        result.put(InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode() + "_CONFIRM", purchaseInboundIds);
+        result.put(InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode() + "_UNAPPROVE", purchaseInboundIds);
+        return result;
+    }
+
+    private boolean isVisibleTransaction(InventoryTransactionDO transaction,
+                                         Map<String, Set<Long>> visibleBizIds,
+                                         Long operatorId) {
+        if (Objects.equals(transaction.getOperatorId(), operatorId)) {
+            return true;
+        }
+        return visibleBizIds.getOrDefault(defaultIfBlank(transaction.getBizType(), ""), Set.of())
+                .contains(transaction.getBizId());
     }
 
     private BigDecimal quantityByDirection(String direction, String expectedDirection, BigDecimal quantity) {
@@ -686,16 +726,19 @@ public class InventoryReportApplicationService {
     private List<PurchaseInboundDO> loadVisiblePurchaseInboundHeaders(InventoryScope scope) {
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         boolean viewAll = dataScopeAccessService.canViewScopeData(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
+        boolean canReview = purchaseInboundPermissionService.canReview(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
         return purchaseInboundRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
-                .filter(header -> viewAll || belongsToOperator(header.getCreatedBy(), header.getSalesmanUserId(), operatorId))
+                .filter(header -> viewAll || canReview || belongsToOperator(header.getCreatedBy(), header.getSalesmanUserId(), operatorId))
                 .toList();
     }
 
     private List<InventoryDocumentHeader> loadVisibleDocumentHeaders(InventoryDocumentType type, InventoryScope scope) {
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         boolean viewAll = dataScopeAccessService.canViewScopeData(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
+        boolean canReview = type.isWorkflowEnabled()
+                && inventoryDocumentPermissionService.canReview(type, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
         return inventoryDocumentRepository.findHeadersByScopeOrdered(type, scope.scopeType(), scope.scopeId()).stream()
-                .filter(header -> viewAll || belongsToOperator(header.getCreatedBy(), header.getSalesmanUserId(), operatorId))
+                .filter(header -> viewAll || canReview || belongsToOperator(header.getCreatedBy(), header.getSalesmanUserId(), operatorId))
                 .toList();
     }
 

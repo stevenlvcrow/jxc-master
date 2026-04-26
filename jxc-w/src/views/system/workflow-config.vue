@@ -1681,11 +1681,19 @@ const saveConfig = async () => {
 };
 
 const goBack = () => {
+  const businessCode = String(form.businessCode ?? '').trim();
+  const workflowCode = String(form.workflowCode ?? '').trim();
   if (window.history.length > 1) {
     router.back();
     return;
   }
-  router.push('/group/workflow-history');
+  router.push({
+    path: '/group/workflow-history',
+    query: {
+      businessCode: businessCode || undefined,
+      workflowCode: workflowCode || undefined,
+    },
+  });
 };
 
 onMounted(async () => {

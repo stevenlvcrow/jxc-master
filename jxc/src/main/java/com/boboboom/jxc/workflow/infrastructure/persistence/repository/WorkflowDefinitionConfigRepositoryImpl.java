@@ -108,4 +108,14 @@ public class WorkflowDefinitionConfigRepositoryImpl implements WorkflowDefinitio
     public void deleteById(Long id) {
         configMapper.deleteById(id);
     }
+
+    /** 按作用域、业务和流程编码删除记录。 */
+    @Override
+    public void deleteByScopeBusinessAndWorkflow(String scopeType, Long scopeId, String businessCode, String workflowCode) {
+        configMapper.delete(new LambdaQueryWrapper<WorkflowDefinitionConfigDO>()
+                .eq(WorkflowDefinitionConfigDO::getScopeType, scopeType)
+                .eq(WorkflowDefinitionConfigDO::getScopeId, scopeId)
+                .eq(WorkflowDefinitionConfigDO::getBusinessCode, businessCode)
+                .eq(WorkflowDefinitionConfigDO::getWorkflowCode, workflowCode));
+    }
 }

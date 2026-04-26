@@ -29,4 +29,6 @@ public interface WorkflowDefinitionConfigRepository {
     void update(WorkflowDefinitionConfigDO config);
 
     void deleteById(Long id);
+
+    void deleteByScopeBusinessAndWorkflow(String scopeType, Long scopeId, String businessCode, String workflowCode);
 }

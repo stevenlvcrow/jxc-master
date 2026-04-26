@@ -733,7 +733,8 @@ public class InventoryDocumentWorkflowService {
                 header.getScopeType(),
                 header.getScopeId(),
                 groupId,
-                task.getName()
+                task.getName(),
+                task.getTaskDefinitionKey()
         ).orElseThrow(() -> new BusinessException(workflowLabel + "当前审批节点未配置审批人"));
         if (!workflowActionService.matchesApprovalTarget(operatorId, header.getScopeType(), header.getScopeId(), groupId, target)) {
             throw new BusinessException("当前账号无" + workflowLabel + "当前节点审批权限");

@@ -171,6 +171,16 @@ public class WorkflowActionService {
                                                           Long scopeId,
                                                           Long groupId,
                                                           String taskName) {
+        return resolveApprovalTarget(businessCode, scopeType, scopeId, groupId, taskName, null);
+    }
+
+    /** 解析审批节点对应的审批目标。 */
+    public Optional<ApprovalTarget> resolveApprovalTarget(String businessCode,
+                                                          String scopeType,
+                                                          Long scopeId,
+                                                          Long groupId,
+                                                          String taskName,
+                                                          String taskDefinitionKey) {
         if (!StringUtils.hasText(businessCode) || !StringUtils.hasText(taskName)) {
             return Optional.empty();
         }
@@ -180,9 +190,9 @@ public class WorkflowActionService {
                 return Optional.empty();
             }
             String normalizedTaskName = trimToNull(taskName);
+            String normalizedTaskDefinitionKey = normalizeTaskDefinitionKey(taskDefinitionKey);
             for (JsonNode node : root) {
-                String nodeName = trimToNull(node.path("nodeName").asText(null));
-                if (!StringUtils.hasText(nodeName) || !nodeName.equals(normalizedTaskName)) {
+                if (!matchesTaskNode(node, normalizedTaskName, normalizedTaskDefinitionKey)) {
                     continue;
                 }
                 Long approverUserId = node.path("approverUserId").isNumber()
@@ -397,6 +407,20 @@ public class WorkflowActionService {
         return StringUtils.hasText(nodeName) && nodeName.equals(normalizedTaskName);
     }
 
+    private boolean matchesTaskNode(JsonNode node, String normalizedTaskName, String normalizedTaskDefinitionKey) {
+        if (matchesNodeName(node, normalizedTaskName)) {
+            return true;
+        }
+        if (!StringUtils.hasText(normalizedTaskDefinitionKey)) {
+            return false;
+        }
+        String nodeKey = trimToNull(node.path("nodeKey").asText(null));
+        if (!StringUtils.hasText(nodeKey)) {
+            return false;
+        }
+        return normalizedTaskDefinitionKey.equals(nodeKey);
+    }
+
     private String resolveApprovalRoleLabel(JsonNode node, Long operatorId) {
         Long approverUserId = node.path("approverUserId").isNumber()
                 ? node.path("approverUserId").asLong()
@@ -501,6 +525,17 @@ public class WorkflowActionService {
             return "";
         }
         return value.toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeTaskDefinitionKey(String taskDefinitionKey) {
+        String value = trimToNull(taskDefinitionKey);
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        if (value.startsWith("task_")) {
+            return value.substring("task_".length());
+        }
+        return value;
     }
 
     private String resolveRoleName(String roleCode) {

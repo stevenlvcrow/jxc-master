@@ -30,19 +30,16 @@ public class WorkflowBindingResolverService {
     private final WorkflowDefinitionConfigRepository definitionConfigRepository;
     private final WorkflowProcessStoreBindingRepository processStoreBindingRepository;
     private final DictionaryLookupService dictionaryLookupService;
-    private final InventoryWorkflowBootstrapService inventoryWorkflowBootstrapService;
 
     /** 审批流程服务，负责相关业务规则和流程协作。 */
     public WorkflowBindingResolverService(WorkflowProcessRegistryRepository processRegistryRepositoryValue,
                                            WorkflowDefinitionConfigRepository definitionConfigRepositoryValue,
                                            WorkflowProcessStoreBindingRepository processStoreBindingRepositoryValue,
-                                           DictionaryLookupService dictionaryLookupServiceValue,
-                                           InventoryWorkflowBootstrapService inventoryWorkflowBootstrapServiceValue) {
+                                           DictionaryLookupService dictionaryLookupServiceValue) {
         this.processRegistryRepository = processRegistryRepositoryValue;
         this.definitionConfigRepository = definitionConfigRepositoryValue;
         this.processStoreBindingRepository = processStoreBindingRepositoryValue;
         this.dictionaryLookupService = dictionaryLookupServiceValue;
-        this.inventoryWorkflowBootstrapService = inventoryWorkflowBootstrapServiceValue;
     }
 
     /**
@@ -74,9 +71,6 @@ public class WorkflowBindingResolverService {
         String workflowCode = trimToNull(registry.getTemplateId());
         if (!StringUtils.hasText(workflowCode)) {
             throw new BusinessException(workflowLabel + "尚未绑定模板，请先在流程管理中绑定模板");
-        }
-        if (InventoryWorkflowBootstrapService.DEFAULT_WORKFLOW_CODE.equals(workflowCode)) {
-            inventoryWorkflowBootstrapService.ensureDefaultWorkflowConfig(groupId, null, registry, registry.getBusinessName());
         }
         WorkflowDefinitionConfigDO config = findConfig(scopeType, scopeId, groupId, registry.getProcessCode(), workflowCode);
         if (config == null || !publishedStatus().equals(config.getStatus())) {

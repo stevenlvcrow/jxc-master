@@ -44,11 +44,13 @@ final class WorkflowBpmnModelSupport {
     private static final String CONDITION_RESULT_VARIABLE = "result";
     private static final int START_NODE_X = 88;
     private static final int DEFAULT_TOP_Y = 76;
-    private static final int BUSINESS_FILL_X = 340;
-    private static final int FINANCE_APPROVAL_X = 632;
-    private static final int SUCCESS_NODE_X = 924;
-    private static final int FAIL_NODE_Y = 324;
-    private static final int END_NODE_X = 722;
+    private static final int DATA_FILL_X = 302;
+    private static final int FINANCE_REVIEW_X = 514;
+    private static final int SUCCESS_NODE_X = 764;
+    private static final int SUCCESS_NODE_Y = 100;
+    private static final int FAIL_NODE_X = 521;
+    private static final int FAIL_NODE_Y = 280;
+    private static final int END_NODE_X = 978;
 
     private WorkflowBpmnModelSupport() {
     }
@@ -96,19 +98,19 @@ final class WorkflowBpmnModelSupport {
     static String defaultNodeConfigJson() {
         List<NodeConfig> nodes = List.of(
                 new NodeConfig("start_node", "开始", START_NODE_X, DEFAULT_TOP_Y, "", "OR", null, false, false,
-                        NODE_TYPE_START, edgeJson(List.of(new EdgeLink("business_fill", ""))), List.of()),
-                new NodeConfig("business_fill", "业务填报", BUSINESS_FILL_X, DEFAULT_TOP_Y, "SALESMAN", "OR", null, false, false,
-                        NODE_TYPE_NORMAL, edgeJson(List.of(new EdgeLink("finance_approval", ""))), List.of("CREATE", "UPDATE", "DELETE")),
-                new NodeConfig("finance_approval", "财务审批", FINANCE_APPROVAL_X, DEFAULT_TOP_Y, "FINANCE", "OR", null, false, false,
+                        NODE_TYPE_START, edgeJson(List.of(new EdgeLink("node_2", ""))), List.of()),
+                new NodeConfig("node_2", "数据填报", DATA_FILL_X, DEFAULT_TOP_Y - 1, "SALESMAN", "OR", null, false, false,
+                        NODE_TYPE_NORMAL, edgeJson(List.of(new EdgeLink("node_3", ""))), List.of()),
+                new NodeConfig("node_3", "财务审核", FINANCE_REVIEW_X, DEFAULT_TOP_Y - 1, "FINANCE", "OR", null, false, false,
                         NODE_TYPE_CONDITION, edgeJson(List.of(
-                                new EdgeLink("success_node", CONDITION_TRUE_EXPRESSION),
-                                new EdgeLink("fail_node", CONDITION_FALSE_EXPRESSION)
+                                new EdgeLink("node_4", CONDITION_TRUE_EXPRESSION),
+                                new EdgeLink("node_5", CONDITION_FALSE_EXPRESSION)
                         )), List.of()),
-                new NodeConfig("success_node", "成功", SUCCESS_NODE_X, DEFAULT_TOP_Y, "", "OR", null, false, false,
-                        NODE_TYPE_SUCCESS, edgeJson(List.of(new EdgeLink("end_node", ""))), List.of()),
-                new NodeConfig("fail_node", "失败", FINANCE_APPROVAL_X, FAIL_NODE_Y, "", "OR", null, false, false,
-                        NODE_TYPE_FAIL, edgeJson(List.of(new EdgeLink("end_node", ""))), List.of()),
-                new NodeConfig("end_node", "结束", END_NODE_X, FAIL_NODE_Y, "", "OR", null, false, false,
+                new NodeConfig("node_4", "成功", SUCCESS_NODE_X, SUCCESS_NODE_Y, "", "OR", null, false, false,
+                        NODE_TYPE_SUCCESS, edgeJson(List.of(new EdgeLink("node_6", ""))), List.of()),
+                new NodeConfig("node_5", "失败", FAIL_NODE_X, FAIL_NODE_Y, "", "OR", null, false, false,
+                        NODE_TYPE_FAIL, edgeJson(List.of(new EdgeLink("node_2", ""))), List.of()),
+                new NodeConfig("node_6", "结束", END_NODE_X, SUCCESS_NODE_Y, "", "OR", null, false, false,
                         NODE_TYPE_END, "", List.of())
         );
         String body = nodes.stream().map(WorkflowBpmnModelSupport::nodeJson).collect(Collectors.joining(",\n"));

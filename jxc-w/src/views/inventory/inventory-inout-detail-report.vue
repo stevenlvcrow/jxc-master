@@ -20,7 +20,7 @@ import {
   type ItemVO,
 } from '@/api/modules/item';
 
-type UnitType = '业务单位' | '基准单位' | '库存单位';
+type UnitType = '' | '业务单位' | '基准单位' | '库存单位';
 type QueryScheme = '系统默认方案';
 type TreeNode = {
   value: string;
@@ -111,7 +111,7 @@ const query = reactive({
   crossMonthDocument: '',
   inoutDirection: '',
   gift: '',
-  unitType: '业务单位' as UnitType,
+  unitType: '' as UnitType,
   queryScheme: '系统默认方案' as QueryScheme,
 });
 
@@ -398,7 +398,7 @@ const handleReset = async () => {
   query.crossMonthDocument = '';
   query.inoutDirection = '';
   query.gift = '';
-  query.unitType = '业务单位';
+  query.unitType = '';
   query.queryScheme = '系统默认方案';
   currentPage.value = 1;
   await fetchReport();
