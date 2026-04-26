@@ -12,15 +12,18 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.application.service.DataScopeAccessService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.identity.domain.repository.GroupRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
@@ -28,10 +31,16 @@ import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.GroupDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
 import com.boboboom.jxc.inventory.domain.repository.InventoryBalanceRepository;
+import com.boboboom.jxc.inventory.domain.repository.InventoryBatchBalanceRepository;
+import com.boboboom.jxc.inventory.domain.repository.InventoryBatchTransactionRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryDocumentRepository;
+import com.boboboom.jxc.inventory.domain.repository.InventoryTransactionRepository;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundLineRepository;
 import com.boboboom.jxc.inventory.domain.repository.PurchaseInboundRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBatchBalanceDO;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBatchTransactionDO;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryTransactionDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.PurchaseInboundLineDO;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -56,7 +65,11 @@ public class InventoryReportApplicationService {
     private final PurchaseInboundRepository purchaseInboundRepository;
     private final PurchaseInboundLineRepository purchaseInboundLineRepository;
     private final InventoryBalanceRepository inventoryBalanceRepository;
+    private final InventoryBatchBalanceRepository inventoryBatchBalanceRepository;
+    private final InventoryBatchTransactionRepository inventoryBatchTransactionRepository;
+    private final InventoryTransactionRepository inventoryTransactionRepository;
     private final DataScopeAccessService dataScopeAccessService;
+    private final DictionaryLookupService dictionaryLookupService;
     private final ObjectMapper objectMapper;
 
     /** 库存报表业务服务，负责库存查询、出入库统计和报表行组装。 */
@@ -68,7 +81,11 @@ public class InventoryReportApplicationService {
                                              PurchaseInboundRepository purchaseInboundRepositoryValue,
                                              PurchaseInboundLineRepository purchaseInboundLineRepositoryValue,
                                              InventoryBalanceRepository inventoryBalanceRepositoryValue,
+                                             InventoryBatchBalanceRepository inventoryBatchBalanceRepositoryValue,
+                                             InventoryBatchTransactionRepository inventoryBatchTransactionRepositoryValue,
+                                             InventoryTransactionRepository inventoryTransactionRepositoryValue,
                                              DataScopeAccessService dataScopeAccessServiceValue,
+                                             DictionaryLookupService dictionaryLookupServiceValue,
                                              ObjectMapper objectMapperValue) {
         this.orgScopeService = orgScopeServiceValue;
         this.groupRepository = groupRepositoryValue;
@@ -78,7 +95,11 @@ public class InventoryReportApplicationService {
         this.purchaseInboundRepository = purchaseInboundRepositoryValue;
         this.purchaseInboundLineRepository = purchaseInboundLineRepositoryValue;
         this.inventoryBalanceRepository = inventoryBalanceRepositoryValue;
+        this.inventoryBatchBalanceRepository = inventoryBatchBalanceRepositoryValue;
+        this.inventoryBatchTransactionRepository = inventoryBatchTransactionRepositoryValue;
+        this.inventoryTransactionRepository = inventoryTransactionRepositoryValue;
         this.dataScopeAccessService = dataScopeAccessServiceValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
         this.objectMapper = objectMapperValue;
     }
 
@@ -199,8 +220,6 @@ public class InventoryReportApplicationService {
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.DAMAGE_OUTBOUND, "报损出库", "出库", "", "是"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.OTHER_INBOUND, "其他入库", "入库", "", "否"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.OTHER_OUTBOUND, "其他出库", "出库", "", "否"));
-        rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.PROFIT_INBOUND, "盘盈入库", "入库", "盘点单", "是"));
-        rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.LOSS_OUTBOUND, "盘亏出库", "出库", "盘点单", "是"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.PRODUCTION_INBOUND, "生产入库", "入库", "", "否"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.CUSTOMER_SALES_OUTBOUND, "客户销售出库", "出库", "销售订单", "否"));
         rows.addAll(loadGenericDocumentRows(scope, InventoryDocumentType.DISH_CONSUMPTION_OUTBOUND, "菜品消耗出库", "出库", "销售订单", "是"));
@@ -296,7 +315,7 @@ public class InventoryReportApplicationService {
         String batchNoValue = requireText(batchNo, "批次号不能为空");
         List<String> warehouseValues = normalizeValues(warehouses);
         String sourceOrgValue = trimNullable(sourceOrg);
-        Map<String, BigDecimal> balanceMap = currentBalanceMap(scope);
+        Map<String, InventoryBatchBalanceDO> balanceMap = currentBatchBalanceMap(scope);
         List<BatchTraceDocumentRow> rows = loadBatchTraceRows(scope, itemCodeValue, batchNoValue, balanceMap).stream()
                 .filter(row -> matchDate(row.documentDate(), start, end))
                 .filter(row -> warehouseValues.isEmpty() || warehouseValues.contains(row.warehouse()))
@@ -312,11 +331,14 @@ public class InventoryReportApplicationService {
     private List<BatchTraceDocumentRow> loadBatchTraceRows(InventoryScope scope,
                                                            String itemCode,
                                                            String batchNo,
-                                                           Map<String, BigDecimal> balanceMap) {
-        List<BatchTraceDocumentRow> rows = new ArrayList<>();
-        for (InventoryDocumentType type : InventoryDocumentType.managedTypes()) {
-            rows.addAll(loadBatchTraceRowsByType(scope, type, itemCode, batchNo, balanceMap));
-        }
+                                                           Map<String, InventoryBatchBalanceDO> balanceMap) {
+        List<BatchTraceDocumentRow> rows = inventoryBatchTransactionRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId())
+                .stream()
+                .filter(transaction -> Objects.equals(transaction.getItemCode(), itemCode))
+                .filter(transaction -> Objects.equals(transaction.getBatchNo(), batchNo))
+                .filter(transaction -> isVisibleBatchTransaction(scope, transaction))
+                .map(transaction -> toBatchTraceDocumentRow(scope, transaction, balanceMap))
+                .toList();
         return rows.stream()
                 .sorted(Comparator.comparing(BatchTraceDocumentRow::documentDate, Comparator.nullsLast(String::compareTo))
                         .thenComparing(BatchTraceDocumentRow::documentCreatedAt, Comparator.nullsLast(String::compareTo))
@@ -324,56 +346,32 @@ public class InventoryReportApplicationService {
                 .toList();
     }
 
-    private List<BatchTraceDocumentRow> loadBatchTraceRowsByType(InventoryScope scope,
-                                                                 InventoryDocumentType type,
-                                                                 String itemCode,
-                                                                 String batchNo,
-                                                                 Map<String, BigDecimal> balanceMap) {
-        List<InventoryDocumentHeader> headers = loadVisibleDocumentHeaders(type, scope);
-        Map<Long, InventoryDocumentHeader> headerMap = headers.stream().collect(Collectors.toMap(InventoryDocumentHeader::getId, header -> header));
-        List<InventoryDocumentLine> lines = inventoryDocumentRepository.findLinesByHeaderIds(type, headers.stream().map(InventoryDocumentHeader::getId).toList());
-        return lines.stream()
-                .filter(line -> isApprovedDocument(headerMap.get(line.getHeaderId())))
-                .filter(line -> Objects.equals(line.getItemCode(), itemCode))
-                .filter(line -> Objects.equals(batchNoFromLine(line), batchNo))
-                .map(line -> toBatchTraceDocumentRow(scope, type, headerMap.get(line.getHeaderId()), line, balanceMap))
-                .filter(Objects::nonNull)
-                .toList();
-    }
-
     private BatchTraceDocumentRow toBatchTraceDocumentRow(InventoryScope scope,
-                                                          InventoryDocumentType type,
-                                                          InventoryDocumentHeader header,
-                                                          InventoryDocumentLine line,
-                                                          Map<String, BigDecimal> balanceMap) {
-        if (header == null) {
-            return null;
-        }
-        Map<String, String> lineExtra = parseExtraJson(line.getExtraJson());
-        String warehouse = resolveWarehouseName(type, header);
-        String batchNo = defaultIfBlank(lineExtra.get("batchNo"), "");
-        boolean inbound = type.getStockDirection() == InventoryDocumentType.StockDirection.INBOUND;
-        BigDecimal quantity = defaultQuantity(line.getQuantity());
-        BigDecimal flowQty = inbound ? quantity : quantity.negate();
+                                                          InventoryBatchTransactionDO transaction,
+                                                          Map<String, InventoryBatchBalanceDO> balanceMap) {
+        String warehouse = defaultIfBlank(transaction.getWarehouseName(), "");
+        BigDecimal flowQty = defaultQuantity(transaction.getQuantityDelta());
+        boolean inbound = flowQty.compareTo(BigDecimal.ZERO) > 0;
+        InventoryBatchBalanceDO balance = balanceMap.get(batchBalanceKey(warehouse, transaction.getItemCode(), transaction.getBatchNo()));
         return new BatchTraceDocumentRow(
-                buildRowId("batch-trace", header.getId(), line.getId()),
-                defaultIfBlank(header.getCounterpartyName(), ""),
+                buildRowId("batch-trace", transaction.getBizId(), transaction.getBizLineId()),
+                "",
                 defaultOrgName(scope),
                 warehouse,
-                resolveTargetOrg(type, header),
-                type.getBusinessName(),
-                header.getDocumentCode(),
-                defaultIfBlank(header.getUpstreamCode(), ""),
-                formatDate(header.getDocumentDate()),
-                formatDateTime(header.getCreatedAt()),
-                batchNo,
-                defaultIfBlank(lineExtra.get("manufacturer"), ""),
-                line.getItemCode(),
-                line.getItemName(),
-                defaultIfBlank(line.getSpec(), ""),
-                defaultIfBlank(line.getUnitName(), ""),
+                "",
+                resolveBatchDocumentType(transaction.getBizType()),
+                defaultIfBlank(transaction.getBizType(), ""),
+                "",
+                formatDate(transaction.getBusinessDate()),
+                "",
+                defaultIfBlank(transaction.getBatchNo(), ""),
+                defaultIfBlank(transaction.getManufacturer(), ""),
+                transaction.getItemCode(),
+                transaction.getItemName(),
+                "",
+                "",
                 flowQty,
-                balanceMap.getOrDefault(transactionKey(warehouse, line.getItemCode()), BigDecimal.ZERO),
+                balance == null ? BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP) : defaultQuantity(balance.getQuantity()),
                 inbound
         );
     }
@@ -400,6 +398,7 @@ public class InventoryReportApplicationService {
                                                                  InventoryDocumentType type,
                                                                  String deductionType) {
         List<InventoryDocumentHeader> headers = loadVisibleDocumentHeaders(type, scope);
+        Map<String, LedgerLineSnapshot> ledgerMap = loadLedgerLineSnapshotMap(scope);
         Map<Long, List<InventoryDocumentLine>> lineMap = inventoryDocumentRepository.findLinesByHeaderIds(type, headers.stream().map(InventoryDocumentHeader::getId).toList())
                 .stream()
                 .collect(Collectors.groupingBy(InventoryDocumentLine::getHeaderId, LinkedHashMap::new, Collectors.toList()));
@@ -410,13 +409,13 @@ public class InventoryReportApplicationService {
             }
             List<InventoryDocumentLine> lines = lineMap.getOrDefault(header.getId(), List.of());
             for (InventoryDocumentLine line : lines) {
-                BigDecimal quantity = defaultQuantity(line.getQuantity());
-                BigDecimal amount = line.getAmount() == null ? quantity.multiply(defaultQuantity(line.getUnitPrice())).setScale(2, RoundingMode.HALF_UP) : line.getAmount();
+                LedgerLineSnapshot ledger = requireLedgerLineSnapshot(ledgerMap, type.getBusinessCode(), header.getId(), line.getId());
+                BigDecimal quantity = ledger.quantity().abs();
                 String warehouseName = resolveWarehouseName(type, header);
                 rows.add(new DishConsumptionOutboundReportRow(
                         line.getId(),
                         defaultIfBlank(header.getDocumentCode(), ""),
-                        header.getDocumentDate() == null ? "" : header.getDocumentDate().toString(),
+                        formatDate(ledger.businessDate()),
                         defaultIfBlank(line.getItemCode(), ""),
                         defaultIfBlank(line.getItemCode(), ""),
                         defaultIfBlank(line.getItemName(), ""),
@@ -468,6 +467,7 @@ public class InventoryReportApplicationService {
 
     private List<InventoryInoutDetailReportRow> loadPurchaseInboundRows(InventoryScope scope) {
         List<PurchaseInboundDO> headers = loadVisiblePurchaseInboundHeaders(scope);
+        Map<String, LedgerLineSnapshot> ledgerMap = loadLedgerLineSnapshotMap(scope);
         List<PurchaseInboundLineDO> lines = purchaseInboundLineRepository.findByInboundIds(headers.stream().map(PurchaseInboundDO::getId).toList());
         Map<Long, List<PurchaseInboundLineDO>> lineMap = lines.stream().collect(Collectors.groupingBy(PurchaseInboundLineDO::getInboundId, LinkedHashMap::new, Collectors.toList()));
         List<InventoryInoutDetailReportRow> rows = new ArrayList<>();
@@ -476,8 +476,10 @@ public class InventoryReportApplicationService {
                 continue;
             }
             for (PurchaseInboundLineDO line : lineMap.getOrDefault(header.getId(), List.of())) {
-                BigDecimal quantity = defaultQuantity(line.getQuantity());
-                BigDecimal amount = quantity.multiply(defaultQuantity(line.getUnitPrice())).setScale(2, RoundingMode.HALF_UP);
+                LedgerLineSnapshot ledger = requireLedgerLineSnapshot(ledgerMap,
+                        InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode(), header.getId(), line.getId());
+                BigDecimal quantity = ledger.quantity().abs();
+                BigDecimal amount = ledger.amount().abs();
                 rows.add(new InventoryInoutDetailReportRow(
                         buildRowId("purchase-inbound", header.getId(), line.getId()),
                         defaultIfBlank(line.getItemCode(), ""),
@@ -499,8 +501,8 @@ public class InventoryReportApplicationService {
                         "否",
                         defaultIfBlank(header.getSupplierName(), ""),
                         "",
-                        header.getInboundDate() == null ? "" : header.getInboundDate().toString(),
-                        header.getInboundDate() == null ? "" : header.getInboundDate().toString(),
+                        formatDate(ledger.businessDate()),
+                        formatDate(ledger.businessDate()),
                         formatDateTime(header.getCreatedAt()),
                         defaultIfBlank(header.getCreatedBy() == null ? null : String.valueOf(header.getCreatedBy()), ""),
                         formatDateTime(header.getApprovedAt()),
@@ -531,6 +533,7 @@ public class InventoryReportApplicationService {
                                                                         String upstreamDocumentType,
                                                                         String adjustmentDocument) {
         List<InventoryDocumentHeader> headers = loadVisibleDocumentHeaders(type, scope);
+        Map<String, LedgerLineSnapshot> ledgerMap = loadLedgerLineSnapshotMap(scope);
         Map<Long, List<InventoryDocumentLine>> lineMap = inventoryDocumentRepository.findLinesByHeaderIds(type, headers.stream().map(InventoryDocumentHeader::getId).toList())
                 .stream()
                 .collect(Collectors.groupingBy(InventoryDocumentLine::getHeaderId, LinkedHashMap::new, Collectors.toList()));
@@ -540,7 +543,8 @@ public class InventoryReportApplicationService {
                 continue;
             }
             for (InventoryDocumentLine line : lineMap.getOrDefault(header.getId(), List.of())) {
-                rows.add(buildGenericDocumentRow(scope, type, header, line, inoutTypeLabel, inoutDirection,
+                LedgerLineSnapshot ledger = requireLedgerLineSnapshot(ledgerMap, type.getBusinessCode(), header.getId(), line.getId());
+                rows.add(buildGenericDocumentRow(scope, type, header, line, ledger, inoutTypeLabel, inoutDirection,
                         upstreamDocumentType, adjustmentDocument));
             }
         }
@@ -551,14 +555,13 @@ public class InventoryReportApplicationService {
                                                                   InventoryDocumentType type,
                                                                   InventoryDocumentHeader header,
                                                                   InventoryDocumentLine line,
+                                                                  LedgerLineSnapshot ledger,
                                                                   String inoutTypeLabel,
                                                                   String inoutDirection,
                                                                   String upstreamDocumentType,
                                                                   String adjustmentDocument) {
-        BigDecimal quantity = defaultQuantity(line.getQuantity());
-        BigDecimal amount = line.getAmount() == null
-                ? quantity.multiply(defaultQuantity(line.getUnitPrice())).setScale(2, RoundingMode.HALF_UP)
-                : line.getAmount();
+        BigDecimal quantity = ledger.quantity().abs();
+        BigDecimal amount = ledger.amount().abs();
         String warehouseName = resolveWarehouseName(type, header);
         return new InventoryInoutDetailReportRow(
                 buildRowId(type.getPathSegment(), header.getId(), line.getId()), defaultIfBlank(line.getItemCode(), ""),
@@ -570,7 +573,7 @@ public class InventoryReportApplicationService {
                 defaultIfBlank(header.getDocumentCode(), ""), inoutTypeLabel,
                 defaultIfBlank(header.getReason(), defaultIfBlank(line.getLineReason(), "")), adjustmentDocument,
                 defaultIfBlank(header.getCounterpartyName(), defaultIfBlank(header.getSecondaryName(), "")), "",
-                formatDate(header.getDocumentDate()), formatDate(header.getDocumentDate()), formatDateTime(header.getCreatedAt()),
+                formatDate(ledger.businessDate()), formatDate(ledger.businessDate()), formatDateTime(header.getCreatedAt()),
                 defaultIfBlank(header.getCreatedBy() == null ? null : String.valueOf(header.getCreatedBy()), ""),
                 formatDateTime(header.getApprovedAt()), quantityByDirection(inoutDirection, "入库", quantity),
                 quantityByDirection(inoutDirection, "入库", quantity), quantityByDirection(inoutDirection, "出库", quantity),
@@ -580,6 +583,77 @@ public class InventoryReportApplicationService {
                 BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
                 crossMonthDocument(header.getDocumentDate(), header.getCreatedAt()), inoutDirection,
                 detectGift(header.getRemark(), line.getLineReason()), defaultIfBlank(header.getRemark(), ""));
+    }
+
+    private Map<String, LedgerLineSnapshot> loadLedgerLineSnapshotMap(InventoryScope scope) {
+        return loadVisibleTransactions(scope, inventoryTransactionRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()))
+                .stream()
+                .filter(transaction -> !isOpeningBalanceBizType(transaction.getBizType()))
+                .collect(Collectors.toMap(
+                        transaction -> ledgerKey(normalizeTransactionBusinessCode(transaction.getBizType()),
+                                transaction.getBizId(), transaction.getBizLineId()),
+                        this::toLedgerLineSnapshot,
+                        (left, right) -> right,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private LedgerLineSnapshot requireLedgerLineSnapshot(Map<String, LedgerLineSnapshot> ledgerMap,
+                                                        String businessCode,
+                                                        Long bizId,
+                                                        Long bizLineId) {
+        LedgerLineSnapshot snapshot = ledgerMap.get(ledgerKey(businessCode, bizId, bizLineId));
+        if (snapshot == null) {
+            throw new BusinessException("缺少库存流水，无法生成正式报表，请清理脏账本后重建：" + businessCode);
+        }
+        return snapshot;
+    }
+
+    private LedgerLineSnapshot toLedgerLineSnapshot(InventoryTransactionDO transaction) {
+        return new LedgerLineSnapshot(
+                defaultQuantity(transaction.getQuantityDelta()),
+                defaultMoney(transaction.getAmountDelta()),
+                defaultMoney(transaction.getCostPrice()),
+                transaction.getBusinessDate(),
+                defaultIfBlank(transaction.getWarehouseName(), "")
+        );
+    }
+
+    private String ledgerKey(String businessCode, Long bizId, Long bizLineId) {
+        return defaultIfBlank(businessCode, "") + "|" + bizId + "|" + bizLineId;
+    }
+
+    private String normalizeTransactionBusinessCode(String bizType) {
+        String value = defaultIfBlank(bizType, "");
+        for (String suffix : List.of("_APPROVE", "_CONFIRM", "_UNAPPROVE")) {
+            if (value.endsWith(suffix)) {
+                return value.substring(0, value.length() - suffix.length());
+            }
+        }
+        return value;
+    }
+
+    private boolean isOpeningBalanceBizType(String bizType) {
+        return matchesTransactionBusinessCode(bizType, InventoryDocumentType.WAREHOUSE_OPENING_BALANCE.getBusinessCode())
+                || matchesTransactionBusinessCode(bizType, PeriodOpeningBalanceApplicationService.BUSINESS_CODE)
+                || Objects.equals(bizType, "QA_OPENING_BALANCE");
+    }
+
+    private boolean matchesTransactionBusinessCode(String bizType, String businessCode) {
+        return Objects.equals(bizType, businessCode)
+                || Objects.equals(bizType, businessCode + "_APPROVE")
+                || Objects.equals(bizType, businessCode + "_CONFIRM")
+                || Objects.equals(bizType, businessCode + "_UNAPPROVE");
+    }
+
+    private List<InventoryTransactionDO> loadVisibleTransactions(InventoryScope scope, List<InventoryTransactionDO> transactions) {
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        if (dataScopeAccessService.canViewScopeData(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId)) {
+            return transactions;
+        }
+        return transactions.stream()
+                .filter(transaction -> Objects.equals(transaction.getOperatorId(), operatorId))
+                .toList();
     }
 
     private BigDecimal quantityByDirection(String direction, String expectedDirection, BigDecimal quantity) {
@@ -712,6 +786,43 @@ public class InventoryReportApplicationService {
                         (left, right) -> right,
                         LinkedHashMap::new
                 ));
+    }
+
+    private Map<String, InventoryBatchBalanceDO> currentBatchBalanceMap(InventoryScope scope) {
+        return inventoryBatchBalanceRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
+                .collect(Collectors.toMap(
+                        balance -> batchBalanceKey(balance.getWarehouseName(), balance.getItemCode(), balance.getBatchNo()),
+                        Function.identity(),
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private boolean isVisibleBatchTransaction(InventoryScope scope, InventoryBatchTransactionDO transaction) {
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        if (dataScopeAccessService.canViewScopeData(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId)) {
+            return true;
+        }
+        return Objects.equals(transaction.getOperatorId(), operatorId);
+    }
+
+    private String batchBalanceKey(String warehouseName, String itemCode, String batchNo) {
+        return transactionKey(warehouseName, itemCode) + "|" + defaultIfBlank(batchNo, "");
+    }
+
+    private String resolveBatchDocumentType(String bizType) {
+        for (InventoryDocumentType type : InventoryDocumentType.values()) {
+            if (Objects.equals(bizType, type.getBusinessCode())
+                    || Objects.equals(bizType, type.getBusinessCode() + "_APPROVE")
+                    || Objects.equals(bizType, type.getBusinessCode() + "_CONFIRM")
+                    || Objects.equals(bizType, type.getBusinessCode() + "_UNAPPROVE")) {
+                return type.getBusinessName();
+            }
+        }
+        if (Objects.equals(bizType, PeriodOpeningBalanceApplicationService.BUSINESS_CODE + "_CONFIRM")) {
+            return "期初库存";
+        }
+        return defaultIfBlank(bizType, "");
     }
 
     private String batchNoFromLine(InventoryDocumentLine line) {
@@ -864,11 +975,15 @@ public class InventoryReportApplicationService {
     }
 
     private boolean isApprovedDocument(InventoryDocumentHeader header) {
-        return Objects.equals(defaultIfBlank(header.getStatus(), ""), "已审核");
+        return Objects.equals(defaultIfBlank(header.getStatus(), ""), approvedStatus());
     }
 
     private boolean isApprovedPurchaseInbound(PurchaseInboundDO header) {
-        return header != null && Objects.equals(defaultIfBlank(header.getStatus(), ""), "已审核");
+        return header != null && Objects.equals(defaultIfBlank(header.getStatus(), ""), approvedStatus());
+    }
+
+    private String approvedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.APPROVED);
     }
 
     private static final class MutableDishRow {

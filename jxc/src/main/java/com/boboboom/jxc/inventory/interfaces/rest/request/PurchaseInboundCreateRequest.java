@@ -41,7 +41,11 @@ public record PurchaseInboundCreateRequest(
             @DecimalMin(value = "0", message = "单价不能小于0")
             BigDecimal unitPrice,
             @DecimalMin(value = "0", message = "税率不能小于0")
-            BigDecimal taxRate
+            BigDecimal taxRate,
+            String batchNo,
+            String manufacturer,
+            String productionDate,
+            String expiryDate
     ) {
     }
 }

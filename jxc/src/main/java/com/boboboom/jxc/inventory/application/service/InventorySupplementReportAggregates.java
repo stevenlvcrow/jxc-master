@@ -2,16 +2,73 @@ package com.boboboom.jxc.inventory.application.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 
 import org.springframework.util.StringUtils;
 
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InterOrgTransferDetailReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InterOrgTransferSummaryReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InventoryInoutSummaryReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.OtherInoutSummaryReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockInoutSummaryReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockTurnoverRateReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockWarningReportRow;
+import com.boboboom.jxc.inventory.application.service.InventoryRealtimeReportApplicationService.StockWarningReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InterOrgTransferDetailReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InterOrgTransferSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.OtherInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.StockInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.StockTurnoverRateReportRow;
+
+final class TransactionStats {
+    LocalDateTime firstInboundTime;
+    LocalDateTime latestInboundTime;
+    LocalDateTime latestOutboundTime;
+    LocalDateTime latestMovementTime;
+    BigDecimal latestInboundQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+    BigDecimal latestOutboundQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+
+    LocalDateTime firstInboundTime() {
+        return firstInboundTime;
+    }
+
+    LocalDateTime latestInboundTime() {
+        return latestInboundTime;
+    }
+
+    LocalDateTime latestOutboundTime() {
+        return latestOutboundTime;
+    }
+
+    LocalDateTime latestMovementTime() {
+        return latestMovementTime;
+    }
+
+    BigDecimal latestInboundQty() {
+        return latestInboundQty;
+    }
+
+    BigDecimal latestOutboundQty() {
+        return latestOutboundQty;
+    }
+}
+
+final class TxnSummary {
+    BigDecimal openingQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+    BigDecimal openingAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    BigDecimal inboundQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+    BigDecimal inboundAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    BigDecimal outboundQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+    BigDecimal outboundAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    BigDecimal closingQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+    BigDecimal closingAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+    BigDecimal returnDifferenceQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+}
+
+final class InventoryProfitLossAgg {
+    BigDecimal inventoryProfitLossQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+    BigDecimal inventoryCheckQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+}
+
+record LedgerLineSnapshot(BigDecimal quantity,
+                          BigDecimal amount,
+                          BigDecimal costPrice,
+                          java.time.LocalDate businessDate,
+                          String warehouseName) {
+}
 
 final class MutableStockWarningRow {
     private static final int INVENTORY_QUANTITY_SCALE = 4;
@@ -27,6 +84,11 @@ final class MutableStockWarningRow {
     private BigDecimal stockLowerLimit = BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
     private String warningStatus = "正常";
     private String itemStatus = "";
+    private String batchNo = "";
+    private String productionDate = "";
+    private String expiryDate = "";
+    private String shelfLifeStatus = "";
+    private String manufacturer = "";
 
     void merge(StockWarningReportRow row) {
         if (!StringUtils.hasText(id)) {
@@ -42,11 +104,17 @@ final class MutableStockWarningRow {
         stockLowerLimit = row.stockLowerLimit();
         warningStatus = row.warningStatus();
         itemStatus = row.itemStatus();
+        batchNo = row.batchNo();
+        productionDate = row.productionDate();
+        expiryDate = row.expiryDate();
+        shelfLifeStatus = row.shelfLifeStatus();
+        manufacturer = row.manufacturer();
     }
 
     StockWarningReportRow toRow() {
         return new StockWarningReportRow(id, itemCode, itemName, unit, itemCategory, warehouse,
-                currentStock, stockUpperLimit, stockLowerLimit, warningStatus, itemStatus);
+                currentStock, stockUpperLimit, stockLowerLimit, warningStatus, itemStatus,
+                batchNo, productionDate, expiryDate, shelfLifeStatus, manufacturer);
     }
 
     private BigDecimal defaultQuantity(BigDecimal value) {
@@ -55,36 +123,20 @@ final class MutableStockWarningRow {
     }
 }
 
-final class MutableInventoryInoutSummaryRow {
-    private InventoryInoutSummaryReportRow row;
+final class MutableOtherInoutSummaryRow {
+    private OtherInoutSummaryReportRow row;
 
-    void merge(InventoryInoutSummaryReportRow value) {
+    void merge(OtherInoutSummaryReportRow value) {
         if (row == null) {
             row = value;
             return;
         }
-        row = new InventoryInoutSummaryReportRow(row.id(), row.itemCode(), row.itemName(), row.specModel(),
-                row.itemCategory(), row.statisticType(), row.unit(), row.orgName(), row.orgCode(), row.warehouse(),
-                row.warehouseType(), row.openingQty().add(value.openingQty()),
-                row.openingCostAmountExTax().add(value.openingCostAmountExTax()), row.openingAvgCostExTax(),
-                row.inboundQty().add(value.inboundQty()),
-                row.inboundCostAmountExTax().add(value.inboundCostAmountExTax()), row.inboundAvgCostExTax(),
-                row.outboundQty().add(value.outboundQty()),
-                row.outboundCostAmountExTax().add(value.outboundCostAmountExTax()), row.outboundAvgCostExTax(),
-                row.closingQty().add(value.closingQty()),
-                row.closingCostAmountExTax().add(value.closingCostAmountExTax()), row.closingAvgCostExTax(),
-                row.inventoryProfitLossQty().add(value.inventoryProfitLossQty()),
-                row.inventoryProfitLossCostAmountTaxIncluded().add(value.inventoryProfitLossCostAmountTaxIncluded()),
-                row.inventoryProfitLossCostAmountExTax().add(value.inventoryProfitLossCostAmountExTax()),
-                row.inventoryCheckQty().add(value.inventoryCheckQty()),
-                row.inventoryCheckCostAmountTaxIncluded().add(value.inventoryCheckCostAmountTaxIncluded()),
-                row.closingCheckDiffQty().add(value.closingCheckDiffQty()),
-                row.closingCheckDiffAmountExTax().add(value.closingCheckDiffAmountExTax()),
-                row.returnDifferenceQty().add(value.returnDifferenceQty()),
-                row.returnDifferenceCostAmountExTax().add(value.returnDifferenceCostAmountExTax()), row.inoutType());
+        row = new OtherInoutSummaryReportRow(row.id(), row.itemCode(), row.itemName(), row.specModel(),
+                row.itemCategory(), row.baseUnit(), row.warehouse(), row.inoutType(), row.reasonType(),
+                row.quantity().add(value.quantity()), row.amountExTax().add(value.amountExTax()));
     }
 
-    InventoryInoutSummaryReportRow toRow() {
+    OtherInoutSummaryReportRow toRow() {
         return row;
     }
 }
@@ -112,24 +164,6 @@ final class MutableStockInoutSummaryRow {
     }
 
     StockInoutSummaryReportRow toRow() {
-        return row;
-    }
-}
-
-final class MutableOtherInoutSummaryRow {
-    private OtherInoutSummaryReportRow row;
-
-    void merge(OtherInoutSummaryReportRow value) {
-        if (row == null) {
-            row = value;
-            return;
-        }
-        row = new OtherInoutSummaryReportRow(row.id(), row.itemCode(), row.itemName(), row.specModel(),
-                row.itemCategory(), row.baseUnit(), row.warehouse(), row.inoutType(), row.reasonType(),
-                row.quantity().add(value.quantity()), row.amountExTax().add(value.amountExTax()));
-    }
-
-    OtherInoutSummaryReportRow toRow() {
         return row;
     }
 }

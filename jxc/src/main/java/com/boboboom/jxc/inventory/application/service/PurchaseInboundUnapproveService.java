@@ -109,6 +109,12 @@ public class PurchaseInboundUnapproveService {
                     line.getQuantity().negate(),
                     line.getQuantity().multiply(line.getUnitPrice()),
                     header.getInboundDate(),
+                    new InventoryStockMutationService.BatchInfo(
+                            line.getBatchNo(),
+                            line.getManufacturer(),
+                            line.getProductionDate(),
+                            line.getExpiryDate()
+                    ),
                     INVENTORY_BIZ_TYPE_UNAPPROVE,
                     operatorId
             );

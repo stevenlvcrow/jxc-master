@@ -29,16 +29,19 @@ const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 const { orgId, requireOrgId } = useRequiredOrgScope();
 const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
 const INVENTORY_CHECK_RANGE_TYPE_DICT = 'inventory.check_range_type';
+const STOCKTAKE_FREQUENCY_DICT = 'inventory.stocktake_frequency';
 const INVENTORY_CHECK_GENERATION_STATUS_DICT = 'inventory.check_generation_status';
 const DOCUMENT_PRINT_STATUS_DICT = 'document.print_status';
 const { optionsOf } = useDictionaryOptions([
   INVENTORY_DOCUMENT_STATUS_DICT,
   INVENTORY_CHECK_RANGE_TYPE_DICT,
+  STOCKTAKE_FREQUENCY_DICT,
   INVENTORY_CHECK_GENERATION_STATUS_DICT,
   DOCUMENT_PRINT_STATUS_DICT,
 ]);
 const documentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
 const checkRangeTypeOptions = optionsOf(INVENTORY_CHECK_RANGE_TYPE_DICT);
+const stocktakeFrequencyOptions = optionsOf(STOCKTAKE_FREQUENCY_DICT);
 const generatedStatusOptions = optionsOf(INVENTORY_CHECK_GENERATION_STATUS_DICT);
 const printStatusOptions = computed(() => [
   { label: '全部', value: '' },
@@ -52,6 +55,12 @@ const statusLabelMap = computed(() =>
 );
 const generatedStatusLabelMap = computed(() =>
   generatedStatusOptions.value.reduce<Record<string, string>>((result, item) => {
+    result[item.itemCode] = item.itemLabel;
+    return result;
+  }, {}),
+);
+const stocktakeFrequencyLabelMap = computed(() =>
+  stocktakeFrequencyOptions.value.reduce<Record<string, string>>((result, item) => {
     result[item.itemCode] = item.itemLabel;
     return result;
   }, {}),
@@ -70,6 +79,7 @@ const query = reactive({
   documentCode: '',
   warehouse: '',
   checkRangeType: '',
+  stocktakeFrequency: '',
   itemName: '',
   status: '',
   generatedStatus: '',
@@ -129,6 +139,7 @@ const loadRows = async () => {
       itemName: query.itemName || undefined,
       status: query.status || undefined,
       checkRangeType: query.checkRangeType || undefined,
+      stocktakeFrequency: query.stocktakeFrequency || undefined,
       printStatus: query.printStatus || undefined,
       generatedStatus: query.generatedStatus || undefined,
       remark: query.remark || undefined,
@@ -184,6 +195,7 @@ const handleExport = async () => {
         itemName: query.itemName || undefined,
         status: query.status || undefined,
         checkRangeType: query.checkRangeType || undefined,
+        stocktakeFrequency: query.stocktakeFrequency || undefined,
         printStatus: query.printStatus || undefined,
         generatedStatus: query.generatedStatus || undefined,
         remark: query.remark || undefined,
@@ -195,7 +207,7 @@ const handleExport = async () => {
       };
     });
     const lines = [
-      ['单据编号', '盘点日期', '仓库', '物品数', '状态', '审核日期', '生成状态', '打印状态', '创建时间', '创建人', '备注']
+      ['单据编号', '盘点日期', '仓库', '物品数', '盘点频次', '状态', '审核日期', '生成状态', '打印状态', '创建时间', '创建人', '备注']
         .map(toCsvCell)
         .join(','),
     ];
@@ -205,6 +217,7 @@ const handleExport = async () => {
         row.checkDate,
         row.warehouseName,
         row.itemCount,
+        stocktakeFrequencyLabelMap.value[row.stocktakeFrequency] ?? row.stocktakeFrequency,
         statusLabelMap.value[row.status] ?? row.status,
         row.auditDate,
         generatedStatusLabelMap.value[row.generatedStatus] ?? row.generatedStatus,
@@ -244,6 +257,7 @@ const handleReset = async () => {
   query.documentCode = '';
   query.warehouse = '';
   query.checkRangeType = '';
+  query.stocktakeFrequency = '';
   query.itemName = '';
   query.status = '';
   query.generatedStatus = '';
@@ -400,6 +414,17 @@ onMounted(() => {
           />
         </el-select>
       </el-form-item>
+      <el-form-item label="盘点频次">
+        <el-select v-model="query.stocktakeFrequency" clearable style="width: 140px">
+          <el-option label="全部" value="" />
+          <el-option
+            v-for="item in stocktakeFrequencyOptions"
+            :key="item.itemCode"
+            :label="item.itemLabel"
+            :value="item.itemCode"
+          />
+        </el-select>
+      </el-form-item>
       <el-form-item label="物品">
         <el-input v-model="query.itemName" placeholder="请输入物品编码/名称" clearable style="width: 160px" />
       </el-form-item>
@@ -477,6 +502,7 @@ onMounted(() => {
             <el-dropdown-item>盘点日期</el-dropdown-item>
             <el-dropdown-item>仓库</el-dropdown-item>
             <el-dropdown-item>物品（项）</el-dropdown-item>
+            <el-dropdown-item>盘点频次</el-dropdown-item>
             <el-dropdown-item>状态</el-dropdown-item>
             <el-dropdown-item>生成状态</el-dropdown-item>
             <el-dropdown-item>打印状态</el-dropdown-item>
@@ -504,6 +530,9 @@ onMounted(() => {
       <el-table-column prop="checkDate" label="盘点日期" min-width="110" show-overflow-tooltip />
       <el-table-column prop="warehouseName" label="仓库" min-width="120" show-overflow-tooltip />
       <el-table-column prop="itemCount" label="物品数" min-width="90" show-overflow-tooltip />
+      <el-table-column prop="stocktakeFrequency" label="盘点频次" min-width="100" show-overflow-tooltip>
+        <template #default="{ row }">{{ stocktakeFrequencyLabelMap[row.stocktakeFrequency] ?? row.stocktakeFrequency }}</template>
+      </el-table-column>
       <el-table-column prop="status" label="状态" min-width="100" show-overflow-tooltip>
         <template #default="{ row }">{{ statusLabelMap[row.status] ?? row.status }}</template>
       </el-table-column>

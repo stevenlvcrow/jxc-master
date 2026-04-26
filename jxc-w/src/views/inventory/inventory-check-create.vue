@@ -82,6 +82,7 @@ type InventoryCheckItemRow = {
   profitAmount: number | null;
   lossOutboundPrice: number | null;
   lossAmount: number | null;
+  differenceReasonCode: string;
   remark: string;
 };
 
@@ -103,8 +104,12 @@ const route = useRoute();
 const sessionStore = useSessionStore();
 const { orgId: currentOrgId, storeId } = useRequiredOrgScope();
 const ITEM_STATUS_DICT = 'item.status';
-const { optionsOf } = useDictionaryOptions([ITEM_STATUS_DICT]);
+const STOCKTAKE_FREQUENCY_DICT = 'inventory.stocktake_frequency';
+const DIFFERENCE_REASON_DICT = 'inventory.check_difference_reason';
+const { optionsOf } = useDictionaryOptions([ITEM_STATUS_DICT, STOCKTAKE_FREQUENCY_DICT, DIFFERENCE_REASON_DICT]);
 const itemStatusOptions = optionsOf(ITEM_STATUS_DICT, { enabled: true, label: '全部', value: '' });
+const stocktakeFrequencyOptions = optionsOf(STOCKTAKE_FREQUENCY_DICT);
+const differenceReasonOptions = optionsOf(DIFFERENCE_REASON_DICT);
 const normalizedItemStatusOptions = computed(() => itemStatusOptions.value.map((item) => ({
   label: item.itemLabel,
   value: item.itemCode,
@@ -183,6 +188,7 @@ const form = reactive({
   warehouseName: '',
   checkDate: '',
   checkType: '指定物品' as CheckTypeOption,
+  stocktakeFrequency: 'DAILY',
   summaryUnit: '库存单位' as UnitOption,
   freezeStock: false,
   collaborativeFlag: false,
@@ -218,6 +224,7 @@ const createEmptyRow = (id: number): InventoryCheckItemRow => ({
   profitAmount: null,
   lossOutboundPrice: null,
   lossAmount: null,
+  differenceReasonCode: '',
   remark: '',
 });
 
@@ -257,6 +264,8 @@ const syncRowDerived = (row: InventoryCheckItemRow) => {
     row.abnormalFlag = '';
   } else if (diff === 0) {
     row.abnormalFlag = '正常';
+    row.differenceReasonCode = '';
+    row.profitLossReason = '';
   } else {
     row.abnormalFlag = '异常';
   }
@@ -278,6 +287,7 @@ const resetForm = () => {
   form.warehouseName = '';
   form.checkDate = '';
   form.checkType = '指定物品';
+  form.stocktakeFrequency = 'DAILY';
   form.summaryUnit = '库存单位';
   form.freezeStock = false;
   form.collaborativeFlag = false;
@@ -380,6 +390,7 @@ const loadItemCandidates = async () => {
       keyword: itemSelectorKeyword.value.trim() || undefined,
       category: activeItemTreeId.value === 'all' ? undefined : activeItemTreeId.value,
       status: itemSelectorStatus.value || undefined,
+      stocktakeFrequency: form.stocktakeFrequency,
     }, orgId);
     itemCandidateSource.value = page.list.map(mapItemCandidate);
     itemSelectorTotal.value = Number(page.total ?? 0);
@@ -409,7 +420,8 @@ const fetchAllItems = async () => fetchAllPages<ItemCandidate>(async (pageNum, p
   const page = await fetchItemsApi({
     pageNo: pageNum,
     pageSize: pageSizeValue,
-    status: '启用',
+    status: 'ENABLED',
+    stocktakeFrequency: form.stocktakeFrequency,
   }, resolveOrgId());
   return {
     list: page.list.map(mapItemCandidate),
@@ -611,6 +623,7 @@ const applyDetail = (detail: InventoryCheckDetail) => {
   form.warehouseId = warehouseOptions.value.find((item) => item.name === detail.warehouseName)?.id ?? 0;
   form.checkDate = detail.checkDate;
   form.checkType = checkRangeTypeLabelMap[detail.checkRangeType] ?? '指定物品';
+  form.stocktakeFrequency = detail.stocktakeFrequency || 'DAILY';
   form.summaryUnit = '库存单位';
   form.freezeStock = detail.freezeStock;
   form.collaborativeFlag = detail.collaborativeFlag;
@@ -643,6 +656,7 @@ const applyDetail = (detail: InventoryCheckDetail) => {
       profitAmount: item.profitAmount ?? null,
       lossOutboundPrice: item.lossOutboundPrice ?? null,
       lossAmount: item.lossAmount ?? null,
+      differenceReasonCode: item.differenceReasonCode || '',
       remark: item.remark,
     } as InventoryCheckItemRow;
     syncRowDerived(row);
@@ -888,6 +902,14 @@ const validateForm = () => {
     ElMessage.warning('请完善盘点明细（实盘数、账面数、账面单价）');
     return false;
   }
+  const missingReasonRow = validRows.find((row) => {
+    const diff = (row.unit1ActualQty ?? 0) - (row.bookQty ?? 0);
+    return diff !== 0 && !row.differenceReasonCode;
+  });
+  if (missingReasonRow) {
+    ElMessage.warning('存在盘点差异时请选择差异原因');
+    return false;
+  }
   return true;
 };
 
@@ -895,6 +917,7 @@ const buildSavePayload = (submitted: boolean): InventoryCheckSavePayload => ({
   checkDate: form.checkDate,
   warehouseName: form.warehouseName,
   checkRangeType: checkRangeTypeCodeMap[form.checkType],
+  stocktakeFrequency: form.stocktakeFrequency,
   freezeStock: form.freezeStock,
   collaborativeFlag: form.collaborativeFlag,
   planName: form.planName,
@@ -916,6 +939,7 @@ const buildSavePayload = (submitted: boolean): InventoryCheckSavePayload => ({
       actualQty: row.unit1ActualQty,
       bookPrice: row.bookPrice,
       profitLossReason: row.profitLossReason,
+      differenceReasonCode: row.differenceReasonCode,
       remark: row.remark,
       extraFields: {},
     })),
@@ -1051,6 +1075,16 @@ watch(
                 />
               </el-select>
             </el-form-item>
+            <el-form-item label="盘点频次">
+              <el-select v-model="form.stocktakeFrequency" style="width: 100%" :disabled="isReadonlyMode">
+                <el-option
+                  v-for="option in stocktakeFrequencyOptions"
+                  :key="option.itemCode"
+                  :label="option.itemLabel"
+                  :value="option.itemCode"
+                />
+              </el-select>
+            </el-form-item>
             <el-form-item label="实盘合计、盈亏数、账面数单位">
               <el-select v-model="form.summaryUnit" style="width: 100%" :disabled="isReadonlyMode">
                 <el-option
@@ -1178,9 +1212,22 @@ watch(
           <el-table-column label="盘亏数量" min-width="110">
             <template #default="{ row }">{{ formatNumber(row.lossQty, 4) }}</template>
           </el-table-column>
-          <el-table-column label="盈亏原因" min-width="160">
+          <el-table-column label="差异原因" min-width="160">
             <template #default="{ row }">
-              <el-input v-model="row.profitLossReason" placeholder="请输入盈亏原因" :disabled="isReadonlyMode" />
+              <el-select
+                v-model="row.differenceReasonCode"
+                clearable
+                placeholder="请选择"
+                :disabled="isReadonlyMode || ((row.unit1ActualQty ?? 0) - (row.bookQty ?? 0) === 0)"
+                style="width: 100%"
+              >
+                <el-option
+                  v-for="option in differenceReasonOptions"
+                  :key="option.itemCode"
+                  :label="option.itemLabel"
+                  :value="option.itemCode"
+                />
+              </el-select>
             </template>
           </el-table-column>
           <el-table-column label="实盘金额" min-width="120">

@@ -1,7 +1,5 @@
 package com.boboboom.jxc.identity.application.auth;
 
-import com.boboboom.jxc.common.BusinessException;
-
 /** 身份与权限类型，负责AuthContextHolder相关处理。 */
 public final class AuthContextHolder {
 
@@ -33,7 +31,7 @@ public final class AuthContextHolder {
     public static Long requireUserId(String message) {
         LoginSession session = HOLDER.get();
         if (session == null || session.getUserId() == null) {
-            throw new BusinessException(message);
+            throw new UnauthorizedException(message);
         }
         return session.getUserId();
     }

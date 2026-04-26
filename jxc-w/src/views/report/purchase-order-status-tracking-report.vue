@@ -4,49 +4,24 @@ import { RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 import { useSessionStore } from '@/stores/session';
 import { fetchItemsApi, type ItemVO } from '@/api/modules/item';
+import {
+  fetchPurchaseOrderStatusTrackingReportApi,
+  type PurchaseOrderStatusTrackingReportRow,
+} from '@/api/modules/purchase';
 import { resolveArchiveOrgId } from '@/views/items/org';
 
 type DateType = '订货日期' | '期望到货日期' | '收货日期';
-type DocumentStatus = '草稿' | '已提交' | '已审核' | '已关闭';
-type ReceiveStatus = '未收货' | '部分收货' | '已收货';
-type GiftStatus = '全部' | '是' | '否';
-type CrossMonthStatus = '全部' | '是' | '否';
 type TreeNode = {
   value: string;
   label: string;
   children?: TreeNode[];
 };
-type PurchaseOrderTrackingRow = {
-  id: string;
-  purchaseOrderCode: string;
-  documentStatus: DocumentStatus;
-  receiveStatus: ReceiveStatus;
-  orderDate: string;
-  expectedArrivalDate: string;
-  supplierName: string;
-  itemName: string;
-  spec: string;
-  itemCategory: string;
-  isGift: Exclude<GiftStatus, '全部'>;
-  purchaseUnit: string;
-  purchasePrice: number;
-  purchaseQty: number;
-  auditQty: number;
-  purchaseAmount: number;
-  auditAmount: number;
-  purchaseWarehouse: string;
-  receiptDate: string;
-  receiptWarehouse: string;
-  receivedQty: number;
-  receiptAmount: number;
-  unreceivedQty: number;
-  returnedQty: number;
-  returnAmount: number;
-};
+type PurchaseOrderTrackingRow = PurchaseOrderStatusTrackingReportRow;
 type ReportColumn = {
   key: keyof PurchaseOrderTrackingRow;
   label: string;
@@ -57,6 +32,9 @@ type ReportColumn = {
 
 const sessionStore = useSessionStore();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
+const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
+const COMMON_YES_NO_DICT = 'common.yes_no';
+const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT, COMMON_YES_NO_DICT]);
 const {
   supplierOptions,
   supplierLoading,
@@ -64,19 +42,17 @@ const {
 } = useSupplierArchiveOptions();
 
 const dateTypeOptions: DateType[] = ['订货日期', '期望到货日期', '收货日期'];
-const documentStatusTree: TreeNode[] = [
-  { value: '草稿', label: '草稿' },
-  { value: '已提交', label: '已提交' },
-  { value: '已审核', label: '已审核' },
-  { value: '已关闭', label: '已关闭' },
-];
 const receiveStatusTree: TreeNode[] = [
   { value: '未收货', label: '未收货' },
   { value: '部分收货', label: '部分收货' },
   { value: '已收货', label: '已收货' },
 ];
-const giftStatusOptions: GiftStatus[] = ['全部', '是', '否'];
-const crossMonthOptions: CrossMonthStatus[] = ['全部', '是', '否'];
+const documentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const yesNoOptions = optionsOf(COMMON_YES_NO_DICT, { enabled: true, label: '全部', value: '全部' });
+const documentStatusTree = computed<TreeNode[]>(() => documentStatusOptions.value.map((item) => ({
+  value: item.itemCode,
+  label: item.itemLabel,
+})));
 
 const query = reactive({
   dateType: '订货日期' as DateType,
@@ -88,8 +64,8 @@ const query = reactive({
   purchaseOrderCode: '',
   documentStatus: '',
   receiveStatus: '',
-  isGift: '全部' as GiftStatus,
-  crossMonth: '全部' as CrossMonthStatus,
+  isGift: '全部',
+  crossMonth: '全部',
 });
 
 const loading = ref(false);
@@ -99,89 +75,7 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
 
-const tableRows = ref<PurchaseOrderTrackingRow[]>([
-  {
-    id: '1',
-    purchaseOrderCode: 'PO-202604-001',
-    documentStatus: '已审核',
-    receiveStatus: '部分收货',
-    orderDate: '2026-04-20',
-    expectedArrivalDate: '2026-04-24',
-    supplierName: '鲜达食品',
-    itemName: '鸡胸肉',
-    spec: '10kg/箱',
-    itemCategory: '生鲜原料',
-    isGift: '否',
-    purchaseUnit: '箱',
-    purchasePrice: 185,
-    purchaseQty: 20,
-    auditQty: 20,
-    purchaseAmount: 3700,
-    auditAmount: 3700,
-    purchaseWarehouse: '中央成品仓',
-    receiptDate: '2026-04-22',
-    receiptWarehouse: '中央成品仓',
-    receivedQty: 12,
-    receiptAmount: 2220,
-    unreceivedQty: 8,
-    returnedQty: 1,
-    returnAmount: 185,
-  },
-  {
-    id: '2',
-    purchaseOrderCode: 'PO-202604-002',
-    documentStatus: '已提交',
-    receiveStatus: '未收货',
-    orderDate: '2026-04-21',
-    expectedArrivalDate: '2026-04-25',
-    supplierName: '优选农场',
-    itemName: '牛腩',
-    spec: '5kg/包',
-    itemCategory: '生鲜原料',
-    isGift: '否',
-    purchaseUnit: '包',
-    purchasePrice: 260,
-    purchaseQty: 14,
-    auditQty: 14,
-    purchaseAmount: 3640,
-    auditAmount: 3640,
-    purchaseWarehouse: '北区原料仓',
-    receiptDate: '-',
-    receiptWarehouse: '北区原料仓',
-    receivedQty: 0,
-    receiptAmount: 0,
-    unreceivedQty: 14,
-    returnedQty: 0,
-    returnAmount: 0,
-  },
-  {
-    id: '3',
-    purchaseOrderCode: 'PO-202604-003',
-    documentStatus: '已审核',
-    receiveStatus: '已收货',
-    orderDate: '2026-04-21',
-    expectedArrivalDate: '2026-04-26',
-    supplierName: '盒马包材',
-    itemName: '包装盒',
-    spec: '500个/箱',
-    itemCategory: '包材',
-    isGift: '否',
-    purchaseUnit: '箱',
-    purchasePrice: 96,
-    purchaseQty: 8,
-    auditQty: 8,
-    purchaseAmount: 768,
-    auditAmount: 768,
-    purchaseWarehouse: '南区包材仓',
-    receiptDate: '2026-04-23',
-    receiptWarehouse: '南区包材仓',
-    receivedQty: 8,
-    receiptAmount: 768,
-    unreceivedQty: 0,
-    returnedQty: 0,
-    returnAmount: 0,
-  },
-]);
+const tableRows = ref<PurchaseOrderTrackingRow[]>([]);
 
 const supplierTree = computed<TreeNode[]>(() => supplierOptions.value.map((item) => ({
   value: item.value,
@@ -273,7 +167,30 @@ const loadOptions = async () => {
 const fetchReport = async () => {
   loading.value = true;
   try {
-    total.value = tableRows.value.length;
+    const orgId = resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
+    if (!orgId) {
+      tableRows.value = [];
+      total.value = 0;
+      return;
+    }
+    const page = await fetchPurchaseOrderStatusTrackingReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      startDate: query.dateRange[0],
+      endDate: query.dateRange[1],
+      dateType: query.dateType,
+      receiptWarehouse: query.receiptWarehouse || undefined,
+      purchaseWarehouse: query.purchaseWarehouse || undefined,
+      itemCode: query.itemCode || undefined,
+      supplier: query.supplier || undefined,
+      purchaseOrderCode: query.purchaseOrderCode || undefined,
+      documentStatus: query.documentStatus || undefined,
+      receiveStatus: query.receiveStatus || undefined,
+      isGift: query.isGift === '全部' ? undefined : query.isGift,
+      crossMonth: query.crossMonth === '全部' ? undefined : query.crossMonth,
+    }, orgId);
+    tableRows.value = page.list ?? [];
+    total.value = Number(page.total ?? 0);
   } finally {
     loading.value = false;
   }
@@ -337,6 +254,9 @@ const getSummaries = ({ columns: tableColumns }: { columns: Array<{ property?: s
 watch(
   () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
   async () => {
+    tableRows.value = [];
+    total.value = 0;
+    currentPage.value = 1;
     await loadOptions();
     await fetchReport();
   },
@@ -454,13 +374,23 @@ onMounted(async () => {
 
       <el-form-item label="是否赠品">
         <el-select v-model="query.isGift" style="width: 120px">
-          <el-option v-for="option in giftStatusOptions" :key="option" :label="option" :value="option" />
+          <el-option
+            v-for="option in yesNoOptions"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
+          />
         </el-select>
       </el-form-item>
 
       <el-form-item label="查询跨月单据">
         <el-select v-model="query.crossMonth" style="width: 120px">
-          <el-option v-for="option in crossMonthOptions" :key="option" :label="option" :value="option" />
+          <el-option
+            v-for="option in yesNoOptions"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
+          />
         </el-select>
       </el-form-item>
 

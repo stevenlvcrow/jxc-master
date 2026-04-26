@@ -4,6 +4,7 @@ import { RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSessionStore } from '@/stores/session';
 import { fetchInventoryInoutSummaryReportApi } from '@/api/modules/inventory';
@@ -21,6 +22,7 @@ type StatisticDimension = '物品' | '物品类别';
 type ItemStatus = '全部' | '启用' | '停用';
 type UnitType = '库存单位';
 type QueryScheme = '系统默认方案';
+const INVENTORY_PERIOD_TYPE_DICT = 'inventory.period_type';
 type TreeNode = {
   value: string;
   label: string;
@@ -72,6 +74,8 @@ type ReportColumn = {
 
 const sessionStore = useSessionStore();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
+const { optionsOf } = useDictionaryOptions([INVENTORY_PERIOD_TYPE_DICT]);
+const periodTypeOptions = optionsOf(INVENTORY_PERIOD_TYPE_DICT);
 const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
 
 const statisticDimensionOptions: StatisticDimension[] = ['物品', '物品类别'];
@@ -113,6 +117,8 @@ const query = reactive({
   warehouse: '',
   warehouseType: '',
   dateRange: [] as string[],
+  periodType: 'MONTH',
+  periodStartDate: '',
   itemCode: '',
   itemCategory: '',
   statisticType: '',
@@ -298,6 +304,8 @@ const fetchReport = async () => {
       warehouseType: query.warehouseType || undefined,
       startDate: query.dateRange[0],
       endDate: query.dateRange[1],
+      periodType: query.periodType,
+      periodStartDate: query.periodStartDate,
       itemCode: query.itemCode || undefined,
       itemCategory: query.itemCategory || undefined,
       statisticType: query.statisticType || undefined,
@@ -324,6 +332,8 @@ const handleReset = async () => {
   query.warehouse = '';
   query.warehouseType = '';
   query.dateRange = [];
+  query.periodType = 'MONTH';
+  query.periodStartDate = '';
   query.itemCode = '';
   query.itemCategory = '';
   query.statisticType = '';
@@ -440,6 +450,27 @@ onMounted(async () => {
           range-separator="至"
           value-format="YYYY-MM-DD"
           style="width: 260px"
+        />
+      </el-form-item>
+
+      <el-form-item label="期初周期">
+        <el-select v-model="query.periodType" style="width: 130px">
+          <el-option
+            v-for="option in periodTypeOptions"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="周期开始">
+        <el-date-picker
+          v-model="query.periodStartDate"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="请选择"
+          style="width: 150px"
         />
       </el-form-item>
 

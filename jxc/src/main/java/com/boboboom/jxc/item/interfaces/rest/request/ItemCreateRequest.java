@@ -42,7 +42,7 @@ public record ItemCreateRequest(
         String consumeOnInbound,
         String disableStocktake,
         String defaultNoStocktake,
-        List<String> stocktakeTypes,
+        String stocktakeFrequency,
         String purchaseReceiptRule,
         String purchaseRuleMaxRatio,
         String purchaseRuleMinRatio,

@@ -134,6 +134,7 @@ public class ItemApplicationService {
                                       String statType,
                                       String storageMode,
                                       String tag,
+                                      String stocktakeFrequency,
                                       String orgId) {
         ItemScope scope = resolveItemScope(orgId);
         int safePageNo = pageNo == null || pageNo < 1 ? 1 : pageNo;
@@ -146,6 +147,7 @@ public class ItemApplicationService {
         String statTypeValue = trimNullable(statType);
         String storageModeValue = trimNullable(storageMode);
         String tagValue = trimNullable(tag);
+        String stocktakeFrequencyValue = trimNullable(stocktakeFrequency);
 
         List<ItemListRow> filtered = itemProfileRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
                 .filter(item -> Boolean.FALSE.equals(item.getDraft()))
@@ -157,6 +159,7 @@ public class ItemApplicationService {
                 .filter(row -> matchCondition(row.statType(), statTypeValue))
                 .filter(row -> matchStorageMode(row.storageMode(), storageModeValue))
                 .filter(row -> matchTag(row.tag(), tagValue))
+                .filter(row -> matchCondition(row.stocktakeFrequency(), stocktakeFrequencyValue))
                 .toList();
 
         long total = filtered.size();
@@ -237,6 +240,7 @@ public class ItemApplicationService {
                 normalizeNumericString(request.stockMin()),
                 normalizeNumericString(request.stockMax())
         );
+        normalizeStocktakeFrequency(request.stocktakeFrequency());
         resolveVolume(request);
         resolveWeight(request);
     }
@@ -281,7 +285,8 @@ public class ItemApplicationService {
                 defaultIfBlank(trimNullable(request.tag()), PLACEHOLDER),
                 hasImages(request.introImages()) ? "已上传" : "未上传",
                 formatDateTime(profile.getCreatedAt()),
-                formatDateTime(profile.getUpdatedAt())
+                formatDateTime(profile.getUpdatedAt()),
+                normalizeStocktakeFrequency(request.stocktakeFrequency())
         );
     }
 
@@ -434,6 +439,20 @@ public class ItemApplicationService {
         throw new BusinessException("储存方式仅支持 冷藏/冷冻/常温");
     }
 
+    private String normalizeStocktakeFrequency(String stocktakeFrequency) {
+        String normalized = trimNullable(stocktakeFrequency);
+        if (normalized == null) {
+            return null;
+        }
+        if ("月盘点".equals(normalized) || "MONTHLY".equals(normalized)) {
+            throw new BusinessException("盘点频次不支持月盘点，请清理脏数据");
+        }
+        if (DictionaryCodes.DAILY.equals(normalized) || DictionaryCodes.WEEKLY.equals(normalized)) {
+            return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_STOCKTAKE_FREQUENCY, normalized);
+        }
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.INVENTORY_STOCKTAKE_FREQUENCY, normalized);
+    }
+
     private void validateStockRange(String stockMin, String stockMax) {
         if (stockMin == null || stockMax == null) {
             return;
@@ -554,7 +573,8 @@ public class ItemApplicationService {
                               String tag,
                               String image,
                               String createdAt,
-                              String updatedAt) {
+                              String updatedAt,
+                              String stocktakeFrequency) {
     }
 
     /** 物品与供应商分页数据模型，承载列表数据和分页信息。 */

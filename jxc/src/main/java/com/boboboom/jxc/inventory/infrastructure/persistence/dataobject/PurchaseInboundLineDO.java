@@ -1,6 +1,7 @@
 package com.boboboom.jxc.inventory.infrastructure.persistence.dataobject;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -18,6 +19,10 @@ public class PurchaseInboundLineDO extends BaseIdDO {
     private BigDecimal quantity;
     private BigDecimal unitPrice;
     private BigDecimal taxRate;
+    private String batchNo;
+    private String manufacturer;
+    private LocalDate productionDate;
+    private LocalDate expiryDate;
     private LocalDateTime createdAt;
 
     /** 获取InboundId。 */
@@ -98,6 +103,46 @@ public class PurchaseInboundLineDO extends BaseIdDO {
     /** 设置TaxRate。 */
     public void setTaxRate(BigDecimal taxRateValue) {
         this.taxRate = taxRateValue;
+    }
+
+    /** 获取BatchNo。 */
+    public String getBatchNo() {
+        return batchNo;
+    }
+
+    /** 设置BatchNo。 */
+    public void setBatchNo(String batchNoValue) {
+        this.batchNo = batchNoValue;
+    }
+
+    /** 获取Manufacturer。 */
+    public String getManufacturer() {
+        return manufacturer;
+    }
+
+    /** 设置Manufacturer。 */
+    public void setManufacturer(String manufacturerValue) {
+        this.manufacturer = manufacturerValue;
+    }
+
+    /** 获取ProductionDate。 */
+    public LocalDate getProductionDate() {
+        return productionDate;
+    }
+
+    /** 设置ProductionDate。 */
+    public void setProductionDate(LocalDate productionDateValue) {
+        this.productionDate = productionDateValue;
+    }
+
+    /** 获取ExpiryDate。 */
+    public LocalDate getExpiryDate() {
+        return expiryDate;
+    }
+
+    /** 设置ExpiryDate。 */
+    public void setExpiryDate(LocalDate expiryDateValue) {
+        this.expiryDate = expiryDateValue;
     }
 
     /** 获取CreatedAt。 */

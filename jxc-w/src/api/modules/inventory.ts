@@ -99,6 +99,19 @@ export type PurchaseInboundPermission = {
   canUnapprove: boolean;
 };
 
+export type PurchaseInboundDeleteResult = {
+  status: 'DELETED' | 'SUBMITTED';
+  message: string;
+  id: number;
+};
+
+export type PurchaseInboundBatchDeleteResult = {
+  status: 'DELETED' | 'SUBMITTED' | 'PARTIAL_SUBMITTED';
+  message: string;
+  deletedCount: number;
+  submittedCount: number;
+};
+
 const withOrgParams = <T extends Record<string, unknown>>(params?: T, orgId?: string) => ({
   ...(params ?? {}),
   ...(orgId ? { orgId } : {}),
@@ -130,12 +143,12 @@ export const updatePurchaseInboundApi = (id: number, payload: CreatePurchaseInbo
   });
 
 export const deletePurchaseInboundApi = (id: number, orgId?: string) =>
-  apiClient.delete<void>(`/api/inventory/purchase-inbound/${id}`, {
+  apiClient.delete<PurchaseInboundDeleteResult>(`/api/inventory/purchase-inbound/${id}`, {
     params: withOrgParams(undefined, orgId),
   });
 
 export const batchDeletePurchaseInboundApi = (ids: number[], orgId?: string) =>
-  apiClient.delete<void>('/api/inventory/purchase-inbound', {
+  apiClient.delete<PurchaseInboundBatchDeleteResult>('/api/inventory/purchase-inbound', {
     params: withOrgParams(undefined, orgId),
     data: { ids },
   });
@@ -300,8 +313,6 @@ export type GenericInventoryDocumentType =
   | 'damage-outbound'
   | 'other-inbound'
   | 'other-outbound'
-  | 'profit-inbound'
-  | 'loss-outbound'
   | 'production-inbound'
   | 'customer-sales-outbound'
   | 'customer-return-inbound'
@@ -344,6 +355,9 @@ export type GenericInventoryDocumentLinePayload = {
   unitPrice?: number | null;
   amount?: number | null;
   lineReason?: string;
+  dishId?: string;
+  dishName?: string;
+  damageReason?: string;
   remark?: string;
   extraFields?: Record<string, string>;
 };
@@ -394,6 +408,9 @@ export type GenericInventoryDocumentDetail = {
     unitPrice: number | null;
     amount: number | null;
     lineReason: string;
+    dishId: string;
+    dishName: string;
+    damageReason: string;
     remark: string;
     extraFields: Record<string, string>;
   }>;
@@ -777,6 +794,43 @@ export type StockWarningReportParams = {
   unitType?: string;
 };
 
+export type RealtimeStockReportParams = {
+  pageNo: number;
+  pageSize: number;
+  warehouse?: string;
+  itemCategory?: string;
+  itemCode?: string;
+  itemStatus?: string;
+  batchNo?: string;
+  shelfLifeStatus?: string;
+};
+
+export type RealtimeStockReportRow = {
+  id: string;
+  itemCode: string;
+  itemName: string;
+  itemCategory: string;
+  unit: string;
+  currentStock: number;
+  availableStock: number;
+  costAmount: number;
+  avgCost: number;
+  warehouse: string;
+  warehouseType: string;
+  spec: string;
+  batchNo: string;
+  manufacturer: string;
+  productionDate: string;
+  expiryDate: string;
+  shelfLifeStatus: string;
+  itemStatus: string;
+};
+
+export const fetchRealtimeStockReportApi = (params: RealtimeStockReportParams, orgId?: string) =>
+  apiClient.get<InventoryReportPage<RealtimeStockReportRow>>('/api/inventory/realtime-stock/report', {
+    params: withOrgParams(params, orgId),
+  });
+
 export type StockWarningReportRow = {
   id: string;
   itemCode: string;
@@ -789,6 +843,11 @@ export type StockWarningReportRow = {
   stockLowerLimit: number;
   warningStatus: string;
   itemStatus: string;
+  batchNo: string;
+  productionDate: string;
+  expiryDate: string;
+  shelfLifeStatus: string;
+  manufacturer: string;
 };
 
 export const fetchStockWarningReportApi = (params: StockWarningReportParams, orgId?: string) =>
@@ -893,6 +952,8 @@ export type InventoryInoutSummaryReportParams = {
   warehouseType?: string;
   startDate?: string;
   endDate?: string;
+  periodType?: string;
+  periodStartDate?: string;
   itemCode?: string;
   itemCategory?: string;
   statisticType?: string;
@@ -951,6 +1012,8 @@ export type StockInoutSummaryReportParams = {
   dateDimension?: string;
   startDate?: string;
   endDate?: string;
+  periodType?: string;
+  periodStartDate?: string;
   statisticDimension?: string;
   warehouse?: string;
   warehouseType?: string;
@@ -1002,6 +1065,8 @@ export type OtherInoutSummaryReportParams = {
   pageSize: number;
   startDate?: string;
   endDate?: string;
+  periodType?: string;
+  periodStartDate?: string;
   warehouse?: string;
   itemCategory?: string;
   itemCode?: string;
@@ -1125,6 +1190,8 @@ export type StockTurnoverRateReportParams = {
   statisticMethod?: string;
   startDate?: string;
   endDate?: string;
+  periodType?: string;
+  periodStartDate?: string;
   warehouse?: string;
   itemCategory?: string;
   itemCode?: string;
@@ -1164,6 +1231,7 @@ export type InventoryCheckRow = {
   totalActualAmount: string;
   totalDiffAmount: string;
   checkRangeType: string;
+  stocktakeFrequency: string;
   status: string;
   diffStatus: string;
   auditDate: string;
@@ -1185,6 +1253,7 @@ export type InventoryCheckListParams = {
   itemName?: string;
   status?: string;
   checkRangeType?: string;
+  stocktakeFrequency?: string;
   printStatus?: string;
   generatedStatus?: string;
   remark?: string;
@@ -1208,6 +1277,7 @@ export type InventoryCheckLinePayload = {
   actualQty?: number | null;
   bookPrice?: number | null;
   profitLossReason?: string;
+  differenceReasonCode?: string;
   remark?: string;
   extraFields?: Record<string, string>;
 };
@@ -1216,6 +1286,7 @@ export type InventoryCheckSavePayload = {
   checkDate: string;
   warehouseName: string;
   checkRangeType: string;
+  stocktakeFrequency: string;
   freezeStock?: boolean;
   collaborativeFlag?: boolean;
   planName?: string;
@@ -1234,6 +1305,7 @@ export type InventoryCheckDetail = {
   checkDate: string;
   warehouseName: string;
   checkRangeType: string;
+  stocktakeFrequency: string;
   freezeStock: boolean;
   collaborativeFlag: boolean;
   planName: string;
@@ -1262,6 +1334,7 @@ export type InventoryCheckDetail = {
     profitQty: number | null;
     lossQty: number | null;
     profitLossReason: string;
+    differenceReasonCode: string;
     profitInboundPrice: number | null;
     profitAmount: number | null;
     lossOutboundPrice: number | null;

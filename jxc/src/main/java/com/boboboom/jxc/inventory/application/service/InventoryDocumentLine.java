@@ -20,6 +20,9 @@ public class InventoryDocumentLine {
     private BigDecimal unitPrice;
     private BigDecimal amount;
     private String lineReason;
+    private String dishId;
+    private String dishName;
+    private String damageReason;
     private String remark;
     private String extraJson;
     private LocalDateTime createdAt;
@@ -142,6 +145,36 @@ public class InventoryDocumentLine {
     /** 设置LineReason。 */
     public void setLineReason(String lineReasonValue) {
         this.lineReason = lineReasonValue;
+    }
+
+    /** 获取DishId。 */
+    public String getDishId() {
+        return dishId;
+    }
+
+    /** 设置DishId。 */
+    public void setDishId(String dishIdValue) {
+        this.dishId = dishIdValue;
+    }
+
+    /** 获取DishName。 */
+    public String getDishName() {
+        return dishName;
+    }
+
+    /** 设置DishName。 */
+    public void setDishName(String dishNameValue) {
+        this.dishName = dishNameValue;
+    }
+
+    /** 获取DamageReason。 */
+    public String getDamageReason() {
+        return damageReason;
+    }
+
+    /** 设置DamageReason。 */
+    public void setDamageReason(String damageReasonValue) {
+        this.damageReason = damageReasonValue;
     }
 
     /** 获取Remark。 */

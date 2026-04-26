@@ -96,7 +96,7 @@ public class PurchaseInboundRepositoryImpl implements PurchaseInboundRepository 
 
     /** 按主键删除记录。 */
     @Override
-    public void deleteById(Long id) {
-        purchaseInboundMapper.deleteById(id);
+    public int deleteById(Long id) {
+        return purchaseInboundMapper.deleteById(id);
     }
 }

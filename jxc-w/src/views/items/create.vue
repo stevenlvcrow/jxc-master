@@ -23,11 +23,15 @@ import CommonSelectorDialog, {
 } from '@/components/CommonSelectorDialog.vue';
 import CommonNumberInput from '@/components/CommonNumberInput.vue';
 import CommonMnemonicField from '@/components/CommonMnemonicField.vue';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 import { requireItemOrgId } from './org';
 
 const router = useRouter();
 const route = useRoute();
 const sessionStore = useSessionStore();
+const STOCKTAKE_FREQUENCY_DICT = 'inventory.stocktake_frequency';
+const { optionsOf } = useDictionaryOptions([STOCKTAKE_FREQUENCY_DICT]);
+const stocktakeFrequencyOptions = optionsOf(STOCKTAKE_FREQUENCY_DICT);
 
 const form = reactive({
   name: '',
@@ -60,7 +64,7 @@ const form = reactive({
   consumeOnInbound: '否',
   disableStocktake: '否',
   defaultNoStocktake: '否',
-  stocktakeTypes: [] as string[],
+  stocktakeFrequency: '',
   purchaseReceiptRule: '不限制',
   purchaseRuleMaxRatio: '',
   purchaseRuleMinRatio: '',
@@ -98,7 +102,6 @@ const statTypeOptions = [
   '固定资产类 (费用类)',
 ];
 const taxBenefitOptions = ['无', '免税'];
-const stocktakeTypeOptions = ['日盘点', '周盘点'];
 const purchaseReceiptRuleOptions = [
   '不限制',
   '等于采购数量',
@@ -733,7 +736,7 @@ const applyDetailPayload = (payload: ItemCreatePayload) => {
     ...form,
     ...payload,
     stocktakeUnits: payload.stocktakeUnits ?? [],
-    stocktakeTypes: payload.stocktakeTypes ?? [],
+    stocktakeFrequency: payload.stocktakeFrequency ?? '',
   });
 
   unitSettingRows.value = payload.unitSettingRows?.length
@@ -1242,12 +1245,15 @@ const loadDetailIfEditMode = async () => {
                 <el-radio value="否">否</el-radio>
               </el-radio-group>
             </el-form-item>
-            <el-form-item label="盘点类型">
-              <el-checkbox-group v-model="form.stocktakeTypes">
-                <el-checkbox v-for="option in stocktakeTypeOptions" :key="`check-${option}`" :value="option">
-                  {{ option }}
-                </el-checkbox>
-              </el-checkbox-group>
+            <el-form-item label="盘点频次">
+              <el-select v-model="form.stocktakeFrequency" clearable placeholder="请选择">
+                <el-option
+                  v-for="option in stocktakeFrequencyOptions"
+                  :key="option.itemCode"
+                  :label="option.itemLabel"
+                  :value="option.itemCode"
+                />
+              </el-select>
             </el-form-item>
 
             <el-form-item label="采购收货数量规则" class="purchase-rule-form-item">

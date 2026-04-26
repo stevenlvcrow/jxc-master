@@ -4,6 +4,7 @@ import { RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSessionStore } from '@/stores/session';
 import { fetchStockTurnoverRateReportApi } from '@/api/modules/inventory';
@@ -18,6 +19,7 @@ import { resolveArchiveOrgId } from '@/views/items/org';
 type StatisticDimension = '仓库' | '物品';
 type StatisticMethod = '按金额计算' | '按数量计算';
 type UnitType = '基准单位';
+const INVENTORY_PERIOD_TYPE_DICT = 'inventory.period_type';
 type TreeNode = {
   value: string;
   label: string;
@@ -51,6 +53,8 @@ type ReportColumn = {
 
 const sessionStore = useSessionStore();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
+const { optionsOf } = useDictionaryOptions([INVENTORY_PERIOD_TYPE_DICT]);
+const periodTypeOptions = optionsOf(INVENTORY_PERIOD_TYPE_DICT);
 
 const statisticDimensionOptions: StatisticDimension[] = ['仓库', '物品'];
 const statisticMethodTree: TreeNode[] = [
@@ -68,6 +72,8 @@ const query = reactive({
   statisticDimension: '仓库' as StatisticDimension,
   statisticMethod: '按金额计算' as StatisticMethod,
   dateRange: [] as string[],
+  periodType: 'MONTH',
+  periodStartDate: '',
   warehouse: '',
   itemCategory: '',
   itemCode: '',
@@ -204,6 +210,8 @@ const fetchReport = async () => {
       statisticMethod: query.statisticMethod,
       startDate: query.dateRange[0],
       endDate: query.dateRange[1],
+      periodType: query.periodType,
+      periodStartDate: query.periodStartDate,
       warehouse: query.warehouse || undefined,
       itemCategory: query.itemCategory || undefined,
       itemCode: query.itemCode || undefined,
@@ -226,6 +234,8 @@ const handleReset = async () => {
   query.statisticDimension = '仓库';
   query.statisticMethod = '按金额计算';
   query.dateRange = [];
+  query.periodType = 'MONTH';
+  query.periodStartDate = '';
   query.warehouse = '';
   query.itemCategory = '';
   query.itemCode = '';
@@ -317,6 +327,27 @@ onMounted(async () => {
           range-separator="至"
           value-format="YYYY-MM-DD"
           style="width: 260px"
+        />
+      </el-form-item>
+
+      <el-form-item label="期初周期">
+        <el-select v-model="query.periodType" style="width: 130px">
+          <el-option
+            v-for="option in periodTypeOptions"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
+          />
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="周期开始">
+        <el-date-picker
+          v-model="query.periodStartDate"
+          type="date"
+          value-format="YYYY-MM-DD"
+          placeholder="请选择"
+          style="width: 150px"
         />
       </el-form-item>
 

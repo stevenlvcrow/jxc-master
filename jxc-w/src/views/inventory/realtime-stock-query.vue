@@ -7,15 +7,13 @@ import CommonTableSection from '@/components/CommonTableSection.vue';
 import { useSessionStore } from '@/stores/session';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import {
-  fetchInventoryBalancesApi,
-  type InventoryBalanceRow,
+  fetchRealtimeStockReportApi,
+  type RealtimeStockReportRow,
 } from '@/api/modules/inventory';
 import {
   fetchItemCategoryTreeApi,
-  fetchItemDetailApi,
   fetchItemStatisticsTypesApi,
   fetchItemsApi,
-  type ItemCreatePayload,
   type ItemStatisticsTypeRow,
   type ItemVO,
 } from '@/api/modules/item';
@@ -44,20 +42,17 @@ type ReportRow = {
   category: string;
   statType: string;
   unit: string;
-  unitRateText: string;
-  volume: number;
-  weight: number;
   stockQty: number;
+  availableStock: number;
   stockAmount: number;
-  stockAmountExTax: number;
-  taxAmount: number;
-  avgPriceExTax: number;
-  expectedInboundQty: number;
-  expectedOutboundQty: number;
-  theoreticalQty: number;
-  theoreticalAmount: number;
-  d1TheoreticalQty: number;
-  d2TheoreticalQty: number;
+  avgCost: number;
+  warehouseType: string;
+  batchNo: string;
+  manufacturer: string;
+  productionDate: string;
+  expiryDate: string;
+  shelfLifeStatus: string;
+  itemStatus: string;
 };
 
 type DisplayColumn = {
@@ -107,21 +102,18 @@ const warehouseColumns: DisplayColumn[] = [
   { key: 'category', label: '物品类别', minWidth: 120 },
   { key: 'statType', label: '统计类型', minWidth: 120 },
   { key: 'unit', label: '单位', minWidth: 100 },
-  { key: 'unitRateText', label: '与基准单位的换算率', minWidth: 180 },
-  { key: 'volume', label: '物品体积', minWidth: 100 },
-  { key: 'weight', label: '物品重量', minWidth: 100 },
   { key: 'warehouseName', label: '仓库', minWidth: 140 },
-  { key: 'stockQty', label: '库存量', minWidth: 100 },
-  { key: 'stockAmount', label: '库存金额', minWidth: 110 },
-  { key: 'stockAmountExTax', label: '库存金额（不含税）', minWidth: 140 },
-  { key: 'taxAmount', label: '库存税额', minWidth: 110 },
-  { key: 'avgPriceExTax', label: '库存均价（不含税）', minWidth: 140 },
-  { key: 'expectedInboundQty', label: '预计入库量', minWidth: 110 },
-  { key: 'expectedOutboundQty', label: '预计出库量', minWidth: 110 },
-  { key: 'theoreticalQty', label: '理论库存量', minWidth: 110 },
-  { key: 'theoreticalAmount', label: '理论库存金额', minWidth: 140 },
-  { key: 'd1TheoreticalQty', label: 'D+1 理论库存量', minWidth: 130 },
-  { key: 'd2TheoreticalQty', label: 'D+2 理论库存量', minWidth: 130 },
+  { key: 'warehouseType', label: '仓库类型', minWidth: 120 },
+  { key: 'stockQty', label: '当前库存', minWidth: 110 },
+  { key: 'availableStock', label: '可用库存', minWidth: 110 },
+  { key: 'stockAmount', label: '库存成本', minWidth: 120 },
+  { key: 'avgCost', label: '移动均价', minWidth: 110 },
+  { key: 'batchNo', label: '批次', minWidth: 130 },
+  { key: 'manufacturer', label: '厂家', minWidth: 130 },
+  { key: 'productionDate', label: '生产日期', minWidth: 110 },
+  { key: 'expiryDate', label: '到期日期', minWidth: 110 },
+  { key: 'shelfLifeStatus', label: '保质期状态', minWidth: 120 },
+  { key: 'itemStatus', label: '物品状态', minWidth: 100 },
 ];
 
 const itemColumns: DisplayColumn[] = [
@@ -131,18 +123,16 @@ const itemColumns: DisplayColumn[] = [
   { key: 'category', label: '物品类别', minWidth: 120 },
   { key: 'statType', label: '统计类型', minWidth: 120 },
   { key: 'unit', label: '单位', minWidth: 100 },
-  { key: 'unitRateText', label: '与基准单位的换算率', minWidth: 180 },
-  { key: 'volume', label: '物品体积', minWidth: 100 },
-  { key: 'weight', label: '物品重量', minWidth: 100 },
-  { key: 'stockQty', label: '库存量', minWidth: 100 },
-  { key: 'stockAmount', label: '库存金额', minWidth: 110 },
-  { key: 'stockAmountExTax', label: '库存金额（不含税）', minWidth: 140 },
-  { key: 'taxAmount', label: '库存税额', minWidth: 110 },
-  { key: 'avgPriceExTax', label: '库存均价（不含税）', minWidth: 140 },
-  { key: 'expectedInboundQty', label: '预计入库量', minWidth: 110 },
-  { key: 'expectedOutboundQty', label: '预计出库量', minWidth: 110 },
-  { key: 'theoreticalQty', label: '理论库存量', minWidth: 110 },
-  { key: 'theoreticalAmount', label: '理论库存金额', minWidth: 140 },
+  { key: 'stockQty', label: '当前库存', minWidth: 110 },
+  { key: 'availableStock', label: '可用库存', minWidth: 110 },
+  { key: 'stockAmount', label: '库存成本', minWidth: 120 },
+  { key: 'avgCost', label: '移动均价', minWidth: 110 },
+  { key: 'batchNo', label: '批次', minWidth: 130 },
+  { key: 'manufacturer', label: '厂家', minWidth: 130 },
+  { key: 'productionDate', label: '生产日期', minWidth: 110 },
+  { key: 'expiryDate', label: '到期日期', minWidth: 110 },
+  { key: 'shelfLifeStatus', label: '保质期状态', minWidth: 120 },
+  { key: 'itemStatus', label: '物品状态', minWidth: 100 },
 ];
 
 const visibleColumns = computed(() => (isWarehouseDimension.value ? warehouseColumns : itemColumns));
@@ -153,14 +143,7 @@ const tableData = computed(() => {
 });
 
 const normalizeText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
-const parseNumber = (value: unknown) => {
-  const text = normalizeText(value);
-  if (!text) {
-    return 0;
-  }
-  const parsed = Number(text);
-  return Number.isFinite(parsed) ? parsed : 0;
-};
+const parseNumber = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
 const formatNumber = (value: number, digits = 4) => Number.isFinite(value) ? value.toFixed(digits) : '0.0000';
 const formatMoney = (value: number) => formatNumber(value, 2);
 const formatCell = (value: unknown) => {
@@ -235,31 +218,6 @@ const loadItemOptions = async (orgId: string) => {
   return rows;
 };
 
-const resolveUnitRateText = (detail: ItemCreatePayload | undefined, item: ItemVO) => {
-  const baseUnit = normalizeText(detail?.unitSettingRows?.[0]?.unit) || normalizeText(item.baseUnit) || '基准单位';
-  const stockUnit = normalizeText(detail?.defaultStockUnit) || normalizeText(item.stockUnit) || baseUnit;
-  const stockUnitRow = detail?.unitSettingRows?.find((row) => normalizeText(row.unit) === stockUnit)
-    ?? detail?.unitSettingRows?.[0];
-  if (!stockUnitRow) {
-    return `1${stockUnit}=1${baseUnit}`;
-  }
-  const from = parseNumber(stockUnitRow.convertFrom || '1');
-  const to = parseNumber(stockUnitRow.convertTo || stockUnitRow.convertFrom || '1');
-  const rate = from > 0 ? to / from : 1;
-  return `1${stockUnit}=${formatNumber(rate, 4)}${baseUnit}`;
-};
-
-const loadBalanceRows = async (orgId: string) => {
-  return fetchAllPages<InventoryBalanceRow>(
-    (pageNum, pageSizeValue) => fetchInventoryBalancesApi({
-      pageNum,
-      pageSize: pageSizeValue,
-      warehouse: isWarehouseDimension.value ? query.warehouse || undefined : undefined,
-      itemName: query.item || undefined,
-    }, orgId),
-  );
-};
-
 const buildReportRows = async () => {
   if (!archiveOrgId.value) {
     rawRows.value = [];
@@ -269,9 +227,16 @@ const buildReportRows = async () => {
   loading.value = true;
   try {
     const orgId = archiveOrgId.value;
-    const [items, balances] = await Promise.all([
+    const [items, page] = await Promise.all([
       loadItemOptions(orgId),
-      loadBalanceRows(orgId),
+      fetchRealtimeStockReportApi({
+        pageNo: 1,
+        pageSize: 200,
+        warehouse: isWarehouseDimension.value ? query.warehouse || undefined : undefined,
+        itemCategory: query.category || undefined,
+        itemCode: query.item || undefined,
+        itemStatus: query.status || undefined,
+      }, orgId),
     ]);
     await Promise.all([
       loadCategoryTree(orgId),
@@ -279,119 +244,52 @@ const buildReportRows = async () => {
       loadWarehouseTree(),
     ]);
 
-    const balanceItemCodes = Array.from(new Set(balances.map((row) => row.itemCode).filter((code) => Boolean(code))));
-    const detailPairs = await Promise.all(
-      balanceItemCodes.map(async (code) => {
-        const item = items.find((row) => row.code === code);
-        if (!item) {
-          return [code, null] as const;
-        }
-        const detail = await fetchItemDetailApi(item.id, orgId).catch(() => null);
-        return [code, detail] as const;
-      }),
-    );
-    const detailMap = new Map<string, ItemCreatePayload>();
-    detailPairs.forEach(([code, detail]) => {
-      if (detail) {
-        detailMap.set(code, detail);
-      }
-    });
     const itemMap = new Map(items.map((item) => [item.code, item]));
+    const grouped = new Map<string, ReportRow>();
 
-    const matchedItemCodes = new Set<string>();
-    const grouped = new Map<string, ReportRow & { totalQty: number }>();
-
-    balances.forEach((balance) => {
+    (page.list ?? []).forEach((balance: RealtimeStockReportRow) => {
       const item = itemMap.get(balance.itemCode);
-      if (!item) {
-        return;
-      }
-      if (query.status && query.status !== '启用' && query.status !== '停用') {
-        return;
-      }
-      if (query.category && normalizeText(item.category) !== normalizeText(query.category)) {
-        return;
-      }
-      if (query.statType && normalizeText(item.statType) !== normalizeText(query.statType)) {
-        return;
-      }
-      if (query.item && normalizeText(item.code) !== normalizeText(query.item)) {
-        return;
-      }
-      if (query.status && normalizeText(item.status) !== normalizeText(query.status)) {
-        return;
-      }
-
-      const qty = parseNumber(balance.quantity);
-      const detail = detailMap.get(item.code);
-      const unitPrice = parseNumber(detail?.productionRefCost ?? item.productionCost ?? detail?.suggestPurchasePrice ?? item.suggestPrice);
-      const taxRateValue = parseNumber(detail?.taxRate);
-      const taxRate = taxRateValue > 1 ? taxRateValue / 100 : taxRateValue;
-      const stockAmount = qty * unitPrice;
-      const stockAmountExTax = taxRate > 0 ? stockAmount / (1 + taxRate) : stockAmount;
-      const taxAmount = stockAmount - stockAmountExTax;
-      const avgPriceExTax = qty > 0 ? stockAmountExTax / qty : 0;
-      const theoreticalQty = qty;
-      const theoreticalAmount = theoreticalQty * avgPriceExTax;
       const rowKey = isWarehouseDimension.value
-        ? `${balance.warehouse}|${item.code}`
-        : item.code;
+        ? `${balance.warehouse}|${balance.itemCode}|${balance.batchNo || ''}`
+        : `${balance.itemCode}|${balance.batchNo || ''}`;
       const existing = grouped.get(rowKey);
       if (!existing) {
         grouped.set(rowKey, {
           key: rowKey,
           warehouseName: balance.warehouse,
-          itemCode: item.code,
-          itemName: item.name,
-          spec: item.spec,
-          category: item.category,
-          statType: item.statType,
-          unit: normalizeText(detail?.defaultStockUnit) || normalizeText(item.stockUnit) || '-',
-          unitRateText: resolveUnitRateText(detail ?? undefined, item),
-          volume: parseNumber(item.volume),
-          weight: parseNumber(item.weight),
-          stockQty: qty,
-          stockAmount,
-          stockAmountExTax,
-          taxAmount,
-          avgPriceExTax,
-          expectedInboundQty: 0,
-          expectedOutboundQty: 0,
-          theoreticalQty,
-          theoreticalAmount,
-          d1TheoreticalQty: isWarehouseDimension.value ? 0 : 0,
-          d2TheoreticalQty: isWarehouseDimension.value ? 0 : 0,
-          totalQty: qty,
+          itemCode: balance.itemCode,
+          itemName: balance.itemName,
+          spec: balance.spec,
+          category: balance.itemCategory,
+          statType: normalizeText(item?.statType),
+          unit: balance.unit,
+          stockQty: parseNumber(balance.currentStock),
+          availableStock: parseNumber(balance.availableStock),
+          stockAmount: parseNumber(balance.costAmount),
+          avgCost: parseNumber(balance.avgCost),
+          warehouseType: balance.warehouseType,
+          batchNo: balance.batchNo,
+          manufacturer: balance.manufacturer,
+          productionDate: balance.productionDate,
+          expiryDate: balance.expiryDate,
+          shelfLifeStatus: balance.shelfLifeStatus,
+          itemStatus: balance.itemStatus,
         });
       } else {
-        existing.stockQty += qty;
-        existing.stockAmount += stockAmount;
-        existing.stockAmountExTax += stockAmountExTax;
-        existing.taxAmount += taxAmount;
-        existing.expectedInboundQty += 0;
-        existing.expectedOutboundQty += 0;
-        existing.theoreticalQty += theoreticalQty;
-        existing.theoreticalAmount += theoreticalAmount;
-        existing.totalQty += qty;
-        if (isWarehouseDimension.value) {
-          existing.d1TheoreticalQty = 0;
-          existing.d2TheoreticalQty = 0;
-        }
+        existing.stockQty += parseNumber(balance.currentStock);
+        existing.availableStock += parseNumber(balance.availableStock);
+        existing.stockAmount += parseNumber(balance.costAmount);
+        existing.avgCost = existing.stockQty > 0 ? existing.stockAmount / existing.stockQty : 0;
       }
-      matchedItemCodes.add(item.code);
     });
 
     const filtered = Array.from(grouped.values())
       .filter((row) => !isTruthyFilter(query.hideZeroStock) || row.stockQty !== 0)
-      .filter((row) => !isTruthyFilter(query.hideZeroTheoretical) || row.theoreticalQty !== 0);
+      .filter((row) => !isTruthyFilter(query.hideZeroTheoretical) || row.availableStock !== 0);
 
     rawRows.value = filtered;
-    total.value = filtered.length;
+    total.value = Number(page.total ?? filtered.length);
     currentPage.value = 1;
-
-    if (!matchedItemCodes.size) {
-      itemOptions.value = items.map((row) => ({ value: row.code, label: `${row.code} / ${row.name}` }));
-    }
   } catch {
     rawRows.value = [];
     total.value = 0;
@@ -406,27 +304,13 @@ const filteredRows = computed(() => rawRows.value);
 const summaryTotals = computed(() => {
   const rows = filteredRows.value;
   const stockQty = rows.reduce((sum, row) => sum + row.stockQty, 0);
+  const availableStock = rows.reduce((sum, row) => sum + row.availableStock, 0);
   const stockAmount = rows.reduce((sum, row) => sum + row.stockAmount, 0);
-  const stockAmountExTax = rows.reduce((sum, row) => sum + row.stockAmountExTax, 0);
-  const taxAmount = rows.reduce((sum, row) => sum + row.taxAmount, 0);
-  const expectedInboundQty = rows.reduce((sum, row) => sum + row.expectedInboundQty, 0);
-  const expectedOutboundQty = rows.reduce((sum, row) => sum + row.expectedOutboundQty, 0);
-  const theoreticalQty = rows.reduce((sum, row) => sum + row.theoreticalQty, 0);
-  const theoreticalAmount = rows.reduce((sum, row) => sum + row.theoreticalAmount, 0);
-  const d1TheoreticalQty = rows.reduce((sum, row) => sum + row.d1TheoreticalQty, 0);
-  const d2TheoreticalQty = rows.reduce((sum, row) => sum + row.d2TheoreticalQty, 0);
   return {
     stockQty,
+    availableStock,
     stockAmount,
-    stockAmountExTax,
-    taxAmount,
-    avgPriceExTax: stockQty > 0 ? stockAmountExTax / stockQty : 0,
-    expectedInboundQty,
-    expectedOutboundQty,
-    theoreticalQty,
-    theoreticalAmount,
-    d1TheoreticalQty,
-    d2TheoreticalQty,
+    avgCost: stockQty > 0 ? stockAmount / stockQty : 0,
   };
 });
 
@@ -434,19 +318,10 @@ const summaryCells = computed(() => {
   const totals = summaryTotals.value;
   const labels = [
     `库存量：${formatNumber(totals.stockQty, 4)}`,
-    `库存金额：${formatMoney(totals.stockAmount)}`,
-    `库存金额（不含税）：${formatMoney(totals.stockAmountExTax)}`,
-    `库存税额：${formatMoney(totals.taxAmount)}`,
-    `库存均价（不含税）：${formatMoney(totals.avgPriceExTax)}`,
-    `预计入库量：${formatNumber(totals.expectedInboundQty, 4)}`,
-    `预计出库量：${formatNumber(totals.expectedOutboundQty, 4)}`,
-    `理论库存量：${formatNumber(totals.theoreticalQty, 4)}`,
-    `理论库存金额：${formatMoney(totals.theoreticalAmount)}`,
+    `可用库存：${formatNumber(totals.availableStock, 4)}`,
+    `库存成本：${formatMoney(totals.stockAmount)}`,
+    `移动均价：${formatMoney(totals.avgCost)}`,
   ];
-  if (isWarehouseDimension.value) {
-    labels.push(`D+1 理论库存量：${formatNumber(totals.d1TheoreticalQty, 4)}`);
-    labels.push(`D+2 理论库存量：${formatNumber(totals.d2TheoreticalQty, 4)}`);
-  }
   return labels;
 });
 
@@ -460,8 +335,8 @@ const handleExport = async () => {
   try {
     const rows = filteredRows.value;
     const headers = isWarehouseDimension.value
-      ? ['物品编码', '物品名称', '规格型号', '物品类别', '统计类型', '单位', '与基准单位的换算率', '物品体积', '物品重量', '仓库', '库存量', '库存金额', '库存金额（不含税）', '库存税额', '库存均价（不含税）', '预计入库量', '预计出库量', '理论库存量', '理论库存金额', 'D+1 理论库存量', 'D+2 理论库存量']
-      : ['物品编码', '物品名称', '规格型号', '物品类别', '统计类型', '单位', '与基准单位的换算率', '物品体积', '物品重量', '库存量', '库存金额', '库存金额（不含税）', '库存税额', '库存均价（不含税）', '预计入库量', '预计出库量', '理论库存量', '理论库存金额'];
+      ? ['物品编码', '物品名称', '规格型号', '物品类别', '统计类型', '单位', '仓库', '仓库类型', '当前库存', '可用库存', '库存成本', '移动均价', '批次', '厂家', '生产日期', '到期日期', '保质期状态', '物品状态']
+      : ['物品编码', '物品名称', '规格型号', '物品类别', '统计类型', '单位', '当前库存', '可用库存', '库存成本', '移动均价', '批次', '厂家', '生产日期', '到期日期', '保质期状态', '物品状态'];
     const lines = [headers.map(toCsvCell).join(',')];
     rows.forEach((row) => {
       const cells = isWarehouseDimension.value
@@ -472,21 +347,18 @@ const handleExport = async () => {
             row.category,
             row.statType,
             row.unit,
-            row.unitRateText,
-            formatNumber(row.volume),
-            formatNumber(row.weight),
             row.warehouseName,
+            row.warehouseType,
             formatNumber(row.stockQty, 4),
+            formatNumber(row.availableStock, 4),
             formatMoney(row.stockAmount),
-            formatMoney(row.stockAmountExTax),
-            formatMoney(row.taxAmount),
-            formatMoney(row.avgPriceExTax),
-            formatNumber(row.expectedInboundQty, 4),
-            formatNumber(row.expectedOutboundQty, 4),
-            formatNumber(row.theoreticalQty, 4),
-            formatMoney(row.theoreticalAmount),
-            formatNumber(row.d1TheoreticalQty, 4),
-            formatNumber(row.d2TheoreticalQty, 4),
+            formatMoney(row.avgCost),
+            row.batchNo,
+            row.manufacturer,
+            row.productionDate,
+            row.expiryDate,
+            row.shelfLifeStatus,
+            row.itemStatus,
           ]
         : [
             row.itemCode,
@@ -495,18 +367,16 @@ const handleExport = async () => {
             row.category,
             row.statType,
             row.unit,
-            row.unitRateText,
-            formatNumber(row.volume),
-            formatNumber(row.weight),
             formatNumber(row.stockQty, 4),
+            formatNumber(row.availableStock, 4),
             formatMoney(row.stockAmount),
-            formatMoney(row.stockAmountExTax),
-            formatMoney(row.taxAmount),
-            formatMoney(row.avgPriceExTax),
-            formatNumber(row.expectedInboundQty, 4),
-            formatNumber(row.expectedOutboundQty, 4),
-            formatNumber(row.theoreticalQty, 4),
-            formatMoney(row.theoreticalAmount),
+            formatMoney(row.avgCost),
+            row.batchNo,
+            row.manufacturer,
+            row.productionDate,
+            row.expiryDate,
+            row.shelfLifeStatus,
+            row.itemStatus,
           ];
       lines.push(cells.map(toCsvCell).join(','));
     });

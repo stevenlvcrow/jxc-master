@@ -4,42 +4,23 @@ import { RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 import { useSessionStore } from '@/stores/session';
 import { fetchItemsApi, type ItemVO } from '@/api/modules/item';
+import {
+  fetchPurchaseReturnStatusTrackingReportApi,
+  type PurchaseReturnStatusTrackingReportRow,
+} from '@/api/modules/purchase';
 import { resolveArchiveOrgId } from '@/views/items/org';
 
-type DocumentStatus = '全部' | '草稿' | '已提交' | '已审核' | '已关闭';
-type GiftStatus = '全部' | '是' | '否';
 type TreeNode = {
   value: string;
   label: string;
   children?: TreeNode[];
 };
-type PurchaseReturnTrackingRow = {
-  id: string;
-  returnCode: string;
-  documentStatus: Exclude<DocumentStatus, '全部'>;
-  returnDate: string;
-  sourceCode: string;
-  supplierCode: string;
-  supplierName: string;
-  itemName: string;
-  spec: string;
-  itemCategory: string;
-  purchaseUnit: string;
-  baseUnit: string;
-  isGift: Exclude<GiftStatus, '全部'>;
-  returnQty: number;
-  returnBaseQty: number;
-  returnAmount: number;
-  auditQty: number;
-  shippedQty: number;
-  shippedBaseQty: number;
-  shippedAmount: number;
-  shippingWarehouse: string;
-};
+type PurchaseReturnTrackingRow = PurchaseReturnStatusTrackingReportRow;
 type ReportColumn = {
   key: keyof PurchaseReturnTrackingRow;
   label: string;
@@ -50,14 +31,17 @@ type ReportColumn = {
 
 const sessionStore = useSessionStore();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
+const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
+const COMMON_YES_NO_DICT = 'common.yes_no';
+const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT, COMMON_YES_NO_DICT]);
 const {
   supplierOptions,
   supplierLoading,
   loadSupplierOptions,
 } = useSupplierArchiveOptions();
 
-const documentStatusOptions: DocumentStatus[] = ['全部', '草稿', '已提交', '已审核', '已关闭'];
-const giftStatusOptions: GiftStatus[] = ['全部', '是', '否'];
+const documentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT, { enabled: true, label: '全部', value: '全部' });
+const yesNoOptions = optionsOf(COMMON_YES_NO_DICT, { enabled: true, label: '全部', value: '全部' });
 
 const query = reactive({
   shippingWarehouse: '',
@@ -65,8 +49,8 @@ const query = reactive({
   supplier: '',
   returnCode: '',
   itemCode: '',
-  documentStatus: '全部' as DocumentStatus,
-  isGift: '全部' as GiftStatus,
+  documentStatus: '全部',
+  isGift: '全部',
 });
 
 const loading = ref(false);
@@ -76,77 +60,7 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
 
-const tableRows = ref<PurchaseReturnTrackingRow[]>([
-  {
-    id: '1',
-    returnCode: 'PRT-202604-001',
-    documentStatus: '已审核',
-    returnDate: '2026-04-23',
-    sourceCode: 'PR-202604-001',
-    supplierCode: 'SUP-001',
-    supplierName: '鲜达食品',
-    itemName: '鸡胸肉',
-    spec: '10kg/箱',
-    itemCategory: '生鲜原料',
-    purchaseUnit: '箱',
-    baseUnit: 'kg',
-    isGift: '否',
-    returnQty: 1,
-    returnBaseQty: 10,
-    returnAmount: 185,
-    auditQty: 1,
-    shippedQty: 1,
-    shippedBaseQty: 10,
-    shippedAmount: 185,
-    shippingWarehouse: '中央成品仓',
-  },
-  {
-    id: '2',
-    returnCode: 'PRT-202604-002',
-    documentStatus: '已提交',
-    returnDate: '2026-04-24',
-    sourceCode: 'PO-202604-002',
-    supplierCode: 'SUP-002',
-    supplierName: '优选农场',
-    itemName: '牛腩',
-    spec: '5kg/包',
-    itemCategory: '生鲜原料',
-    purchaseUnit: '包',
-    baseUnit: 'kg',
-    isGift: '否',
-    returnQty: 2,
-    returnBaseQty: 10,
-    returnAmount: 520,
-    auditQty: 2,
-    shippedQty: 0,
-    shippedBaseQty: 0,
-    shippedAmount: 0,
-    shippingWarehouse: '北区原料仓',
-  },
-  {
-    id: '3',
-    returnCode: 'PRT-202604-003',
-    documentStatus: '草稿',
-    returnDate: '2026-04-24',
-    sourceCode: '-',
-    supplierCode: 'SUP-003',
-    supplierName: '盒马包材',
-    itemName: '包装盒',
-    spec: '500个/箱',
-    itemCategory: '包材',
-    purchaseUnit: '箱',
-    baseUnit: '个',
-    isGift: '否',
-    returnQty: 1,
-    returnBaseQty: 500,
-    returnAmount: 96,
-    auditQty: 0,
-    shippedQty: 0,
-    shippedBaseQty: 0,
-    shippedAmount: 0,
-    shippingWarehouse: '南区包材仓',
-  },
-]);
+const tableRows = ref<PurchaseReturnTrackingRow[]>([]);
 
 const supplierTree = computed<TreeNode[]>(() => supplierOptions.value.map((item) => ({
   value: item.value,
@@ -231,7 +145,26 @@ const loadOptions = async () => {
 const fetchReport = async () => {
   loading.value = true;
   try {
-    total.value = tableRows.value.length;
+    const orgId = resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
+    if (!orgId) {
+      tableRows.value = [];
+      total.value = 0;
+      return;
+    }
+    const page = await fetchPurchaseReturnStatusTrackingReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      startDate: query.dateRange[0],
+      endDate: query.dateRange[1],
+      shippingWarehouse: query.shippingWarehouse || undefined,
+      supplier: query.supplier || undefined,
+      returnCode: query.returnCode || undefined,
+      itemCode: query.itemCode || undefined,
+      documentStatus: query.documentStatus === '全部' ? undefined : query.documentStatus,
+      isGift: query.isGift === '全部' ? undefined : query.isGift,
+    }, orgId);
+    tableRows.value = page.list ?? [];
+    total.value = Number(page.total ?? 0);
   } finally {
     loading.value = false;
   }
@@ -291,6 +224,9 @@ const getSummaries = ({ columns: tableColumns }: { columns: Array<{ property?: s
 watch(
   () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
   async () => {
+    tableRows.value = [];
+    total.value = 0;
+    currentPage.value = 1;
     await loadOptions();
     await fetchReport();
   },
@@ -364,13 +300,23 @@ onMounted(async () => {
 
       <el-form-item label="单据状态">
         <el-select v-model="query.documentStatus" style="width: 120px">
-          <el-option v-for="option in documentStatusOptions" :key="option" :label="option" :value="option" />
+          <el-option
+            v-for="option in documentStatusOptions"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
+          />
         </el-select>
       </el-form-item>
 
       <el-form-item label="是否赠品">
         <el-select v-model="query.isGift" style="width: 120px">
-          <el-option v-for="option in giftStatusOptions" :key="option" :label="option" :value="option" />
+          <el-option
+            v-for="option in yesNoOptions"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
+          />
         </el-select>
       </el-form-item>
 

@@ -10,6 +10,7 @@ record InventoryCheckListFilter(String timeType,
                                 String item,
                                 String status,
                                 String range,
+                                String stocktakeFrequency,
                                 String printStatus,
                                 String generatedStatus,
                                 String remark) { }

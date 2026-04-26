@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @MapperScan({
     "com.boboboom.jxc.infrastructure.persistence.mapper",
     "com.boboboom.jxc.cost.infrastructure.persistence.mapper",
+    "com.boboboom.jxc.finance.infrastructure.persistence.mapper",
     "com.boboboom.jxc.identity.infrastructure.persistence.mapper",
     "com.boboboom.jxc.item.infrastructure.persistence.mapper",
     "com.boboboom.jxc.inventory.infrastructure.persistence.mapper",

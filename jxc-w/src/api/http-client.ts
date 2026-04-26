@@ -21,6 +21,12 @@ const baseConfig: AxiosRequestConfig = {
   baseURL: import.meta.env.VITE_API_BASE_URL,
   timeout: 12000,
 };
+const ORG_SCOPE_INVALID_CODE = 40301;
+const LOGIN_PATH = '/login';
+const SELECT_ORG_PATH = '/select-org';
+
+let authRedirecting = false;
+let orgRedirecting = false;
 
 const isRecord = (payload: unknown): payload is Record<string, unknown> => (
   Boolean(payload) && typeof payload === 'object'
@@ -39,6 +45,94 @@ const mapBusinessError = (payload: ApiFailure, status?: number) => {
   const message = payload.message ?? '请求失败，请稍后重试';
   const code = payload.code ?? status ?? -1;
   return new ApiError(message, code, payload.traceId, status);
+};
+
+const isOrgScopeInvalid = (error: ApiError) => error.status === 403 && error.code === ORG_SCOPE_INVALID_CODE;
+
+const resetRedirectLockLater = (type: 'auth' | 'org') => {
+  window.setTimeout(() => {
+    if (type === 'auth') {
+      authRedirecting = false;
+      return;
+    }
+    orgRedirecting = false;
+  }, 500);
+};
+
+const redirectToLogin = async (message: string, silent?: boolean) => {
+  if (authRedirecting) {
+    return;
+  }
+  authRedirecting = true;
+  try {
+    const [
+      { default: router },
+      { pinia },
+      { useSessionStore },
+      { useMenuStore },
+      { useAppStore },
+    ] = await Promise.all([
+      import('@/router'),
+      import('@/stores'),
+      import('@/stores/session'),
+      import('@/stores/menu'),
+      import('@/stores/app'),
+    ]);
+    const sessionStore = useSessionStore(pinia);
+    const menuStore = useMenuStore(pinia);
+    const appStore = useAppStore(pinia);
+    sessionStore.logout();
+    menuStore.clearMenus();
+    appStore.resetVisitedTabs();
+    if (router.currentRoute.value.path !== LOGIN_PATH) {
+      await router.replace(LOGIN_PATH);
+    }
+    if (!silent) {
+      ElMessage.error(message);
+    }
+  } finally {
+    resetRedirectLockLater('auth');
+  }
+};
+
+const redirectToSelectOrg = async (message: string, silent?: boolean) => {
+  if (orgRedirecting) {
+    return;
+  }
+  orgRedirecting = true;
+  try {
+    const [
+      { default: router },
+      { pinia },
+      { useSessionStore },
+      { useMenuStore },
+      { useAppStore },
+    ] = await Promise.all([
+      import('@/router'),
+      import('@/stores'),
+      import('@/stores/session'),
+      import('@/stores/menu'),
+      import('@/stores/app'),
+    ]);
+    const sessionStore = useSessionStore(pinia);
+    const menuStore = useMenuStore(pinia);
+    const appStore = useAppStore(pinia);
+    if (!sessionStore.isLoggedIn) {
+      await redirectToLogin(message, silent);
+      return;
+    }
+    sessionStore.clearSelectedOrg();
+    menuStore.clearMenus();
+    appStore.resetVisitedTabs();
+    if (router.currentRoute.value.path !== SELECT_ORG_PATH) {
+      await router.replace(SELECT_ORG_PATH);
+    }
+    if (!silent) {
+      ElMessage.error(message);
+    }
+  } finally {
+    resetRedirectLockLater('org');
+  }
 };
 
 const toApiError = (error: unknown) => {
@@ -96,9 +190,7 @@ const createHttpClient = () => {
         const hasRefreshToken = Boolean(authStorage.getRefreshToken());
         if (!hasRefreshToken) {
           const mapped401Error = toApiError(error);
-          if (!config.meta?.silent) {
-            ElMessage.error(mapped401Error.message);
-          }
+          await redirectToLogin(mapped401Error.message, config.meta?.silent);
           return Promise.reject(mapped401Error);
         }
         config._retry = true;
@@ -108,12 +200,21 @@ const createHttpClient = () => {
           config.headers.Authorization = `Bearer ${newToken}`;
           return client.request(config);
         } catch (refreshError) {
-          authStorage.clearTokens();
-          return Promise.reject(toApiError(refreshError));
+          const mappedRefreshError = toApiError(refreshError);
+          await redirectToLogin(mappedRefreshError.message, config.meta?.silent);
+          return Promise.reject(mappedRefreshError);
         }
       }
 
       const mappedError = toApiError(error);
+      if (mappedError.status === 401) {
+        await redirectToLogin(mappedError.message, config?.meta?.silent);
+        return Promise.reject(mappedError);
+      }
+      if (isOrgScopeInvalid(mappedError)) {
+        await redirectToSelectOrg(mappedError.message, config?.meta?.silent);
+        return Promise.reject(mappedError);
+      }
       if (!config?.meta?.silent) {
         ElMessage.error(mappedError.message);
       }

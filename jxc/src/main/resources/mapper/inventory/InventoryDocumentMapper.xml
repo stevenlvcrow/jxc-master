@@ -51,6 +51,9 @@
         <result property="unitPrice" column="unit_price"/>
         <result property="amount" column="amount"/>
         <result property="lineReason" column="line_reason"/>
+        <result property="dishId" column="dish_id"/>
+        <result property="dishName" column="dish_name"/>
+        <result property="damageReason" column="damage_reason"/>
         <result property="remark" column="remark"/>
         <result property="extraJson" column="extra_json"/>
         <result property="createdAt" column="created_at"/>
@@ -80,6 +83,7 @@
                 id, inbound_id as header_id, item_code, item_name, spec, category,
                 null::varchar as unit_name, null::numeric as available_qty, quantity, unit_price,
                 quantity * unit_price as amount, null::varchar as line_reason,
+                null::varchar as dish_id, null::varchar as dish_name, null::varchar as damage_reason,
                 null::varchar as remark, null::text as extra_json, created_at
             </when>
             <otherwise>
@@ -214,9 +218,10 @@
     <insert id="insertLine" useGeneratedKeys="true" keyProperty="line.id">
         insert into ${lineTable}
         (header_id, item_code, item_name, spec, category, unit_name, available_qty, quantity, unit_price,
-         amount, line_reason, remark, extra_json, created_at)
+         amount, line_reason, dish_id, dish_name, damage_reason, remark, extra_json, created_at)
         values (#{line.headerId}, #{line.itemCode}, #{line.itemName}, #{line.spec}, #{line.category},
                 #{line.unitName}, #{line.availableQty}, #{line.quantity}, #{line.unitPrice}, #{line.amount},
-                #{line.lineReason}, #{line.remark}, #{line.extraJson}, current_timestamp)
+                #{line.lineReason}, #{line.dishId}, #{line.dishName}, #{line.damageReason}, #{line.remark},
+                #{line.extraJson}, current_timestamp)
     </insert>
 </mapper>

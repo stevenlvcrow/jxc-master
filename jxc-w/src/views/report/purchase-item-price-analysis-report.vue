@@ -12,6 +12,11 @@ import {
   type ItemCategoryTreeNode,
   type ItemVO,
 } from '@/api/modules/item';
+import {
+  fetchPurchaseItemPriceAnalysisReportApi,
+  type PurchaseItemPriceAnalysisReportRow,
+  type PurchasePriceAnalysisPeriod,
+} from '@/api/modules/purchase';
 import { resolveArchiveOrgId } from '@/views/items/org';
 
 type StatisticMethod = '采购总价' | '采购均价';
@@ -23,34 +28,7 @@ type TreeNode = {
   label: string;
   children?: TreeNode[];
 };
-type PeriodKey =
-  | 'p0420'
-  | 'p0413'
-  | 'p0406'
-  | 'p0330'
-  | 'p0323'
-  | 'p0316'
-  | 'p0309'
-  | 'p0302'
-  | 'p0223'
-  | 'p0216'
-  | 'p0209'
-  | 'p0202'
-  | 'p0126'
-  | 'p0121';
-type PurchasePriceAnalysisRow = {
-  id: string;
-  itemName: string;
-  itemCode: string;
-  spec: string;
-  itemCategory: string;
-  baseUnit: string;
-  unit: string;
-  supplier: string;
-  totalValues: Record<PeriodKey, number>;
-  avgValues: Record<PeriodKey, number>;
-  fluctuationValues: Record<PeriodKey, number>;
-};
+type PurchasePriceAnalysisRow = PurchaseItemPriceAnalysisReportRow;
 
 const sessionStore = useSessionStore();
 const {
@@ -63,23 +41,6 @@ const statisticMethodOptions: StatisticMethod[] = ['采购总价', '采购均价
 const detailGranularityOptions: DetailGranularity[] = ['不显示', '到供应商粒度'];
 const statisticPeriodOptions: StatisticPeriod[] = ['按日', '按周', '按月'];
 const timeSortOptions: TimeSort[] = ['按时间倒序', '按时间正序'];
-
-const periods: Array<{ key: PeriodKey; label: string; compactLabel: string }> = [
-  { key: 'p0420', label: '4.20 - 4.21', compactLabel: '4.20-4.21' },
-  { key: 'p0413', label: '4.13 - 4.19', compactLabel: '4.13-4.19' },
-  { key: 'p0406', label: '4.6 - 4.12', compactLabel: '4.6-4.12' },
-  { key: 'p0330', label: '3.30 - 4.5', compactLabel: '3.30-4.5' },
-  { key: 'p0323', label: '3.23 - 3.29', compactLabel: '3.23-3.29' },
-  { key: 'p0316', label: '3.16 - 3.22', compactLabel: '3.16-3.22' },
-  { key: 'p0309', label: '3.9 - 3.15', compactLabel: '3.9-3.15' },
-  { key: 'p0302', label: '3.2 - 3.8', compactLabel: '3.2-3.8' },
-  { key: 'p0223', label: '2.23 - 3.1', compactLabel: '2.23-3.1' },
-  { key: 'p0216', label: '2.16 - 2.22', compactLabel: '2.16-2.22' },
-  { key: 'p0209', label: '2.9 - 2.15', compactLabel: '2.9-2.15' },
-  { key: 'p0202', label: '2.2 - 2.8', compactLabel: '2.2-2.8' },
-  { key: 'p0126', label: '1.26 - 2.1', compactLabel: '1.26-2.1' },
-  { key: 'p0121', label: '1.21 - 1.25', compactLabel: '1.21-1.25' },
-];
 
 const query = reactive({
   statisticMethod: '采购总价' as StatisticMethod,
@@ -96,68 +57,11 @@ const loading = ref(false);
 const optionLoading = ref(false);
 const itemCategoryTree = ref<TreeNode[]>([]);
 const itemOptions = ref<Array<{ value: string; label: string }>>([]);
+const periods = ref<PurchasePriceAnalysisPeriod[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
 const total = ref(0);
-
-const makePeriodValues = (seed: number) => ({
-  p0420: seed * 1.08,
-  p0413: seed,
-  p0406: seed * 0.96,
-  p0330: seed * 0.92,
-  p0323: seed * 1.03,
-  p0316: seed * 0.99,
-  p0309: seed * 0.94,
-  p0302: seed * 0.91,
-  p0223: seed * 0.88,
-  p0216: seed * 0.9,
-  p0209: seed * 0.86,
-  p0202: seed * 0.84,
-  p0126: seed * 0.82,
-  p0121: seed * 0.8,
-});
-
-const tableRows = ref<PurchasePriceAnalysisRow[]>([
-  {
-    id: '1',
-    itemName: '鸡胸肉',
-    itemCode: 'ITEM-001',
-    spec: '10kg/箱',
-    itemCategory: '生鲜原料',
-    baseUnit: 'kg',
-    unit: '箱',
-    supplier: '鲜达食品',
-    totalValues: makePeriodValues(3700),
-    avgValues: makePeriodValues(185),
-    fluctuationValues: makePeriodValues(2.6),
-  },
-  {
-    id: '2',
-    itemName: '牛腩',
-    itemCode: 'ITEM-002',
-    spec: '5kg/包',
-    itemCategory: '生鲜原料',
-    baseUnit: 'kg',
-    unit: '包',
-    supplier: '优选农场',
-    totalValues: makePeriodValues(3640),
-    avgValues: makePeriodValues(260),
-    fluctuationValues: makePeriodValues(3.1),
-  },
-  {
-    id: '3',
-    itemName: '包装盒',
-    itemCode: 'ITEM-003',
-    spec: '500个/箱',
-    itemCategory: '包材',
-    baseUnit: '个',
-    unit: '箱',
-    supplier: '盒马包材',
-    totalValues: makePeriodValues(768),
-    avgValues: makePeriodValues(96),
-    fluctuationValues: makePeriodValues(1.4),
-  },
-]);
+const tableRows = ref<PurchasePriceAnalysisRow[]>([]);
 
 const isTotalMode = computed(() => query.statisticMethod === '采购总价');
 const supplierSelectOptions = computed(() => supplierOptions.value.map((item) => ({
@@ -223,14 +127,39 @@ const loadOptions = async () => {
 const fetchReport = async () => {
   loading.value = true;
   try {
-    total.value = tableRows.value.length;
+    const orgId = resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode);
+    if (!orgId) {
+      tableRows.value = [];
+      periods.value = [];
+      total.value = 0;
+      return;
+    }
+    const report = await fetchPurchaseItemPriceAnalysisReportApi({
+      pageNo: currentPage.value,
+      pageSize: pageSize.value,
+      startDate: query.dateRange[0],
+      endDate: query.dateRange[1],
+      statisticMethod: query.statisticMethod,
+      detailGranularity: query.detailGranularity,
+      statisticPeriod: query.statisticPeriod,
+      supplier: query.supplier || undefined,
+      itemCode: query.itemCode || undefined,
+      itemCategory: query.itemCategory || undefined,
+      timeSort: query.timeSort,
+    }, orgId);
+    periods.value = report.periods ?? [];
+    tableRows.value = report.page?.list ?? [];
+    total.value = Number(report.page?.total ?? 0);
   } finally {
     loading.value = false;
   }
 };
 
-const formatAmount = (value: number) => value.toFixed(2);
-const formatRate = (value: number) => `${value.toFixed(2)}%`;
+const valueOf = (row: PurchasePriceAnalysisRow, periodKey: string, key: 'total' | 'avg' | 'fluctuationRate') => (
+  row.values.find((item) => item.periodKey === periodKey)?.[key] ?? 0
+);
+const formatAmount = (value: number) => Number(value || 0).toFixed(2);
+const formatRate = (value: number) => `${Number(value || 0).toFixed(2)}%`;
 
 const handleSearch = async () => {
   currentPage.value = 1;
@@ -276,14 +205,18 @@ const getSummaries = ({ columns }: { columns: Array<{ property?: string; type?: 
     if (!property.startsWith('total:')) {
       return '';
     }
-    const key = property.slice('total:'.length) as PeriodKey;
-    return tableRows.value.reduce((sum, row) => sum + row.totalValues[key], 0).toFixed(2);
+    const key = property.slice('total:'.length);
+    return tableRows.value.reduce((sum, row) => sum + valueOf(row, key, 'total'), 0).toFixed(2);
   });
 };
 
 watch(
   () => [sessionStore.currentOrgId, sessionStore.platformAdminMode],
   async () => {
+    tableRows.value = [];
+    periods.value = [];
+    total.value = 0;
+    currentPage.value = 1;
     await loadOptions();
     await fetchReport();
   },
@@ -417,7 +350,7 @@ onMounted(async () => {
           show-overflow-tooltip
         >
           <template #default="{ row }">
-            {{ formatAmount(row.totalValues[period.key]) }}
+            {{ formatAmount(valueOf(row, period.key, 'total')) }}
           </template>
         </el-table-column>
       </template>
@@ -431,7 +364,7 @@ onMounted(async () => {
             show-overflow-tooltip
           >
             <template #default="{ row }">
-              {{ formatAmount(row.avgValues[period.key]) }}
+              {{ formatAmount(valueOf(row, period.key, 'avg')) }}
             </template>
           </el-table-column>
           <el-table-column
@@ -441,7 +374,7 @@ onMounted(async () => {
             show-overflow-tooltip
           >
             <template #default="{ row }">
-              {{ formatRate(row.fluctuationValues[period.key]) }}
+              {{ formatRate(valueOf(row, period.key, 'fluctuationRate')) }}
             </template>
           </el-table-column>
         </template>

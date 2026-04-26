@@ -250,6 +250,13 @@ export const useSessionStore = defineStore('session', () => {
     persistOrg();
   };
 
+  const clearSelectedOrg = () => {
+    currentOrgId.value = '';
+    platformAdminMode.value = false;
+    persistOrg();
+    persistPlatformAdminMode();
+  };
+
   const setOrgTree = (tree: OrgNode[]) => {
     orgTree.value = normalizeOrgTree(tree);
     orgTreeLoaded.value = true;
@@ -280,6 +287,7 @@ export const useSessionStore = defineStore('session', () => {
     setProfile,
     logout,
     selectOrg,
+    clearSelectedOrg,
     setOrgTree,
   };
 });

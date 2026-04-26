@@ -254,8 +254,8 @@ const handleToolbarAction = async (action: string) => {
     } catch {
       return;
     }
-    await batchDeletePurchaseInboundApi(selectedIds.value, resolveOrgId());
-    ElMessage.success('批量删除成功');
+    const result = await batchDeletePurchaseInboundApi(selectedIds.value, resolveOrgId());
+    ElMessage.success(result.message || '批量删除成功');
     await fetchTableData();
     return;
   }
@@ -314,8 +314,8 @@ const handleDelete = async (row: PurchaseInboundRow) => {
     ElMessage.warning('请选择门店后再操作');
     return;
   }
-  await deletePurchaseInboundApi(row.id, orgId);
-  ElMessage.success('删除成功');
+  const result = await deletePurchaseInboundApi(row.id, orgId);
+  ElMessage.success(result.message || '删除成功');
   await fetchTableData();
 };
 

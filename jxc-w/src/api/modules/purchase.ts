@@ -71,6 +71,13 @@ export type PurchaseDocumentPage = {
   pageSize: number;
 };
 
+export type PurchaseReportPage<T> = {
+  list: T[];
+  total: number;
+  pageNo: number;
+  pageSize: number;
+};
+
 export type PurchaseDocumentListParams = {
   pageNo: number;
   pageSize: number;
@@ -144,6 +151,132 @@ export type PurchaseDocumentSavePayload = {
   }>;
 };
 
+export type PurchaseOrderStatusTrackingReportParams = {
+  pageNo: number;
+  pageSize: number;
+  startDate?: string;
+  endDate?: string;
+  dateType?: string;
+  receiptWarehouse?: string;
+  purchaseWarehouse?: string;
+  itemCode?: string;
+  supplier?: string;
+  purchaseOrderCode?: string;
+  documentStatus?: string;
+  receiveStatus?: string;
+  isGift?: string;
+  crossMonth?: string;
+};
+
+export type PurchaseOrderStatusTrackingReportRow = {
+  id: string;
+  purchaseOrderCode: string;
+  documentStatus: string;
+  receiveStatus: string;
+  orderDate: string;
+  expectedArrivalDate: string;
+  supplierName: string;
+  itemName: string;
+  spec: string;
+  itemCategory: string;
+  isGift: string;
+  purchaseUnit: string;
+  purchasePrice: number;
+  purchaseQty: number;
+  auditQty: number;
+  purchaseAmount: number;
+  auditAmount: number;
+  purchaseWarehouse: string;
+  receiptDate: string;
+  receiptWarehouse: string;
+  receivedQty: number;
+  receiptAmount: number;
+  unreceivedQty: number;
+  returnedQty: number;
+  returnAmount: number;
+};
+
+export type PurchaseReturnStatusTrackingReportParams = {
+  pageNo: number;
+  pageSize: number;
+  startDate?: string;
+  endDate?: string;
+  shippingWarehouse?: string;
+  supplier?: string;
+  returnCode?: string;
+  itemCode?: string;
+  documentStatus?: string;
+  isGift?: string;
+};
+
+export type PurchaseReturnStatusTrackingReportRow = {
+  id: string;
+  returnCode: string;
+  documentStatus: string;
+  returnDate: string;
+  sourceCode: string;
+  supplierCode: string;
+  supplierName: string;
+  itemName: string;
+  spec: string;
+  itemCategory: string;
+  purchaseUnit: string;
+  baseUnit: string;
+  isGift: string;
+  returnQty: number;
+  returnBaseQty: number;
+  returnAmount: number;
+  auditQty: number;
+  shippedQty: number;
+  shippedBaseQty: number;
+  shippedAmount: number;
+  shippingWarehouse: string;
+};
+
+export type PurchaseItemPriceAnalysisReportParams = {
+  pageNo: number;
+  pageSize: number;
+  startDate?: string;
+  endDate?: string;
+  statisticMethod?: string;
+  detailGranularity?: string;
+  statisticPeriod?: string;
+  supplier?: string;
+  itemCode?: string;
+  itemCategory?: string;
+  timeSort?: string;
+};
+
+export type PurchasePriceAnalysisPeriod = {
+  key: string;
+  label: string;
+  compactLabel: string;
+};
+
+export type PurchasePriceAnalysisValue = {
+  periodKey: string;
+  total: number;
+  avg: number;
+  fluctuationRate: number;
+};
+
+export type PurchaseItemPriceAnalysisReportRow = {
+  id: string;
+  itemName: string;
+  itemCode: string;
+  spec: string;
+  itemCategory: string;
+  baseUnit: string;
+  unit: string;
+  supplier: string;
+  values: PurchasePriceAnalysisValue[];
+};
+
+export type PurchaseItemPriceAnalysisReport = {
+  periods: PurchasePriceAnalysisPeriod[];
+  page: PurchaseReportPage<PurchaseItemPriceAnalysisReportRow>;
+};
+
 const withOrgParams = <T extends Record<string, unknown>>(params?: T, orgId?: string) => ({
   ...(params ?? {}),
   ...(orgId ? { orgId } : {}),
@@ -207,4 +340,19 @@ export const updatePurchaseApplicationLinesApi = (
     lineUpdates,
   }, {
     params: withOrgParams(undefined, orgId),
+  });
+
+export const fetchPurchaseOrderStatusTrackingReportApi = (params: PurchaseOrderStatusTrackingReportParams, orgId?: string) =>
+  apiClient.get<PurchaseReportPage<PurchaseOrderStatusTrackingReportRow>>('/api/purchase/reports/order-status-tracking', {
+    params: withOrgParams(params, orgId),
+  });
+
+export const fetchPurchaseReturnStatusTrackingReportApi = (params: PurchaseReturnStatusTrackingReportParams, orgId?: string) =>
+  apiClient.get<PurchaseReportPage<PurchaseReturnStatusTrackingReportRow>>('/api/purchase/reports/return-status-tracking', {
+    params: withOrgParams(params, orgId),
+  });
+
+export const fetchPurchaseItemPriceAnalysisReportApi = (params: PurchaseItemPriceAnalysisReportParams, orgId?: string) =>
+  apiClient.get<PurchaseItemPriceAnalysisReport>('/api/purchase/reports/item-price-analysis', {
+    params: withOrgParams(params, orgId),
   });

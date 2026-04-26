@@ -197,7 +197,11 @@ public class PurchaseInboundApplicationService {
                                 defaultIfBlank(line.getCategory(), ""),
                                 line.getQuantity() == null ? BigDecimal.ZERO : line.getQuantity(),
                                 line.getUnitPrice() == null ? BigDecimal.ZERO : line.getUnitPrice(),
-                                line.getTaxRate() == null ? BigDecimal.ZERO : line.getTaxRate()
+                                line.getTaxRate() == null ? BigDecimal.ZERO : line.getTaxRate(),
+                                defaultIfBlank(line.getBatchNo(), ""),
+                                defaultIfBlank(line.getManufacturer(), ""),
+                                line.getProductionDate() == null ? "" : line.getProductionDate().toString(),
+                                line.getExpiryDate() == null ? "" : line.getExpiryDate().toString()
                         ))
                         .toList()
         );
@@ -213,11 +217,15 @@ public class PurchaseInboundApplicationService {
 
     /** 删除采购入库单。 */
     @Transactional
-    public void deletePurchaseInbound(Long id, String orgId) {
+    public PurchaseInboundDeleteResult deletePurchaseInbound(Long id, String orgId) {
         InventoryScope scope = resolveInventoryScope(orgId);
         ensurePurchaseInboundOperationPermission(scope, "DELETE");
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         PurchaseInboundDO header = requireHeader(scope, id, operatorId);
+        if (canDeleteDirectly(header, operatorId)) {
+            deletePurchaseInboundInternal(header);
+            return PurchaseInboundDeleteResult.deleted(header.getId());
+        }
         if (inventoryDocumentWorkflowService.shouldTriggerAction(
                 InventoryDocumentType.PURCHASE_INBOUND,
                 scope.scopeType(),
@@ -229,19 +237,27 @@ public class PurchaseInboundApplicationService {
                 throw new BusinessException("已审核单据请先反审核后再删除");
             }
             saveDeleteWorkflow(scope, header, operatorId);
-            return;
+            return PurchaseInboundDeleteResult.submitted(header.getId());
         }
         deletePurchaseInboundInternal(header);
+        return PurchaseInboundDeleteResult.deleted(header.getId());
     }
 
     /** 批量删除采购入库单。 */
     @Transactional
-    public void batchDeletePurchaseInbound(String orgId, PurchaseInboundBatchRequest request) {
+    public PurchaseInboundBatchDeleteResult batchDeletePurchaseInbound(String orgId, PurchaseInboundBatchRequest request) {
         InventoryScope scope = resolveInventoryScope(orgId);
         ensurePurchaseInboundOperationPermission(scope, "DELETE");
         Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
         List<PurchaseInboundDO> headers = requireHeaders(scope, request.ids(), operatorId);
+        int deletedCount = 0;
+        int submittedCount = 0;
         for (PurchaseInboundDO header : headers) {
+            if (canDeleteDirectly(header, operatorId)) {
+                deletePurchaseInboundInternal(header);
+                deletedCount++;
+                continue;
+            }
             if (inventoryDocumentWorkflowService.shouldTriggerAction(
                     InventoryDocumentType.PURCHASE_INBOUND,
                     scope.scopeType(),
@@ -253,10 +269,13 @@ public class PurchaseInboundApplicationService {
                     throw new BusinessException("已审核单据请先反审核后再删除");
                 }
                 saveDeleteWorkflow(scope, header, operatorId);
+                submittedCount++;
                 continue;
             }
             deletePurchaseInboundInternal(header);
+            deletedCount++;
         }
+        return PurchaseInboundBatchDeleteResult.of(deletedCount, submittedCount);
     }
 
     /** 批量审核通过单据。 */
@@ -516,6 +535,10 @@ public class PurchaseInboundApplicationService {
         line.setQuantity(normalizePositive(item.quantity(), "数量必须大于0"));
         line.setUnitPrice(normalizeNonNegative(item.unitPrice(), "单价不能小于0"));
         line.setTaxRate(normalizeNonNegative(item.taxRate() == null ? BigDecimal.ZERO : item.taxRate(), "税率不能小于0"));
+        line.setBatchNo(trimNullable(item.batchNo()));
+        line.setManufacturer(trimNullable(item.manufacturer()));
+        line.setProductionDate(parseDateNullable(item.productionDate(), "生产日期格式不正确"));
+        line.setExpiryDate(parseDateNullable(item.expiryDate(), "到期日期格式不正确"));
         return line;
     }
 
@@ -828,6 +851,12 @@ public class PurchaseInboundApplicationService {
                     line.getQuantity(),
                     line.getQuantity().multiply(line.getUnitPrice()),
                     header.getInboundDate(),
+                    new InventoryStockMutationService.BatchInfo(
+                            line.getBatchNo(),
+                            line.getManufacturer(),
+                            line.getProductionDate(),
+                            line.getExpiryDate()
+                    ),
                     "PURCHASE_INBOUND_APPROVE",
                     operatorId
             );
@@ -1009,6 +1038,11 @@ public class PurchaseInboundApplicationService {
         return value == null ? "" : value.toLowerCase(Locale.ROOT);
     }
 
+    private boolean canDeleteDirectly(PurchaseInboundDO header, Long operatorId) {
+        return Objects.equals(header.getCreatedBy(), operatorId)
+                && !Objects.equals(header.getStatus(), approvedStatus());
+    }
+
     private String formatDateTime(LocalDateTime value) {
         if (value == null) {
             return "";
@@ -1024,7 +1058,9 @@ public class PurchaseInboundApplicationService {
             inventoryDocumentWorkflowService.cancelPurchaseInboundWorkflowInstanceIfRunning(header);
         }
         purchaseInboundLineRepository.deleteByInboundId(header.getId());
-        purchaseInboundRepository.deleteById(header.getId());
+        if (purchaseInboundRepository.deleteById(header.getId()) != 1) {
+            throw new BusinessException("采购入库单删除失败，请刷新后重试");
+        }
     }
 
     private void saveDeleteWorkflow(InventoryScope scope, PurchaseInboundDO header, Long operatorId) {
@@ -1045,6 +1081,37 @@ public class PurchaseInboundApplicationService {
 
     /** 库存载荷模型，承载接口返回的关键标识。 */
     public record IdPayload(Long id, String documentCode) {
+    }
+
+    /** 采购入库删除结果，区分真实删除和提交删除审批。 */
+    public record PurchaseInboundDeleteResult(String status, String message, Long id) {
+
+        private static PurchaseInboundDeleteResult deleted(Long id) {
+            return new PurchaseInboundDeleteResult("DELETED", "删除成功", id);
+        }
+
+        private static PurchaseInboundDeleteResult submitted(Long id) {
+            return new PurchaseInboundDeleteResult("SUBMITTED", "删除审批已提交，审批通过后才会删除", id);
+        }
+    }
+
+    /** 采购入库批量删除结果，区分真实删除和提交删除审批数量。 */
+    public record PurchaseInboundBatchDeleteResult(String status, String message, int deletedCount, int submittedCount) {
+
+        private static PurchaseInboundBatchDeleteResult of(int deletedCount, int submittedCount) {
+            if (submittedCount == 0) {
+                return new PurchaseInboundBatchDeleteResult("DELETED", "批量删除成功", deletedCount, submittedCount);
+            }
+            if (deletedCount == 0) {
+                return new PurchaseInboundBatchDeleteResult("SUBMITTED", "删除审批已提交，审批通过后才会删除", deletedCount, submittedCount);
+            }
+            return new PurchaseInboundBatchDeleteResult(
+                    "PARTIAL_SUBMITTED",
+                    "已删除" + deletedCount + "条，另有" + submittedCount + "条已提交删除审批",
+                    deletedCount,
+                    submittedCount
+            );
+        }
     }
 
     /** 库存数据模型，承载采购入库明细数据。 */
@@ -1074,9 +1141,13 @@ public class PurchaseInboundApplicationService {
                                             String itemName,
                                             String spec,
                                             String category,
-                                            BigDecimal quantity,
-                                            BigDecimal unitPrice,
-                                            BigDecimal taxRate) {
+                                        BigDecimal quantity,
+                                        BigDecimal unitPrice,
+                                        BigDecimal taxRate,
+                                        String batchNo,
+                                        String manufacturer,
+                                        String productionDate,
+                                        String expiryDate) {
     }
 
     /** 库存行数据模型，承载列表或报表明细。 */

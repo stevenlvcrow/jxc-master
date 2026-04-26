@@ -7,17 +7,19 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.boboboom.jxc.identity.interfaces.rest.response.CodeDataResponse;
+import com.boboboom.jxc.inventory.application.service.InventoryRealtimeReportApplicationService;
+import com.boboboom.jxc.inventory.application.service.InventoryRealtimeReportApplicationService.RealtimeStockReportRow;
+import com.boboboom.jxc.inventory.application.service.InventoryRealtimeReportApplicationService.StockWarningReportRow;
 import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InterOrgTransferDetailReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InterOrgTransferSummaryReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InventoryInoutSummaryReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.InventoryProfitLossReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.OtherInoutSummaryReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.PageData;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StagnantStockReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockInoutSummaryReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockTurnoverRateReportRow;
-import com.boboboom.jxc.inventory.application.service.InventorySupplementReportApplicationService.StockWarningReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InterOrgTransferDetailReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InterOrgTransferSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InventoryInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InventoryProfitLossReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.OtherInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.PageData;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.StagnantStockReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.StockInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.StockTurnoverRateReportRow;
 
 import jakarta.validation.constraints.Min;
 
@@ -30,15 +32,43 @@ import jakarta.validation.constraints.Min;
 public class InventorySupplementReportController {
 
     private final InventorySupplementReportApplicationService inventorySupplementReportApplicationService;
+    private final InventoryRealtimeReportApplicationService inventoryRealtimeReportApplicationService;
 
     /** 库存接口入口，负责接收请求、调用业务服务并返回统一响应。 */
-    public InventorySupplementReportController(InventorySupplementReportApplicationService inventorySupplementReportApplicationServiceValue) {
+    public InventorySupplementReportController(InventorySupplementReportApplicationService inventorySupplementReportApplicationServiceValue,
+                                               InventoryRealtimeReportApplicationService inventoryRealtimeReportApplicationServiceValue) {
         this.inventorySupplementReportApplicationService = inventorySupplementReportApplicationServiceValue;
+        this.inventoryRealtimeReportApplicationService = inventoryRealtimeReportApplicationServiceValue;
+    }
+
+    /** 处理GetMapping。 */
+    @GetMapping("/realtime-stock/report")
+    public CodeDataResponse<InventoryRealtimeReportApplicationService.PageData<RealtimeStockReportRow>> realtimeStockReport(
+            @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
+            @RequestParam(defaultValue = "10") @Min(1) Integer pageSize,
+            @RequestParam(required = false) String warehouse,
+            @RequestParam(required = false) String itemCategory,
+            @RequestParam(required = false) String itemCode,
+            @RequestParam(required = false) String itemStatus,
+            @RequestParam(required = false) String batchNo,
+            @RequestParam(required = false) String shelfLifeStatus,
+            @RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(inventoryRealtimeReportApplicationService.realtimeStockReport(
+                pageNo,
+                pageSize,
+                warehouse,
+                itemCategory,
+                itemCode,
+                itemStatus,
+                batchNo,
+                shelfLifeStatus,
+                orgId
+        ));
     }
 
     /** 处理GetMapping。 */
     @GetMapping("/stock-warning/report")
-    public CodeDataResponse<PageData<StockWarningReportRow>> stockWarningReport(
+    public CodeDataResponse<InventoryRealtimeReportApplicationService.PageData<StockWarningReportRow>> stockWarningReport(
             @RequestParam(defaultValue = "1") @Min(1) Integer pageNo,
             @RequestParam(defaultValue = "10") @Min(1) Integer pageSize,
             @RequestParam(required = false) String statisticDimension,
@@ -49,7 +79,7 @@ public class InventorySupplementReportController {
             @RequestParam(required = false) String warningStatus,
             @RequestParam(required = false) String unitType,
             @RequestParam(required = false) String orgId) {
-        return CodeDataResponse.ok(inventorySupplementReportApplicationService.stockWarningReport(
+        return CodeDataResponse.ok(inventoryRealtimeReportApplicationService.stockWarningReport(
                 pageNo,
                 pageSize,
                 statisticDimension,
@@ -131,6 +161,8 @@ public class InventorySupplementReportController {
             @RequestParam(required = false) String warehouseType,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String periodType,
+            @RequestParam(required = false) String periodStartDate,
             @RequestParam(required = false) String itemCode,
             @RequestParam(required = false) String itemCategory,
             @RequestParam(required = false) String statisticType,
@@ -148,6 +180,8 @@ public class InventorySupplementReportController {
                 warehouseType,
                 startDate,
                 endDate,
+                periodType,
+                periodStartDate,
                 itemCode,
                 itemCategory,
                 statisticType,
@@ -169,6 +203,8 @@ public class InventorySupplementReportController {
             @RequestParam(required = false) String dateDimension,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String periodType,
+            @RequestParam(required = false) String periodStartDate,
             @RequestParam(required = false) String statisticDimension,
             @RequestParam(required = false) String warehouse,
             @RequestParam(required = false) String warehouseType,
@@ -190,6 +226,8 @@ public class InventorySupplementReportController {
                 dateDimension,
                 startDate,
                 endDate,
+                periodType,
+                periodStartDate,
                 statisticDimension,
                 warehouse,
                 warehouseType,
@@ -214,6 +252,8 @@ public class InventorySupplementReportController {
             @RequestParam(defaultValue = "10") @Min(1) Integer pageSize,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String periodType,
+            @RequestParam(required = false) String periodStartDate,
             @RequestParam(required = false) String warehouse,
             @RequestParam(required = false) String itemCategory,
             @RequestParam(required = false) String itemCode,
@@ -226,6 +266,8 @@ public class InventorySupplementReportController {
                 pageSize,
                 startDate,
                 endDate,
+                periodType,
+                periodStartDate,
                 warehouse,
                 itemCategory,
                 itemCode,
@@ -313,6 +355,8 @@ public class InventorySupplementReportController {
             @RequestParam(required = false) String statisticMethod,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
+            @RequestParam(required = false) String periodType,
+            @RequestParam(required = false) String periodStartDate,
             @RequestParam(required = false) String warehouse,
             @RequestParam(required = false) String itemCategory,
             @RequestParam(required = false) String itemCode,
@@ -326,6 +370,8 @@ public class InventorySupplementReportController {
                 statisticMethod,
                 startDate,
                 endDate,
+                periodType,
+                periodStartDate,
                 warehouse,
                 itemCategory,
                 itemCode,

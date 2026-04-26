@@ -17,7 +17,7 @@ import { resolveArchiveOrgId } from '@/views/items/org';
 
 type StatisticDimension = '机构' | '仓库';
 type ItemStatus = '启用' | '停用';
-type WarningStatus = '全部' | '库存不足' | '库存超储';
+type WarningStatus = '全部' | '库存不足' | '库存超储' | '临期' | '已过期';
 type UnitType = '库存单位';
 type TreeNode = {
   value: string;
@@ -36,6 +36,12 @@ type StockWarningRow = {
   stockUpperLimit: number;
   stockLowerLimit: number;
   warningStatus: string;
+  itemStatus: string;
+  batchNo: string;
+  productionDate: string;
+  expiryDate: string;
+  shelfLifeStatus: string;
+  manufacturer: string;
 };
 
 type ReportColumn = {
@@ -58,6 +64,8 @@ const warningStatusTree: TreeNode[] = [
   { value: '全部', label: '全部' },
   { value: '库存不足', label: '库存不足' },
   { value: '库存超储', label: '库存超储' },
+  { value: '临期', label: '临期' },
+  { value: '已过期', label: '已过期' },
 ];
 const unitTypeTree: TreeNode[] = [{ value: '库存单位', label: '库存单位' }];
 
@@ -90,6 +98,11 @@ const baseColumns: ReportColumn[] = [
   { key: 'currentStock', label: '当前库存数', minWidth: 120, align: 'right' },
   { key: 'stockUpperLimit', label: '库存上限', minWidth: 110, align: 'right' },
   { key: 'stockLowerLimit', label: '库存下限', minWidth: 110, align: 'right' },
+  { key: 'batchNo', label: '批次', minWidth: 130 },
+  { key: 'productionDate', label: '生产日期', minWidth: 110 },
+  { key: 'expiryDate', label: '到期日期', minWidth: 110 },
+  { key: 'shelfLifeStatus', label: '保质期状态', minWidth: 120 },
+  { key: 'manufacturer', label: '厂家', minWidth: 130 },
   { key: 'warningStatus', label: '预警状态', minWidth: 110 },
 ];
 

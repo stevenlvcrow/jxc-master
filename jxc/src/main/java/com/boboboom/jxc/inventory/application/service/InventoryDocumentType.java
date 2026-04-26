@@ -20,8 +20,6 @@ public enum InventoryDocumentType {
     DAMAGE_OUTBOUND("damage-outbound", "DAMAGE_OUTBOUND", "报损出库", "BSCK", "/inventory/damage-outbounds/view/", true, StockDirection.OUTBOUND),
     OTHER_INBOUND("other-inbound", "OTHER_INBOUND", "其他入库", "QTRK", "/inventory/other-inbounds/view/", true, StockDirection.INBOUND),
     OTHER_OUTBOUND("other-outbound", "OTHER_OUTBOUND", "其他出库", "QTCK", "/inventory/other-outbounds/view/", true, StockDirection.OUTBOUND),
-    PROFIT_INBOUND("profit-inbound", "PROFIT_INBOUND", "盘盈单", "PY", "/inventory/profit-inbounds/view/", false, StockDirection.INBOUND),
-    LOSS_OUTBOUND("loss-outbound", "LOSS_OUTBOUND", "盘亏单", "PK", "/inventory/loss-outbounds/view/", false, StockDirection.OUTBOUND),
     PRODUCTION_INBOUND("production-inbound", "PRODUCTION_INBOUND", "生产入库", "SCRK", "/inventory/production-inbounds/view/", true, StockDirection.INBOUND),
     CUSTOMER_SALES_OUTBOUND("customer-sales-outbound", "CUSTOMER_SALES_OUTBOUND", "客户销售出库", "XSCK", "/inventory/customer-sales-outbounds/view/", true, StockDirection.OUTBOUND),
     CUSTOMER_RETURN_INBOUND("customer-return-inbound", "CUSTOMER_RETURN_INBOUND", "客户退货入库", "KHTH", "/inventory/customer-return-inbounds/view/", true, StockDirection.INBOUND),

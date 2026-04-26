@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.boboboom.jxc.inventory.infrastructure.persistence.mapper.InventoryBatchBalanceMapper">
+
+    <resultMap id="InventoryBatchBalanceDOResultMap" type="com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBatchBalanceDO">
+        <id property="id" column="id"/>
+        <result property="scopeType" column="scope_type"/>
+        <result property="scopeId" column="scope_id"/>
+        <result property="warehouseName" column="warehouse_name"/>
+        <result property="itemCode" column="item_code"/>
+        <result property="itemName" column="item_name"/>
+        <result property="batchNo" column="batch_no"/>
+        <result property="manufacturer" column="manufacturer"/>
+        <result property="productionDate" column="production_date"/>
+        <result property="expiryDate" column="expiry_date"/>
+        <result property="quantity" column="quantity"/>
+        <result property="costAmount" column="cost_amount"/>
+        <result property="avgCost" column="avg_cost"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectForUpdate" resultMap="InventoryBatchBalanceDOResultMap">
+        select id, scope_type, scope_id, warehouse_name, item_code, item_name, batch_no,
+               manufacturer, production_date, expiry_date, quantity, cost_amount, avg_cost,
+               created_at, updated_at
+        from inventory_batch_balance
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and warehouse_name = #{warehouseName}
+          and item_code = #{itemCode}
+          and batch_no = #{batchNo}
+        for update
+    </select>
+</mapper>

@@ -12,6 +12,7 @@
         <result property="checkDate" column="check_date"/>
         <result property="warehouseName" column="warehouse_name"/>
         <result property="checkRangeType" column="check_range_type"/>
+        <result property="stocktakeFrequency" column="stocktake_frequency"/>
         <result property="freezeStock" column="freeze_stock"/>
         <result property="collaborativeFlag" column="collaborative_flag"/>
         <result property="planName" column="plan_name"/>
@@ -55,6 +56,7 @@
         <result property="profitQty" column="profit_qty"/>
         <result property="lossQty" column="loss_qty"/>
         <result property="profitLossReason" column="profit_loss_reason"/>
+        <result property="differenceReasonCode" column="difference_reason_code"/>
         <result property="profitInboundPrice" column="profit_inbound_price"/>
         <result property="profitAmount" column="profit_amount"/>
         <result property="lossOutboundPrice" column="loss_outbound_price"/>
@@ -110,12 +112,12 @@
 
     <insert id="insertHeader" useGeneratedKeys="true" keyProperty="header.id">
         insert into ${headerTable}
-        (scope_type, scope_id, document_code, check_date, warehouse_name, check_range_type, freeze_stock,
+        (scope_type, scope_id, document_code, check_date, warehouse_name, check_range_type, stocktake_frequency, freeze_stock,
          collaborative_flag, plan_name, third_party_document, salesman_user_id, salesman_name, item_count,
          total_book_amount, total_actual_amount, total_diff_amount, diff_status, generated_status, print_status,
          status, remark, rejection_reason, extra_json, created_by, approved_by, approved_at, created_at, updated_at)
         values (#{header.scopeType}, #{header.scopeId}, #{header.documentCode}, #{header.checkDate},
-                #{header.warehouseName}, #{header.checkRangeType}, #{header.freezeStock}, #{header.collaborativeFlag},
+                #{header.warehouseName}, #{header.checkRangeType}, #{header.stocktakeFrequency}, #{header.freezeStock}, #{header.collaborativeFlag},
                 #{header.planName}, #{header.thirdPartyDocument}, #{header.salesmanUserId}, #{header.salesmanName},
                 #{header.itemCount}, #{header.totalBookAmount}, #{header.totalActualAmount}, #{header.totalDiffAmount},
                 #{header.diffStatus}, #{header.generatedStatus}, #{header.printStatus}, #{header.status},
@@ -128,6 +130,7 @@
         set check_date = #{header.checkDate},
             warehouse_name = #{header.warehouseName},
             check_range_type = #{header.checkRangeType},
+            stocktake_frequency = #{header.stocktakeFrequency},
             freeze_stock = #{header.freezeStock},
             collaborative_flag = #{header.collaborativeFlag},
             plan_name = #{header.planName},
@@ -182,12 +185,13 @@
         insert into ${lineTable}
         (header_id, item_code, item_name, spec, category, unit_name, available_qty, book_qty, actual_qty,
          book_price, book_amount, actual_amount, diff_qty, diff_amount, profit_qty, loss_qty, profit_loss_reason,
+         difference_reason_code,
          profit_inbound_price, profit_amount, loss_outbound_price, loss_amount, abnormal_flag, remark, extra_json,
          created_at)
         values (#{line.headerId}, #{line.itemCode}, #{line.itemName}, #{line.spec}, #{line.category},
                 #{line.unitName}, #{line.availableQty}, #{line.bookQty}, #{line.actualQty}, #{line.bookPrice},
                 #{line.bookAmount}, #{line.actualAmount}, #{line.diffQty}, #{line.diffAmount}, #{line.profitQty},
-                #{line.lossQty}, #{line.profitLossReason}, #{line.profitInboundPrice}, #{line.profitAmount},
+                #{line.lossQty}, #{line.profitLossReason}, #{line.differenceReasonCode}, #{line.profitInboundPrice}, #{line.profitAmount},
                 #{line.lossOutboundPrice}, #{line.lossAmount}, #{line.abnormalFlag}, #{line.remark},
                 #{line.extraJson}, current_timestamp)
     </insert>

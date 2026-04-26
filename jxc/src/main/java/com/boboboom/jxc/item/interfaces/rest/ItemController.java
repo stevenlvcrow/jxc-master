@@ -111,6 +111,7 @@ public class ItemController {
      * @param statType 统计类型
      * @param storageMode 存储方式
      * @param tag 标签
+     * @param stocktakeFrequency 盘点频次
      * @param orgId 机构标识
      * @return 分页结果
      */
@@ -124,8 +125,10 @@ public class ItemController {
                                                         @RequestParam(required = false) String statType,
                                                         @RequestParam(required = false) String storageMode,
                                                         @RequestParam(required = false) String tag,
+                                                        @RequestParam(required = false) String stocktakeFrequency,
                                                         @RequestParam(required = false) String orgId) {
-        return CodeDataResponse.ok(itemApplicationService.list(pageNo, pageSize, keyword, category, status, itemType, statType, storageMode, tag, orgId));
+        return CodeDataResponse.ok(itemApplicationService.list(pageNo, pageSize, keyword, category, status, itemType, statType,
+                storageMode, tag, stocktakeFrequency, orgId));
     }
 
     /**

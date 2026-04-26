@@ -20,18 +20,32 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import com.boboboom.jxc.common.BusinessException;
+import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.application.service.DataScopeAccessService;
+import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InterOrgTransferDetailReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InterOrgTransferSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InventoryInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.InventoryProfitLossReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.OtherInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.PageData;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.StagnantStockReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.StockInoutSummaryReportRow;
+import com.boboboom.jxc.inventory.application.service.InventorySupplementReportRows.StockTurnoverRateReportRow;
 import com.boboboom.jxc.inventory.domain.repository.InventoryBalanceRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryCheckRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryDocumentRepository;
+import com.boboboom.jxc.inventory.domain.repository.InventoryPeriodOpeningRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryTransactionRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryPeriodOpeningDO;
+import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryPeriodOpeningLineDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryTransactionDO;
 import com.boboboom.jxc.item.domain.repository.ItemProfileRepository;
 import com.boboboom.jxc.item.infrastructure.persistence.dataobject.ItemProfileDO;
@@ -61,7 +75,9 @@ public class InventorySupplementReportApplicationService {
     private final UserAccountRepository userAccountRepository;
     private final WarehouseRepository warehouseRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final InventoryPeriodOpeningRepository inventoryPeriodOpeningRepository;
     private final DataScopeAccessService dataScopeAccessService;
+    private final DictionaryLookupService dictionaryLookupService;
     private final ObjectMapper objectMapper;
 
     /** 库存补充报表业务服务，负责预警、周转、跨组织调拨等扩展报表计算。 */
@@ -73,7 +89,9 @@ public class InventorySupplementReportApplicationService {
                                                        UserAccountRepository userAccountRepositoryValue,
                                                        WarehouseRepository warehouseRepositoryValue,
                                                        InventoryTransactionRepository inventoryTransactionRepositoryValue,
+                                                       InventoryPeriodOpeningRepository inventoryPeriodOpeningRepositoryValue,
                                                        DataScopeAccessService dataScopeAccessServiceValue,
+                                                       DictionaryLookupService dictionaryLookupServiceValue,
                                                        ObjectMapper objectMapperValue) {
         this.orgScopeService = orgScopeServiceValue;
         this.inventoryBalanceRepository = inventoryBalanceRepositoryValue;
@@ -83,51 +101,10 @@ public class InventorySupplementReportApplicationService {
         this.userAccountRepository = userAccountRepositoryValue;
         this.warehouseRepository = warehouseRepositoryValue;
         this.inventoryTransactionRepository = inventoryTransactionRepositoryValue;
+        this.inventoryPeriodOpeningRepository = inventoryPeriodOpeningRepositoryValue;
         this.dataScopeAccessService = dataScopeAccessServiceValue;
+        this.dictionaryLookupService = dictionaryLookupServiceValue;
         this.objectMapper = objectMapperValue;
-    }
-
-    /** 查询库存预警报表。 */
-    public PageData<StockWarningReportRow> stockWarningReport(Integer pageNo,
-                                                             Integer pageSize,
-                                                             String statisticDimension,
-                                                             String warehouse,
-                                                             String itemCategory,
-                                                             String itemCode,
-                                                             String itemStatus,
-                                                             String warningStatus,
-                                                             String unitType,
-                                                             String orgId) {
-        InventoryScope scope = resolveInventoryScope(orgId);
-        int safePageNo = normalizePageNo(pageNo);
-        int safePageSize = normalizePageSize(pageSize);
-        String statisticDimensionValue = trimNullable(statisticDimension);
-        String warehouseValue = trimNullable(warehouse);
-        String itemCategoryValue = trimNullable(itemCategory);
-        String itemCodeValue = trimNullable(itemCode);
-        String itemStatusValue = trimNullable(itemStatus);
-        String warningStatusValue = trimNullable(warningStatus);
-        String unitTypeValue = trimNullable(unitType);
-
-        Map<String, ItemProfileSnapshot> itemProfiles = loadItemProfiles(scope);
-        List<StockWarningReportRow> rows = inventoryBalanceRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
-                .map(balance -> toStockWarningRow(scope, balance, itemProfiles))
-                .filter(row -> !StringUtils.hasText(warehouseValue) || Objects.equals(row.warehouse(), warehouseValue))
-                .filter(row -> !StringUtils.hasText(itemCategoryValue) || Objects.equals(row.itemCategory(), itemCategoryValue))
-                .filter(row -> !StringUtils.hasText(itemCodeValue) || row.itemCode().contains(itemCodeValue))
-                .filter(row -> !StringUtils.hasText(itemStatusValue) || Objects.equals(row.itemStatus(), itemStatusValue))
-                .filter(row -> !StringUtils.hasText(warningStatusValue) || Objects.equals(row.warningStatus(), warningStatusValue))
-                .filter(row -> !StringUtils.hasText(unitTypeValue) || Objects.equals(row.unit(), unitTypeValue))
-                .toList();
-
-        List<StockWarningReportRow> normalized = "仓库".equals(statisticDimensionValue)
-                ? rows
-                : aggregateStockWarningRows(rows);
-        List<StockWarningReportRow> sorted = normalized.stream()
-                .sorted(Comparator.comparing(StockWarningReportRow::itemCode)
-                        .thenComparing(row -> defaultIfBlank(row.warehouse(), "")))
-                .toList();
-        return page(sorted, safePageNo, safePageSize);
     }
 
     /** 查询滞销库存报表。 */
@@ -192,7 +169,7 @@ public class InventorySupplementReportApplicationService {
         String statisticsTypeValue = trimNullable(statisticsType);
         String itemKeywordValue = trimNullable(itemKeyword);
         String checkTypeValue = trimNullable(checkType);
-        String profitLossResultValue = trimNullable(profitLossResult);
+        String profitLossResultValue = normalizeProfitLossResult(profitLossResult);
         String unitTypeValue = trimNullable(unitType);
 
         List<InventoryProfitLossReportRow> rows = collectInventoryProfitLossRows(
@@ -302,8 +279,12 @@ public class InventorySupplementReportApplicationService {
         return (!StringUtils.hasText(itemCategoryValue) || Objects.equals(row.itemCategory(), itemCategoryValue))
                 && (!StringUtils.hasText(statisticsTypeValue) || Objects.equals(row.statisticsType(), statisticsTypeValue))
                 && matchesInventoryProfitLossItem(row, itemKeywordValue)
-                && (!StringUtils.hasText(profitLossResultValue) || Objects.equals(row.profitLossResult(), profitLossResultValue))
+                && matchesProfitLossResult(row.profitLossResult(), profitLossResultValue)
                 && (!StringUtils.hasText(unitTypeValue) || Objects.equals(row.unit(), unitTypeValue));
+    }
+
+    private boolean matchesProfitLossResult(String rowResult, String resultCode) {
+        return !StringUtils.hasText(resultCode) || Objects.equals(profitLossResultCode(rowResult), resultCode);
     }
 
     private boolean matchesInventoryProfitLossWarehouse(InventoryCheckHeader header, String warehouseValue) {
@@ -328,6 +309,8 @@ public class InventorySupplementReportApplicationService {
                                                                                 String warehouseType,
                                                                                 String startDate,
                                                                                 String endDate,
+                                                                                String periodType,
+                                                                                String periodStartDate,
                                                                                 String itemCode,
                                                                                 String itemCategory,
                                                                                 String statisticType,
@@ -342,6 +325,7 @@ public class InventorySupplementReportApplicationService {
         int safePageSize = normalizePageSize(pageSize);
         LocalDate start = parseDateNullable(startDate);
         LocalDate end = parseDateNullable(endDate);
+        PeriodReportRange periodRange = resolvePeriodReportRange(periodType, periodStartDate, start, end);
         String statisticDimensionValue = trimNullable(statisticDimension);
         String warehouseValue = trimNullable(warehouse);
         String warehouseTypeValue = trimNullable(warehouseType);
@@ -354,8 +338,9 @@ public class InventorySupplementReportApplicationService {
         boolean hideEmpty = Objects.equals(trimNullable(hideNoInout), "true") || Objects.equals(trimNullable(hideNoInout), "是");
 
         Map<String, ItemProfileSnapshot> itemProfiles = loadItemProfiles(scope);
-        Map<String, TxnSummary> txnSummaryMap = loadTxnSummary(scope, start, end, inoutTypeValue);
-        Map<String, InventoryProfitLossAgg> checkAggMap = loadInventoryCheckAgg(scope, start, end);
+        Map<String, TxnSummary> txnSummaryMap = loadTxnSummary(scope, periodRange.startDate(), periodRange.endDate(),
+                inoutTypeValue, periodRange.periodType(), periodRange.periodStartDate(), itemProfiles);
+        Map<String, InventoryProfitLossAgg> checkAggMap = loadInventoryCheckAgg(scope, periodRange.startDate(), periodRange.endDate());
 
         List<InventoryInoutSummaryReportRow> rows = collectInventoryInoutSummaryRows(scope, statisticDimensionValue,
                 warehouseValue, itemCodeValue, itemCategoryValue, statisticTypeValue, itemStatusValue, unitTypeValue,
@@ -479,6 +464,8 @@ public class InventorySupplementReportApplicationService {
                                                                        String dateDimension,
                                                                        String startDate,
                                                                        String endDate,
+                                                                       String periodType,
+                                                                       String periodStartDate,
                                                                        String statisticDimension,
                                                                        String warehouse,
                                                                        String warehouseType,
@@ -498,6 +485,7 @@ public class InventorySupplementReportApplicationService {
         int safePageSize = normalizePageSize(pageSize);
         LocalDate start = parseDateNullable(startDate);
         LocalDate end = parseDateNullable(endDate);
+        PeriodReportRange periodRange = resolvePeriodReportRange(periodType, periodStartDate, start, end);
         String statisticModeValue = trimNullable(statisticMode);
         String targetStoreValue = trimNullable(targetStore);
         String warehouseValue = trimNullable(warehouse);
@@ -512,10 +500,13 @@ public class InventorySupplementReportApplicationService {
         String unitTypeValue = trimNullable(unitType);
 
         Map<String, ItemProfileSnapshot> itemProfiles = loadItemProfiles(scope);
+        requireApprovedPeriodOpenings(scope, periodRange.periodType(), periodRange.periodStartDate(), warehouseValue);
+        Map<String, LedgerLineSnapshot> ledgerMap = loadLedgerLineSnapshotMap(scope);
         StockInoutSummaryFilter filter = new StockInoutSummaryFilter(statisticModeValue, targetStoreValue,
                 warehouseValue, warehouseTypeValue, itemKeywordValue, itemCategoryValue, statisticTypeValue,
                 itemStatusValue, inoutTypeValue, inoutDirectionValue, oppositeOrgValue, unitTypeValue);
-        List<StockInoutSummaryReportRow> rows = collectStockInoutSummaryRows(scope, start, end, filter, itemProfiles);
+        List<StockInoutSummaryReportRow> rows = collectStockInoutSummaryRows(scope, periodRange.startDate(),
+                periodRange.endDate(), filter, itemProfiles, ledgerMap);
         rows = aggregateStockInoutRows(rows);
         return page(rows, safePageNo, safePageSize);
     }
@@ -524,10 +515,11 @@ public class InventorySupplementReportApplicationService {
                                                                           LocalDate start,
                                                                           LocalDate end,
                                                                           StockInoutSummaryFilter filter,
-                                                                          Map<String, ItemProfileSnapshot> itemProfiles) {
+                                                                          Map<String, ItemProfileSnapshot> itemProfiles,
+                                                                          Map<String, LedgerLineSnapshot> ledgerMap) {
         List<StockInoutSummaryReportRow> rows = new ArrayList<>();
         for (InventoryDocumentType type : stockInoutSummaryTypes()) {
-            appendStockInoutSummaryRowsForType(rows, scope, type, start, end, filter, itemProfiles);
+            appendStockInoutSummaryRowsForType(rows, scope, type, start, end, filter, itemProfiles, ledgerMap);
         }
         return rows;
     }
@@ -538,7 +530,8 @@ public class InventorySupplementReportApplicationService {
                                                     LocalDate start,
                                                     LocalDate end,
                                                     StockInoutSummaryFilter filter,
-                                                    Map<String, ItemProfileSnapshot> itemProfiles) {
+                                                    Map<String, ItemProfileSnapshot> itemProfiles,
+                                                    Map<String, LedgerLineSnapshot> ledgerMap) {
         List<InventoryDocumentHeader> headers = loadVisibleDocumentHeaders(type, scope);
         Map<Long, List<InventoryDocumentLine>> lineMap = inventoryDocumentRepository.findLinesByHeaderIds(type,
                 headers.stream().map(InventoryDocumentHeader::getId).toList())
@@ -548,7 +541,7 @@ public class InventorySupplementReportApplicationService {
             if (!isApprovedDocument(header)) {
                 continue;
             }
-            appendStockInoutSummaryRowsForHeader(rows, scope, type, header, lineMap, start, end, filter, itemProfiles);
+            appendStockInoutSummaryRowsForHeader(rows, scope, type, header, lineMap, start, end, filter, itemProfiles, ledgerMap);
         }
     }
 
@@ -560,7 +553,8 @@ public class InventorySupplementReportApplicationService {
                                                       LocalDate start,
                                                       LocalDate end,
                                                       StockInoutSummaryFilter filter,
-                                                      Map<String, ItemProfileSnapshot> itemProfiles) {
+                                                      Map<String, ItemProfileSnapshot> itemProfiles,
+                                                      Map<String, LedgerLineSnapshot> ledgerMap) {
         if (!matchesStockInoutSummaryHeader(header, start, end, filter)) {
             return;
         }
@@ -569,7 +563,11 @@ public class InventorySupplementReportApplicationService {
             if (item == null || !matchesStockInoutSummaryLine(line, item, filter)) {
                 continue;
             }
-            StockInoutSummaryReportRow row = buildStockInoutSummaryRow(scope, type, header, line, item);
+            LedgerLineSnapshot ledger = requireLedgerLineSnapshot(ledgerMap, type.getBusinessCode(), header.getId(), line.getId());
+            if (!matchDate(ledger.businessDate(), start, end)) {
+                continue;
+            }
+            StockInoutSummaryReportRow row = buildStockInoutSummaryRow(scope, type, header, line, item, ledger);
             if (matchesStockInoutSummaryRow(row, type, filter)) {
                 rows.add(row);
             }
@@ -580,7 +578,7 @@ public class InventorySupplementReportApplicationService {
                                                    LocalDate start,
                                                    LocalDate end,
                                                    StockInoutSummaryFilter filter) {
-        return matchDate(header.getDocumentDate(), start, end) && matchesStockInoutTargetStore(header, filter.targetStore());
+        return matchesStockInoutTargetStore(header, filter.targetStore());
     }
 
     private boolean matchesStockInoutTargetStore(InventoryDocumentHeader header, String targetStore) {
@@ -650,7 +648,6 @@ public class InventorySupplementReportApplicationService {
                 InventoryDocumentType.STOCK_TRANSFER, InventoryDocumentType.STOCK_TRANSFER_INBOUND,
                 InventoryDocumentType.DEPARTMENT_TRANSFER, InventoryDocumentType.DAMAGE_OUTBOUND,
                 InventoryDocumentType.OTHER_INBOUND, InventoryDocumentType.OTHER_OUTBOUND,
-                InventoryDocumentType.PROFIT_INBOUND, InventoryDocumentType.LOSS_OUTBOUND,
                 InventoryDocumentType.PRODUCTION_INBOUND, InventoryDocumentType.CUSTOMER_SALES_OUTBOUND,
                 InventoryDocumentType.CUSTOMER_RETURN_INBOUND, InventoryDocumentType.DISH_CONSUMPTION_OUTBOUND,
                 InventoryDocumentType.STORE_TRANSFER, InventoryDocumentType.STOCK_TRANSFER_OUTBOUND);
@@ -661,6 +658,8 @@ public class InventorySupplementReportApplicationService {
                                                                         Integer pageSize,
                                                                         String startDate,
                                                                         String endDate,
+                                                                        String periodType,
+                                                                        String periodStartDate,
                                                                         String warehouse,
                                                                         String itemCategory,
                                                                         String itemCode,
@@ -673,6 +672,7 @@ public class InventorySupplementReportApplicationService {
         int safePageSize = normalizePageSize(pageSize);
         LocalDate start = parseDateNullable(startDate);
         LocalDate end = parseDateNullable(endDate);
+        PeriodReportRange periodRange = resolvePeriodReportRange(periodType, periodStartDate, start, end);
         String warehouseValue = trimNullable(warehouse);
         String itemCategoryValue = trimNullable(itemCategory);
         String itemCodeValue = trimNullable(itemCode);
@@ -680,10 +680,13 @@ public class InventorySupplementReportApplicationService {
         String reasonTypeValue = trimNullable(reasonType);
         String itemStatusValue = trimNullable(itemStatus);
         Map<String, ItemProfileSnapshot> itemProfiles = loadItemProfiles(scope);
+        requireApprovedPeriodOpenings(scope, periodRange.periodType(), periodRange.periodStartDate(), warehouseValue);
+        Map<String, LedgerLineSnapshot> ledgerMap = loadLedgerLineSnapshotMap(scope);
         OtherInoutSummaryFilter filter = new OtherInoutSummaryFilter(warehouseValue, itemCategoryValue,
                 itemCodeValue, inoutTypeValue, reasonTypeValue, itemStatusValue);
 
-        List<OtherInoutSummaryReportRow> rows = collectOtherInoutSummaryRows(scope, start, end, filter, itemProfiles);
+        List<OtherInoutSummaryReportRow> rows = collectOtherInoutSummaryRows(scope, periodRange.startDate(),
+                periodRange.endDate(), filter, itemProfiles, ledgerMap);
         rows = aggregateOtherInoutRows(rows);
         return page(rows, safePageNo, safePageSize);
     }
@@ -692,13 +695,13 @@ public class InventorySupplementReportApplicationService {
                                                                           LocalDate start,
                                                                           LocalDate end,
                                                                           OtherInoutSummaryFilter filter,
-                                                                          Map<String, ItemProfileSnapshot> itemProfiles) {
+                                                                          Map<String, ItemProfileSnapshot> itemProfiles,
+                                                                          Map<String, LedgerLineSnapshot> ledgerMap) {
         List<OtherInoutSummaryReportRow> rows = new ArrayList<>();
         for (InventoryDocumentType type : List.of(InventoryDocumentType.OTHER_INBOUND,
                 InventoryDocumentType.OTHER_OUTBOUND, InventoryDocumentType.DAMAGE_OUTBOUND,
-                InventoryDocumentType.PROFIT_INBOUND, InventoryDocumentType.LOSS_OUTBOUND,
                 InventoryDocumentType.PRODUCTION_INBOUND)) {
-            appendOtherInoutSummaryRowsForType(rows, scope, type, start, end, filter, itemProfiles);
+            appendOtherInoutSummaryRowsForType(rows, scope, type, start, end, filter, itemProfiles, ledgerMap);
         }
         return rows;
     }
@@ -709,7 +712,8 @@ public class InventorySupplementReportApplicationService {
                                                     LocalDate start,
                                                     LocalDate end,
                                                     OtherInoutSummaryFilter filter,
-                                                    Map<String, ItemProfileSnapshot> itemProfiles) {
+                                                    Map<String, ItemProfileSnapshot> itemProfiles,
+                                                    Map<String, LedgerLineSnapshot> ledgerMap) {
         List<InventoryDocumentHeader> headers = loadVisibleDocumentHeaders(type, scope);
         Map<Long, List<InventoryDocumentLine>> lineMap = inventoryDocumentRepository.findLinesByHeaderIds(type,
                 headers.stream().map(InventoryDocumentHeader::getId).toList())
@@ -719,7 +723,7 @@ public class InventorySupplementReportApplicationService {
             if (!isApprovedDocument(header)) {
                 continue;
             }
-            appendOtherInoutSummaryRowsForHeader(rows, type, header, lineMap, start, end, filter, itemProfiles);
+            appendOtherInoutSummaryRowsForHeader(rows, type, header, lineMap, start, end, filter, itemProfiles, ledgerMap);
         }
     }
 
@@ -730,10 +734,10 @@ public class InventorySupplementReportApplicationService {
                                                       LocalDate start,
                                                       LocalDate end,
                                                       OtherInoutSummaryFilter filter,
-                                                      Map<String, ItemProfileSnapshot> itemProfiles) {
+                                                      Map<String, ItemProfileSnapshot> itemProfiles,
+                                                      Map<String, LedgerLineSnapshot> ledgerMap) {
         String resolvedWarehouse = defaultIfBlank(header.getPrimaryName(), "");
-        if (!matchDate(header.getDocumentDate(), start, end)
-                || StringUtils.hasText(filter.warehouse()) && !Objects.equals(resolvedWarehouse, filter.warehouse())) {
+        if (StringUtils.hasText(filter.warehouse()) && !Objects.equals(resolvedWarehouse, filter.warehouse())) {
             return;
         }
         for (InventoryDocumentLine line : lineMap.getOrDefault(header.getId(), List.of())) {
@@ -741,7 +745,11 @@ public class InventorySupplementReportApplicationService {
             if (item == null || !matchesOtherInoutSummaryItem(item, filter)) {
                 continue;
             }
-            OtherInoutSummaryReportRow row = buildOtherInoutSummaryRow(type, header, line, item, resolvedWarehouse);
+            LedgerLineSnapshot ledger = requireLedgerLineSnapshot(ledgerMap, type.getBusinessCode(), header.getId(), line.getId());
+            if (!matchDate(ledger.businessDate(), start, end)) {
+                continue;
+            }
+            OtherInoutSummaryReportRow row = buildOtherInoutSummaryRow(type, header, line, item, ledger, resolvedWarehouse);
             if (matchesOtherInoutSummaryRow(row, filter)) {
                 rows.add(row);
             }
@@ -763,11 +771,12 @@ public class InventorySupplementReportApplicationService {
                                                                  InventoryDocumentHeader header,
                                                                  InventoryDocumentLine line,
                                                                  ItemProfileSnapshot item,
+                                                                 LedgerLineSnapshot ledger,
                                                                  String resolvedWarehouse) {
         String rowInoutType = resolveOtherInoutType(type, header, line);
         String rowReasonType = resolveOtherReasonType(header, line, type);
-        BigDecimal qty = defaultQuantity(line.getQuantity());
-        BigDecimal amount = defaultMoney(line.getAmount() == null ? qty.multiply(item.unitCost()) : line.getAmount());
+        BigDecimal qty = ledger.quantity().abs();
+        BigDecimal amount = ledger.amount().abs();
         return new OtherInoutSummaryReportRow(summaryRowId(resolvedWarehouse, item.itemCode(), rowInoutType + rowReasonType),
                 item.itemCode(), item.itemName(), item.spec(), item.category(), item.stockUnit(), resolvedWarehouse,
                 rowInoutType, rowReasonType, qty, amount);
@@ -802,10 +811,11 @@ public class InventorySupplementReportApplicationService {
         String targetWarehouseValue = trimNullable(targetWarehouse);
         String documentStatusValue = trimNullable(documentStatus);
         Map<String, ItemProfileSnapshot> itemProfiles = loadItemProfiles(scope);
+        Map<String, LedgerLineSnapshot> ledgerMap = loadLedgerLineSnapshotMap(scope);
         InterOrgTransferDetailFilter filter = new InterOrgTransferDetailFilter(statisticModeValue, targetStoreValue,
                 sourceStoreValue, itemNameValue, itemCategoryValue, sourceWarehouseValue, targetWarehouseValue,
                 documentStatusValue);
-        List<InterOrgTransferDetailReportRow> rows = collectInterOrgTransferDetailRows(scope, start, end, filter, itemProfiles);
+        List<InterOrgTransferDetailReportRow> rows = collectInterOrgTransferDetailRows(scope, start, end, filter, itemProfiles, ledgerMap);
         rows.sort(Comparator.comparing(InterOrgTransferDetailReportRow::transferDate).reversed().thenComparing(InterOrgTransferDetailReportRow::transferNo));
         return page(rows, safePageNo, safePageSize);
     }
@@ -814,12 +824,13 @@ public class InventorySupplementReportApplicationService {
                                                                                     LocalDate start,
                                                                                     LocalDate end,
                                                                                     InterOrgTransferDetailFilter filter,
-                                                                                    Map<String, ItemProfileSnapshot> itemProfiles) {
+                                                                                    Map<String, ItemProfileSnapshot> itemProfiles,
+                                                                                    Map<String, LedgerLineSnapshot> ledgerMap) {
         List<InterOrgTransferDetailReportRow> rows = new ArrayList<>();
         for (InventoryDocumentType type : List.of(InventoryDocumentType.STOCK_TRANSFER,
                 InventoryDocumentType.STOCK_TRANSFER_INBOUND, InventoryDocumentType.STORE_TRANSFER,
                 InventoryDocumentType.STOCK_TRANSFER_OUTBOUND, InventoryDocumentType.DEPARTMENT_TRANSFER)) {
-            appendInterOrgTransferDetailRowsForType(rows, scope, type, start, end, filter, itemProfiles);
+            appendInterOrgTransferDetailRowsForType(rows, scope, type, start, end, filter, itemProfiles, ledgerMap);
         }
         return rows;
     }
@@ -830,7 +841,8 @@ public class InventorySupplementReportApplicationService {
                                                          LocalDate start,
                                                          LocalDate end,
                                                          InterOrgTransferDetailFilter filter,
-                                                         Map<String, ItemProfileSnapshot> itemProfiles) {
+                                                         Map<String, ItemProfileSnapshot> itemProfiles,
+                                                         Map<String, LedgerLineSnapshot> ledgerMap) {
         List<InventoryDocumentHeader> headers = loadVisibleDocumentHeaders(type, scope);
         Map<Long, List<InventoryDocumentLine>> lineMap = inventoryDocumentRepository.findLinesByHeaderIds(type,
                 headers.stream().map(InventoryDocumentHeader::getId).toList())
@@ -840,7 +852,7 @@ public class InventorySupplementReportApplicationService {
             if (!isApprovedDocument(header)) {
                 continue;
             }
-            appendInterOrgTransferDetailRowsForHeader(rows, scope, type, header, lineMap, start, end, filter, itemProfiles);
+            appendInterOrgTransferDetailRowsForHeader(rows, scope, type, header, lineMap, start, end, filter, itemProfiles, ledgerMap);
         }
     }
 
@@ -852,7 +864,8 @@ public class InventorySupplementReportApplicationService {
                                                            LocalDate start,
                                                            LocalDate end,
                                                            InterOrgTransferDetailFilter filter,
-                                                           Map<String, ItemProfileSnapshot> itemProfiles) {
+                                                           Map<String, ItemProfileSnapshot> itemProfiles,
+                                                           Map<String, LedgerLineSnapshot> ledgerMap) {
         String resolvedSource = defaultIfBlank(header.getPrimaryName(), "");
         String resolvedTarget = defaultIfBlank(header.getSecondaryName(), defaultIfBlank(header.getCounterpartyName(), ""));
         if (!matchesInterOrgTransferHeader(header, resolvedSource, resolvedTarget, start, end, filter)) {
@@ -863,7 +876,8 @@ public class InventorySupplementReportApplicationService {
             if (item == null || !matchesInterOrgTransferLine(line, item, filter)) {
                 continue;
             }
-            InterOrgTransferDetailReportRow row = buildInterOrgTransferDetailRow(scope, type, header, line, item,
+            LedgerLineSnapshot ledger = requireLedgerLineSnapshot(ledgerMap, type.getBusinessCode(), header.getId(), line.getId());
+            InterOrgTransferDetailReportRow row = buildInterOrgTransferDetailRow(scope, type, header, line, item, ledger,
                     resolvedSource, resolvedTarget);
             if (!StringUtils.hasText(filter.statisticMode()) || Objects.equals(row.statisticMode(), filter.statisticMode())) {
                 rows.add(row);
@@ -925,7 +939,8 @@ public class InventorySupplementReportApplicationService {
                 null,
                 null
         );
-        List<InterOrgTransferDetailReportRow> detailRows = collectInterOrgTransferDetailRows(scope, start, end, filter, loadItemProfiles(scope));
+        List<InterOrgTransferDetailReportRow> detailRows = collectInterOrgTransferDetailRows(scope, start, end, filter,
+                loadItemProfiles(scope), loadLedgerLineSnapshotMap(scope));
         List<InterOrgTransferSummaryReportRow> rows = aggregateInterOrgTransferSummaryRows(detailRows);
         return page(rows, safePageNo, safePageSize);
     }
@@ -937,6 +952,8 @@ public class InventorySupplementReportApplicationService {
                                                                         String statisticMethod,
                                                                         String startDate,
                                                                         String endDate,
+                                                                        String periodType,
+                                                                        String periodStartDate,
                                                                         String warehouse,
                                                                         String itemCategory,
                                                                         String itemCode,
@@ -948,6 +965,7 @@ public class InventorySupplementReportApplicationService {
         int safePageSize = normalizePageSize(pageSize);
         LocalDate start = parseDateNullable(startDate);
         LocalDate end = parseDateNullable(endDate);
+        PeriodReportRange periodRange = resolvePeriodReportRange(periodType, periodStartDate, start, end);
         String statisticDimensionValue = trimNullable(statisticDimension);
         String statisticMethodValue = trimNullable(statisticMethod);
         String warehouseValue = trimNullable(warehouse);
@@ -957,7 +975,8 @@ public class InventorySupplementReportApplicationService {
         String unitTypeValue = trimNullable(unitType);
 
         Map<String, ItemProfileSnapshot> itemProfiles = loadItemProfiles(scope);
-        Map<String, TxnSummary> summaryMap = loadTxnSummary(scope, start, end, null);
+        Map<String, TxnSummary> summaryMap = loadTxnSummary(scope, periodRange.startDate(), periodRange.endDate(),
+                null, periodRange.periodType(), periodRange.periodStartDate(), itemProfiles);
         StockTurnoverRateFilter filter = new StockTurnoverRateFilter(statisticDimensionValue, warehouseValue,
                 itemCategoryValue, itemCodeValue, itemStatusValue, unitTypeValue);
         List<StockTurnoverRateReportRow> rows = collectStockTurnoverRateRows(scope, filter, itemProfiles, summaryMap);
@@ -966,7 +985,7 @@ public class InventorySupplementReportApplicationService {
             rows = aggregateStockTurnoverRows(rows);
         }
         if (StringUtils.hasText(statisticMethodValue) && Objects.equals(statisticMethodValue, "按数量计算")) {
-            rows = convertTurnoverToQuantity(rows, scope, itemProfiles, summaryMap);
+            throw new BusinessException("库存周转率只支持移动加权金额口径，不支持按物品档案单价折算数量");
         }
         return page(rows, safePageNo, safePageSize);
     }
@@ -1023,46 +1042,6 @@ public class InventorySupplementReportApplicationService {
                 outboundAmount, turnoverRate, turnoverDays);
     }
 
-    private StockWarningReportRow toStockWarningRow(InventoryScope scope,
-                                                    InventoryBalanceDO balance,
-                                                    Map<String, ItemProfileSnapshot> itemProfiles) {
-        ItemProfileSnapshot item = itemProfiles.get(balance.getItemCode());
-        BigDecimal currentStock = defaultQuantity(balance.getQuantity());
-        BigDecimal lower = item == null ? BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP)
-                : defaultQuantity(parseBigDecimal(item.stockMin()));
-        BigDecimal upper = item == null ? BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP)
-                : defaultQuantity(parseBigDecimal(item.stockMax()));
-        String warningStatus;
-        if (currentStock.compareTo(lower) < 0) {
-            warningStatus = "库存不足";
-        } else if (currentStock.compareTo(upper) > 0) {
-            warningStatus = "库存超储";
-        } else {
-            warningStatus = "正常";
-        }
-        return new StockWarningReportRow(
-                balance.getWarehouseName() + "|" + balance.getItemCode(),
-                defaultIfBlank(balance.getItemCode(), ""),
-                defaultIfBlank(balance.getItemName(), ""),
-                defaultIfBlank(item == null ? null : item.stockUnit(), "库存单位"),
-                defaultIfBlank(item == null ? null : item.category(), ""),
-                defaultIfBlank(balance.getWarehouseName(), ""),
-                currentStock,
-                upper,
-                lower,
-                warningStatus,
-                defaultIfBlank(item == null ? null : item.status(), "启用")
-        );
-    }
-
-    private List<StockWarningReportRow> aggregateStockWarningRows(List<StockWarningReportRow> rows) {
-        Map<String, MutableStockWarningRow> grouped = new LinkedHashMap<>();
-        for (StockWarningReportRow row : rows) {
-            grouped.computeIfAbsent(row.itemCode(), ignored -> new MutableStockWarningRow()).merge(row);
-        }
-        return grouped.values().stream().map(MutableStockWarningRow::toRow).toList();
-    }
-
     private StagnantStockReportRow toStagnantStockRow(InventoryScope scope,
                                                       InventoryBalanceDO balance,
                                                       Map<String, ItemProfileSnapshot> itemProfiles,
@@ -1070,9 +1049,9 @@ public class InventorySupplementReportApplicationService {
         ItemProfileSnapshot item = itemProfiles.get(balance.getItemCode());
         TransactionStats stats = statsMap.getOrDefault(transactionKey(balance.getWarehouseName(), balance.getItemCode()), new TransactionStats());
         BigDecimal stockQty = defaultQuantity(balance.getQuantity());
-        int retainedDays = stats.latestMovementTime() == null
+        int retainedDays = stats.latestMovementTime == null
                 ? 0
-                : (int) ChronoUnit.DAYS.between(stats.latestMovementTime().toLocalDate(), LocalDate.now());
+                : (int) ChronoUnit.DAYS.between(stats.latestMovementTime.toLocalDate(), LocalDate.now());
         Integer stagnantDays = item == null ? 0 : item.stagnantDays();
         String stagnantStatus = isStagnantStock(stagnantDays, retainedDays, stockQty) ? "是" : "否";
         return new StagnantStockReportRow(
@@ -1082,11 +1061,11 @@ public class InventorySupplementReportApplicationService {
                 defaultIfBlank(balance.getItemCode(), ""),
                 defaultIfBlank(item == null ? null : item.spec(), ""),
                 defaultIfBlank(item == null ? null : item.stockUnit(), "库存单位"),
-                formatDateTime(stats.firstInboundTime()),
-                formatDateTime(stats.latestInboundTime()),
-                formatDateTime(stats.latestOutboundTime()),
-                stats.latestInboundQty(),
-                stats.latestOutboundQty(),
+                formatDateTime(stats.firstInboundTime),
+                formatDateTime(stats.latestInboundTime),
+                formatDateTime(stats.latestOutboundTime),
+                stats.latestInboundQty,
+                stats.latestOutboundQty,
                 stockQty,
                 retainedDays,
                 stagnantDays == null ? 0 : stagnantDays,
@@ -1173,8 +1152,7 @@ public class InventorySupplementReportApplicationService {
                 request.warningDays(),
                 request.stagnantDays(),
                 defaultIfBlank(trimNullable(request.status()), "启用"),
-                defaultIfBlank(trimNullable(request.statType()), ""),
-                resolveUnitCost(request)
+                defaultIfBlank(trimNullable(request.statType()), "")
         );
     }
 
@@ -1196,23 +1174,29 @@ public class InventorySupplementReportApplicationService {
         } else if (quantityDelta != null && quantityDelta.compareTo(BigDecimal.ZERO) < 0) {
             mergeOutboundTransactionStats(stats, transaction);
         }
-        mergeLatestMovementStats(stats, transaction.getCreatedAt());
+        mergeLatestMovementStats(stats, transactionDateTime(transaction));
     }
 
     private void mergeInboundTransactionStats(TransactionStats stats, InventoryTransactionDO transaction) {
-        stats.latestInboundTime = transaction.getCreatedAt();
+        LocalDateTime businessTime = transactionDateTime(transaction);
+        stats.latestInboundTime = businessTime;
         stats.latestInboundQty = defaultQuantity(transaction.getQuantityDelta());
         if (stats.firstInboundTime == null) {
-            stats.firstInboundTime = transaction.getCreatedAt();
+            stats.firstInboundTime = businessTime;
         }
     }
 
     private void mergeOutboundTransactionStats(TransactionStats stats, InventoryTransactionDO transaction) {
-        stats.latestOutboundTime = transaction.getCreatedAt();
+        LocalDateTime businessTime = transactionDateTime(transaction);
+        stats.latestOutboundTime = businessTime;
         stats.latestOutboundQty = defaultQuantity(transaction.getQuantityDelta().abs());
         if (stats.firstInboundTime == null) {
-            stats.firstInboundTime = transaction.getCreatedAt();
+            stats.firstInboundTime = businessTime;
         }
+    }
+
+    private LocalDateTime transactionDateTime(InventoryTransactionDO transaction) {
+        return (transaction.getBusinessDate() == null ? LocalDate.now() : transaction.getBusinessDate()).atStartOfDay();
     }
 
     private void mergeLatestMovementStats(TransactionStats stats, LocalDateTime movementTime) {
@@ -1229,35 +1213,78 @@ public class InventorySupplementReportApplicationService {
         return user.map(UserAccountDO::getRealName).filter(StringUtils::hasText).orElse(String.valueOf(userId));
     }
 
-    private Map<String, TxnSummary> loadTxnSummary(InventoryScope scope, LocalDate start, LocalDate end, String inoutType) {
+    private Map<String, TxnSummary> loadTxnSummary(InventoryScope scope,
+                                                   LocalDate start,
+                                                   LocalDate end,
+                                                   String inoutType,
+                                                   String periodType,
+                                                   LocalDate periodStartDate,
+                                                   Map<String, ItemProfileSnapshot> itemProfiles) {
+        if (!StringUtils.hasText(periodType) || periodStartDate == null) {
+            throw new BusinessException("周期成本报表必须选择期初周期类型和期初周期开始日");
+        }
+        Map<String, TxnSummary> summaryMap = loadApprovedPeriodOpenings(scope, periodType, periodStartDate, itemProfiles);
         List<InventoryTransactionDO> transactions = loadVisibleTransactions(scope, inventoryTransactionRepository.findByScopeAndBusinessDateRange(
                 scope.scopeType(),
                 scope.scopeId(),
                 start,
                 end
         ));
-        Map<String, TxnSummary> summaryMap = new LinkedHashMap<>();
-        Map<String, InventoryBalanceDO> balanceMap = inventoryBalanceRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
-                .collect(Collectors.toMap(
-                        balance -> balance.getWarehouseName() + "|" + balance.getItemCode(),
-                        Function.identity(),
-                        (left, right) -> left,
-                        LinkedHashMap::new
-                ));
         for (InventoryTransactionDO transaction : transactions) {
             if (!matchesInventoryInoutSummaryBizType(transaction, inoutType)) {
                 continue;
             }
             mergeTxnSummary(summaryMap, transaction);
         }
-        for (Map.Entry<String, InventoryBalanceDO> entry : balanceMap.entrySet()) {
-            TxnSummary summary = summaryMap.computeIfAbsent(entry.getKey(), ignored -> new TxnSummary());
-            if (summary.closingQty.compareTo(BigDecimal.ZERO) == 0) {
-                summary.closingQty = defaultQuantity(entry.getValue().getQuantity());
-                summary.closingAmount = defaultMoney(entry.getValue().getCostAmount());
+        return summaryMap;
+    }
+
+    private Map<String, TxnSummary> loadApprovedPeriodOpenings(InventoryScope scope,
+                                                               String periodType,
+                                                               LocalDate periodStartDate,
+                                                               Map<String, ItemProfileSnapshot> itemProfiles) {
+        Map<String, TxnSummary> result = new LinkedHashMap<>();
+        List<String> warehouses = inventoryBalanceRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
+                .map(InventoryBalanceDO::getWarehouseName)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        for (String warehouse : warehouses) {
+            InventoryPeriodOpeningDO opening = inventoryPeriodOpeningRepository
+                    .findByPeriod(scope.scopeType(), scope.scopeId(), warehouse, periodType, periodStartDate)
+                    .filter(header -> Objects.equals(header.getStatus(), approvedStatus()))
+                    .orElseThrow(() -> new BusinessException("缺少已审核期初库存，无法生成成本报表：" + warehouse));
+            for (InventoryPeriodOpeningLineDO line : inventoryPeriodOpeningRepository.findLinesByHeaderId(opening.getId())) {
+                ItemProfileSnapshot item = itemProfiles.get(line.getItemCode());
+                if (item == null) {
+                    throw new BusinessException("期初库存物品不存在，请清理脏数据：" + line.getItemCode());
+                }
+                TxnSummary summary = result.computeIfAbsent(transactionKey(warehouse, line.getItemCode()), ignored -> new TxnSummary());
+                summary.openingQty = defaultQuantity(line.getOpeningQty());
+                summary.openingAmount = defaultMoney(line.getOpeningAmount());
+                summary.closingQty = summary.openingQty;
+                summary.closingAmount = summary.openingAmount;
             }
         }
-        return summaryMap;
+        return result;
+    }
+
+    private void requireApprovedPeriodOpenings(InventoryScope scope,
+                                               String periodType,
+                                               LocalDate periodStartDate,
+                                               String warehouse) {
+        List<String> warehouses = StringUtils.hasText(warehouse) ? List.of(warehouse)
+                : inventoryBalanceRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
+                        .map(InventoryBalanceDO::getWarehouseName)
+                        .filter(StringUtils::hasText)
+                        .distinct()
+                        .toList();
+        for (String warehouseName : warehouses) {
+            inventoryPeriodOpeningRepository
+                    .findByPeriod(scope.scopeType(), scope.scopeId(), warehouseName, periodType, periodStartDate)
+                    .filter(header -> Objects.equals(header.getStatus(), approvedStatus()))
+                    .orElseThrow(() -> new BusinessException("缺少已审核期初库存，无法生成成本报表：" + warehouseName));
+        }
     }
 
     private boolean matchesInventoryInoutSummaryBizType(InventoryTransactionDO transaction, String inoutType) {
@@ -1297,6 +1324,57 @@ public class InventorySupplementReportApplicationService {
         return matchesTransactionBusinessCode(bizType, InventoryDocumentType.WAREHOUSE_OPENING_BALANCE.getBusinessCode())
                 || matchesTransactionBusinessCode(bizType, PeriodOpeningBalanceApplicationService.BUSINESS_CODE)
                 || Objects.equals(bizType, "QA_OPENING_BALANCE");
+    }
+
+    private Map<String, LedgerLineSnapshot> loadLedgerLineSnapshotMap(InventoryScope scope) {
+        return loadVisibleTransactions(scope, inventoryTransactionRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()))
+                .stream()
+                .filter(transaction -> !isOpeningBalanceBizType(transaction.getBizType()))
+                .collect(Collectors.toMap(
+                        transaction -> ledgerKey(normalizeTransactionBusinessCode(transaction.getBizType()),
+                                transaction.getBizId(), transaction.getBizLineId()),
+                        this::toLedgerLineSnapshot,
+                        (left, right) -> right,
+                        LinkedHashMap::new
+                ));
+    }
+
+    private LedgerLineSnapshot requireLedgerLineSnapshot(Map<String, LedgerLineSnapshot> ledgerMap,
+                                                        String businessCode,
+                                                        Long bizId,
+                                                        Long bizLineId) {
+        LedgerLineSnapshot snapshot = ledgerMap.get(ledgerKey(businessCode, bizId, bizLineId));
+        if (snapshot == null) {
+            throw new BusinessException("缺少库存流水，无法生成正式报表，请清理脏账本后重建：" + businessCode);
+        }
+        if (snapshot.businessDate() == null) {
+            throw new BusinessException("库存流水缺少业务日期，无法生成正式报表，请清理脏账本后重建：" + businessCode);
+        }
+        return snapshot;
+    }
+
+    private LedgerLineSnapshot toLedgerLineSnapshot(InventoryTransactionDO transaction) {
+        return new LedgerLineSnapshot(
+                defaultQuantity(transaction.getQuantityDelta()),
+                defaultMoney(transaction.getAmountDelta()),
+                defaultMoney(transaction.getCostPrice()),
+                transaction.getBusinessDate(),
+                defaultIfBlank(transaction.getWarehouseName(), "")
+        );
+    }
+
+    private String ledgerKey(String businessCode, Long bizId, Long bizLineId) {
+        return defaultIfBlank(businessCode, "") + "|" + bizId + "|" + bizLineId;
+    }
+
+    private String normalizeTransactionBusinessCode(String bizType) {
+        String value = defaultIfBlank(bizType, "");
+        for (String suffix : List.of("_APPROVE", "_CONFIRM", "_UNAPPROVE")) {
+            if (value.endsWith(suffix)) {
+                return value.substring(0, value.length() - suffix.length());
+            }
+        }
+        return value;
     }
 
     private void mergeTxnSummary(Map<String, TxnSummary> summaryMap, InventoryTransactionDO transaction) {
@@ -1353,12 +1431,35 @@ public class InventorySupplementReportApplicationService {
     }
 
     private List<InventoryInoutSummaryReportRow> aggregateInventoryInoutByCategory(List<InventoryInoutSummaryReportRow> rows) {
-        Map<String, MutableInventoryInoutSummaryRow> grouped = new LinkedHashMap<>();
+        Map<String, InventoryInoutSummaryReportRow> grouped = new LinkedHashMap<>();
         for (InventoryInoutSummaryReportRow row : rows) {
             String key = row.warehouse() + "|" + defaultIfBlank(row.itemCategory(), "");
-            grouped.computeIfAbsent(key, ignored -> new MutableInventoryInoutSummaryRow()).merge(row);
+            grouped.merge(key, row, this::mergeInventoryInoutSummaryRow);
         }
-        return grouped.values().stream().map(MutableInventoryInoutSummaryRow::toRow).toList();
+        return new ArrayList<>(grouped.values());
+    }
+
+    private InventoryInoutSummaryReportRow mergeInventoryInoutSummaryRow(InventoryInoutSummaryReportRow row,
+                                                                         InventoryInoutSummaryReportRow value) {
+        return new InventoryInoutSummaryReportRow(row.id(), row.itemCode(), row.itemName(), row.specModel(),
+                row.itemCategory(), row.statisticType(), row.unit(), row.orgName(), row.orgCode(), row.warehouse(),
+                row.warehouseType(), row.openingQty().add(value.openingQty()),
+                row.openingCostAmountExTax().add(value.openingCostAmountExTax()), row.openingAvgCostExTax(),
+                row.inboundQty().add(value.inboundQty()),
+                row.inboundCostAmountExTax().add(value.inboundCostAmountExTax()), row.inboundAvgCostExTax(),
+                row.outboundQty().add(value.outboundQty()),
+                row.outboundCostAmountExTax().add(value.outboundCostAmountExTax()), row.outboundAvgCostExTax(),
+                row.closingQty().add(value.closingQty()),
+                row.closingCostAmountExTax().add(value.closingCostAmountExTax()), row.closingAvgCostExTax(),
+                row.inventoryProfitLossQty().add(value.inventoryProfitLossQty()),
+                row.inventoryProfitLossCostAmountTaxIncluded().add(value.inventoryProfitLossCostAmountTaxIncluded()),
+                row.inventoryProfitLossCostAmountExTax().add(value.inventoryProfitLossCostAmountExTax()),
+                row.inventoryCheckQty().add(value.inventoryCheckQty()),
+                row.inventoryCheckCostAmountTaxIncluded().add(value.inventoryCheckCostAmountTaxIncluded()),
+                row.closingCheckDiffQty().add(value.closingCheckDiffQty()),
+                row.closingCheckDiffAmountExTax().add(value.closingCheckDiffAmountExTax()),
+                row.returnDifferenceQty().add(value.returnDifferenceQty()),
+                row.returnDifferenceCostAmountExTax().add(value.returnDifferenceCostAmountExTax()), row.inoutType());
     }
 
     private List<StockInoutSummaryReportRow> aggregateStockInoutRows(List<StockInoutSummaryReportRow> rows) {
@@ -1397,60 +1498,17 @@ public class InventorySupplementReportApplicationService {
         return grouped.values().stream().map(MutableStockTurnoverRateRow::toRow).toList();
     }
 
-    private List<StockTurnoverRateReportRow> convertTurnoverToQuantity(List<StockTurnoverRateReportRow> rows,
-                                                                       InventoryScope scope,
-                                                                       Map<String, ItemProfileSnapshot> itemProfiles,
-                                                                       Map<String, TxnSummary> summaryMap) {
-        List<StockTurnoverRateReportRow> converted = new ArrayList<>();
-        for (StockTurnoverRateReportRow row : rows) {
-            ItemProfileSnapshot item = itemProfiles.get(row.itemCode());
-            if (item == null) {
-                converted.add(row);
-                continue;
-            }
-            String key = turnoverKey(row.warehouse(), item, "物品");
-            TxnSummary summary = summaryMap.getOrDefault(key, new TxnSummary());
-            BigDecimal opening = summary.openingQty;
-            BigDecimal closing = summary.closingQty;
-            BigDecimal outbound = summary.outboundQty;
-            BigDecimal avg = opening.add(closing)
-                    .divide(BigDecimal.valueOf(2), INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
-            BigDecimal rate = avg.compareTo(BigDecimal.ZERO) == 0
-                    ? BigDecimal.ZERO.setScale(TURNOVER_RATE_SCALE, RoundingMode.HALF_UP)
-                    : outbound.divide(avg, TURNOVER_RATE_SCALE, RoundingMode.HALF_UP);
-            BigDecimal days = rate.compareTo(BigDecimal.ZERO) == 0
-                    ? BigDecimal.ZERO.setScale(TURNOVER_RATE_SCALE, RoundingMode.HALF_UP)
-                    : DAYS_PER_YEAR.divide(rate, TURNOVER_RATE_SCALE, RoundingMode.HALF_UP);
-            converted.add(new StockTurnoverRateReportRow(
-                    row.id(),
-                    row.orgName(),
-                    row.warehouse(),
-                    row.itemName(),
-                    row.itemCode(),
-                    row.unit(),
-                    row.itemCategory(),
-                    row.itemStatus(),
-                    opening.multiply(item.unitCost()).setScale(2, RoundingMode.HALF_UP),
-                    closing.multiply(item.unitCost()).setScale(2, RoundingMode.HALF_UP),
-                    avg.multiply(item.unitCost()).setScale(2, RoundingMode.HALF_UP),
-                    outbound.multiply(item.unitCost()).setScale(2, RoundingMode.HALF_UP),
-                    rate,
-                    days
-            ));
-        }
-        return converted;
-    }
-
     private StockInoutSummaryReportRow buildStockInoutSummaryRow(InventoryScope scope,
                                                                  InventoryDocumentType type,
                                                                  InventoryDocumentHeader header,
                                                                  InventoryDocumentLine line,
-                                                                 ItemProfileSnapshot item) {
+                                                                 ItemProfileSnapshot item,
+                                                                 LedgerLineSnapshot ledger) {
         String inoutType = resolveStockInoutType(type);
         String direction = resolveStockDirection(type);
         String warehouse = resolveStockWarehouse(type, header);
-        BigDecimal qty = defaultQuantity(line.getQuantity());
-        BigDecimal amount = defaultMoney(line.getAmount() == null ? qty.multiply(item.unitCost()) : line.getAmount());
+        BigDecimal qty = ledger.quantity().abs();
+        BigDecimal amount = ledger.amount().abs();
         BigDecimal avg = qty.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : amount.divide(qty, 2, RoundingMode.HALF_UP);
         return new StockInoutSummaryReportRow(
                 summaryRowId(warehouse, item.itemCode(), inoutType + defaultIfBlank(header.getCounterpartyName(), "")),
@@ -1484,10 +1542,11 @@ public class InventorySupplementReportApplicationService {
                                                                            InventoryDocumentHeader header,
                                                                            InventoryDocumentLine line,
                                                                            ItemProfileSnapshot item,
+                                                                           LedgerLineSnapshot ledger,
                                                                            String sourceStore,
                                                                            String targetStore) {
-        BigDecimal qty = defaultQuantity(line.getQuantity());
-        BigDecimal amount = defaultMoney(line.getAmount() == null ? qty.multiply(item.unitCost()) : line.getAmount());
+        BigDecimal qty = ledger.quantity().abs();
+        BigDecimal amount = ledger.amount().abs();
         return new InterOrgTransferDetailReportRow(
                 summaryRowId(sourceStore, item.itemCode(), defaultIfBlank(header.getDocumentCode(), "")),
                 defaultIfBlank(header.getDocumentCode(), ""),
@@ -1561,8 +1620,6 @@ public class InventorySupplementReportApplicationService {
         return switch (type) {
             case OTHER_INBOUND -> "其他入库";
             case OTHER_OUTBOUND -> "其他出库";
-            case PROFIT_INBOUND -> "盘盈入库";
-            case LOSS_OUTBOUND -> "盘亏出库";
             case DAMAGE_OUTBOUND -> "盘亏出库";
             case PRODUCTION_INBOUND -> "盘盈入库";
             default -> resolveStockInoutType(type);
@@ -1591,12 +1648,15 @@ public class InventorySupplementReportApplicationService {
 
     private boolean isPurchaseReturnBizType(String bizType) {
         return Objects.equals(bizType, InventoryDocumentType.PURCHASE_RETURN_OUTBOUND.getBusinessCode())
-                || Objects.equals(bizType, InventoryDocumentType.OTHER_OUTBOUND.getBusinessCode())
-                || Objects.equals(bizType, InventoryDocumentType.LOSS_OUTBOUND.getBusinessCode());
+                || Objects.equals(bizType, InventoryDocumentType.OTHER_OUTBOUND.getBusinessCode());
     }
 
     private boolean isApprovedDocument(InventoryDocumentHeader header) {
-        return header != null && Objects.equals(defaultIfBlank(header.getStatus(), ""), "已审核");
+        return header != null && Objects.equals(defaultIfBlank(header.getStatus(), ""), approvedStatus());
+    }
+
+    private String approvedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.APPROVED);
     }
 
     private String summaryKey(String warehouse, ItemProfileSnapshot item, String statisticDimension) {
@@ -1664,21 +1724,6 @@ public class InventorySupplementReportApplicationService {
             }
         }
         return "";
-    }
-
-    private BigDecimal resolveUnitCost(ItemCreateRequest request) {
-        String preferred = trimNullable(request.suggestPurchasePrice());
-        if (!StringUtils.hasText(preferred)) {
-            preferred = trimNullable(request.productionRefCost());
-        }
-        if (!StringUtils.hasText(preferred)) {
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
-        try {
-            return new BigDecimal(preferred).setScale(2, RoundingMode.HALF_UP);
-        } catch (NumberFormatException ex) {
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
     }
 
     private boolean matchDate(LocalDate value, LocalDate start, LocalDate end) {
@@ -1816,12 +1861,64 @@ public class InventorySupplementReportApplicationService {
         return new BigDecimal(value.trim()).stripTrailingZeros().toPlainString();
     }
 
-    private BigDecimal parseBigDecimal(String value) {
-        String normalized = normalizeBigDecimalString(value);
-        if (!StringUtils.hasText(normalized)) {
-            return BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
+    private PeriodReportRange resolvePeriodReportRange(String periodType,
+                                                       String periodStartDate,
+                                                       LocalDate startDate,
+                                                       LocalDate endDate) {
+        String normalizedType = requiredPeriodType(periodType);
+        LocalDate normalizedStart = parseRequiredDate(periodStartDate, "期初周期开始日不能为空");
+        LocalDate normalizedEnd = endDate == null ? periodEndDate(normalizedType, normalizedStart) : endDate;
+        LocalDate businessStart = startDate == null ? normalizedStart : startDate;
+        if (businessStart.isBefore(normalizedStart)) {
+            throw new BusinessException("报表开始日期不能早于期初周期开始日");
         }
-        return new BigDecimal(normalized).setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
+        if (normalizedEnd.isBefore(businessStart)) {
+            throw new BusinessException("报表结束日期不能早于开始日期");
+        }
+        return new PeriodReportRange(normalizedType, normalizedStart, businessStart, normalizedEnd);
+    }
+
+    private String requiredPeriodType(String periodType) {
+        String normalized = trimNullable(periodType);
+        if (!StringUtils.hasText(normalized)) {
+            throw new BusinessException("期初周期类型不能为空");
+        }
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.INVENTORY_PERIOD_TYPE, normalized);
+    }
+
+    private String normalizeProfitLossResult(String profitLossResult) {
+        String normalized = trimNullable(profitLossResult);
+        if (!StringUtils.hasText(normalized)) {
+            return null;
+        }
+        return dictionaryLookupService.requireEnabledCode(DictionaryCodes.INVENTORY_PROFIT_LOSS_RESULT, normalized);
+    }
+
+    private String profitLossResultCode(String profitLossResult) {
+        if (Objects.equals(profitLossResult, "盘盈")) {
+            return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_PROFIT_LOSS_RESULT, DictionaryCodes.PROFIT);
+        }
+        if (Objects.equals(profitLossResult, "盘亏")) {
+            return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_PROFIT_LOSS_RESULT, DictionaryCodes.LOSS);
+        }
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_PROFIT_LOSS_RESULT, DictionaryCodes.NO_DIFF);
+    }
+
+    private LocalDate parseRequiredDate(String value, String message) {
+        String normalized = trimNullable(value);
+        if (!StringUtils.hasText(normalized)) {
+            throw new BusinessException(message);
+        }
+        return LocalDate.parse(normalized);
+    }
+
+    private LocalDate periodEndDate(String periodType, LocalDate startDate) {
+        return switch (periodType) {
+            case "DAY" -> startDate;
+            case "MONTH" -> startDate.plusMonths(1).minusDays(1);
+            case "YEAR" -> startDate.plusYears(1).minusDays(1);
+            default -> throw new BusinessException("不支持的期初周期类型");
+        };
     }
 
     private Map<String, String> parseHeaderExtraJson(InventoryDocumentHeader header) {
@@ -1857,143 +1954,13 @@ public class InventorySupplementReportApplicationService {
     private record InventoryScope(String scopeType, Long scopeId, Long groupId) {
     }
 
-    private record ItemProfileSnapshot(String itemCode,
-                                       String itemName,
-                                       String category,
-                                       String stockUnit,
-                                       String spec,
-                                       String stockMin,
-                                       String stockMax,
-                                       Integer warningDays,
-                                       Integer stagnantDays,
-                                       String status,
-                                       String statisticsType,
-                                       BigDecimal unitCost) {
+    private record PeriodReportRange(String periodType, LocalDate periodStartDate, LocalDate startDate,
+                                     LocalDate endDate) {
     }
 
-    private static final class TransactionStats {
-        private LocalDateTime firstInboundTime;
-        private LocalDateTime latestInboundTime;
-        private LocalDateTime latestOutboundTime;
-        private LocalDateTime latestMovementTime;
-        private BigDecimal latestInboundQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-        private BigDecimal latestOutboundQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-
-        private LocalDateTime firstInboundTime() {
-            return firstInboundTime;
-        }
-
-        private LocalDateTime latestInboundTime() {
-            return latestInboundTime;
-        }
-
-        private LocalDateTime latestOutboundTime() {
-            return latestOutboundTime;
-        }
-
-        private LocalDateTime latestMovementTime() {
-            return latestMovementTime;
-        }
-
-        private BigDecimal latestInboundQty() {
-            return latestInboundQty;
-        }
-
-        private BigDecimal latestOutboundQty() {
-            return latestOutboundQty;
-        }
+    private record ItemProfileSnapshot(String itemCode, String itemName, String category, String stockUnit,
+                                       String spec, String stockMin, String stockMax, Integer warningDays,
+                                       Integer stagnantDays, String status, String statisticsType) {
     }
 
-    /** 库存分页数据模型，承载列表数据和分页信息。 */
-    public record PageData<T>(List<T> list, long total, int pageNo, int pageSize) {
-    }
-
-    /** 库存行数据模型，承载列表或报表明细。 */
-    public record StockWarningReportRow(String id, String itemCode, String itemName, String unit, String itemCategory, String warehouse, BigDecimal currentStock, BigDecimal stockUpperLimit, BigDecimal stockLowerLimit, String warningStatus, String itemStatus) { }
-
-    /** 库存行数据模型，承载列表或报表明细。 */
-    public record StagnantStockReportRow(String id, String warehouse, String itemName, String itemCode, String specModel, String unit, String firstInboundTime, String latestInboundTime, String latestOutboundTime, BigDecimal latestInboundQty, BigDecimal latestOutboundQty, BigDecimal stockQty, int retainedDays, int itemStagnantDays, String stagnant, String itemStatus, String itemCategory) { }
-
-    /** 库存行数据模型，承载列表或报表明细。 */
-    public record InventoryProfitLossReportRow(String id, String itemCode, String itemName, String specModel, String itemCategory, String statisticsType, String unit, String checkDocumentNo, String checkType, String stockDocumentNo, String orgName, String orgCode, String warehouse, String checkTime, String auditTime, String auditor, BigDecimal bookQty, BigDecimal bookAmount, BigDecimal actualQty, BigDecimal actualAmount, BigDecimal profitLossQty, BigDecimal profitLossAmount, BigDecimal profitLossQtyAbs, BigDecimal profitLossAmountAbs, BigDecimal adjustmentAmount, String profitLossResult, BigDecimal profitInboundPrice, BigDecimal lossOutboundPrice, String checkReason, String remark) { }
-
-    /** 库存行数据模型，承载列表或报表明细。 */
-    public record InventoryInoutSummaryReportRow(String id,
-                                                 String itemCode,
-                                                 String itemName,
-                                                 String specModel,
-                                                 String itemCategory,
-                                                 String statisticType,
-                                                 String unit,
-                                                 String orgName,
-                                                 String orgCode,
-                                                 String warehouse,
-                                                 String warehouseType,
-                                                 BigDecimal openingQty,
-                                                 BigDecimal openingCostAmountExTax,
-                                                 BigDecimal openingAvgCostExTax,
-                                                 BigDecimal inboundQty,
-                                                 BigDecimal inboundCostAmountExTax,
-                                                 BigDecimal inboundAvgCostExTax,
-                                                 BigDecimal outboundQty,
-                                                 BigDecimal outboundCostAmountExTax,
-                                                 BigDecimal outboundAvgCostExTax,
-                                                 BigDecimal closingQty,
-                                                 BigDecimal closingCostAmountExTax,
-                                                 BigDecimal closingAvgCostExTax,
-                                                 BigDecimal inventoryProfitLossQty,
-                                                 BigDecimal inventoryProfitLossCostAmountTaxIncluded,
-                                                 BigDecimal inventoryProfitLossCostAmountExTax,
-                                                 BigDecimal inventoryCheckQty,
-                                                 BigDecimal inventoryCheckCostAmountTaxIncluded,
-                                                 BigDecimal closingCheckDiffQty,
-                                                 BigDecimal closingCheckDiffAmountExTax,
-                                                 BigDecimal returnDifferenceQty,
-                                                 BigDecimal returnDifferenceCostAmountExTax,
-                                                 String inoutType) {
-        private boolean isEmpty() {
-            return openingQty.compareTo(BigDecimal.ZERO) == 0
-                    && inboundQty.compareTo(BigDecimal.ZERO) == 0
-                    && outboundQty.compareTo(BigDecimal.ZERO) == 0
-                    && closingQty.compareTo(BigDecimal.ZERO) == 0
-                    && inventoryProfitLossQty.compareTo(BigDecimal.ZERO) == 0
-                    && inventoryCheckQty.compareTo(BigDecimal.ZERO) == 0
-                    && closingCheckDiffQty.compareTo(BigDecimal.ZERO) == 0
-                    && returnDifferenceQty.compareTo(BigDecimal.ZERO) == 0;
-        }
-
-        private boolean hasInoutMovement() {
-            return inboundQty.compareTo(BigDecimal.ZERO) != 0 || outboundQty.compareTo(BigDecimal.ZERO) != 0;
-        }
-    }
-
-    /** 库存行数据模型，承载列表或报表明细。 */
-    public record StockInoutSummaryReportRow(String id, String itemCode, String itemName, String specModel, String itemCategory, String statisticType, String unit, String inoutType, String warehouse, String warehouseType, String oppositeOrg, String oppositeWarehouse, BigDecimal inboundQty, BigDecimal inboundCostAmountTaxIncluded, BigDecimal inboundAvgCostTaxIncluded, BigDecimal inboundSettlementAmountTaxIncluded, BigDecimal inboundAvgSettlementTaxIncluded, BigDecimal outboundQty, BigDecimal outboundCostAmountTaxIncluded, BigDecimal outboundAvgCostTaxIncluded, BigDecimal outboundSettlementAmountTaxIncluded, BigDecimal outboundAvgSettlementTaxIncluded, String statisticMode) { }
-
-    /** 库存行数据模型，承载列表或报表明细。 */
-    public record OtherInoutSummaryReportRow(String id, String itemCode, String itemName, String specModel, String itemCategory, String baseUnit, String warehouse, String inoutType, String reasonType, BigDecimal quantity, BigDecimal amountExTax) { }
-
-    /** 库存行数据模型，承载列表或报表明细。 */
-    public record InterOrgTransferDetailReportRow(String id, String transferNo, String itemCode, String itemName, String documentStatus, String transferDate, String outboundAuditTime, String sourceStore, String sourceWarehouse, String inboundDate, String inboundAuditTime, String targetStore, String targetWarehouse, String specModel, String itemCategory, String baseUnit, BigDecimal transferBaseQty, String businessUnit, BigDecimal transferQty, BigDecimal inboundAmountTaxIncluded, BigDecimal outboundCostAmountExTax, BigDecimal outboundSettlementAmountTaxIncluded, BigDecimal inboundPriceTaxIncluded, BigDecimal outboundCostPriceExTax, BigDecimal outboundSettlementPriceTaxIncluded, String remark, String statisticMode) { }
-
-    /** 库存行数据模型，承载列表或报表明细。 */
-    public record InterOrgTransferSummaryReportRow(String id, String itemCode, String itemName, String sourceStore, String targetStore, String specModel, String itemCategory, String unit, BigDecimal transferQty, BigDecimal inboundAmountTaxIncluded, BigDecimal outboundCostAmountExTax, BigDecimal outboundSettlementAmountTaxIncluded, BigDecimal inboundAvgPriceTaxIncluded, BigDecimal outboundCostAvgPriceExTax, BigDecimal outboundSettlementAvgPriceTaxIncluded) { }
-
-    /** 库存行数据模型，承载列表或报表明细。 */
-    public record StockTurnoverRateReportRow(String id, String orgName, String warehouse, String itemName, String itemCode, String unit, String itemCategory, String itemStatus, BigDecimal openingAmount, BigDecimal closingAmount, BigDecimal avgStockAmount, BigDecimal outboundAmount, BigDecimal turnoverRate, BigDecimal turnoverDays) { }
-    private static final class TxnSummary {
-        private BigDecimal openingQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-        private BigDecimal openingAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        private BigDecimal inboundQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-        private BigDecimal inboundAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        private BigDecimal outboundQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-        private BigDecimal outboundAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        private BigDecimal closingQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-        private BigDecimal closingAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        private BigDecimal returnDifferenceQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-    }
-    private static final class InventoryProfitLossAgg {
-        private BigDecimal inventoryProfitLossQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-        private BigDecimal inventoryCheckQty = BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
-    }
 }

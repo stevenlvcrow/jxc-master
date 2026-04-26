@@ -20,5 +20,5 @@ public interface PurchaseInboundRepository {
 
     void update(PurchaseInboundDO header);
 
-    void deleteById(Long id);
+    int deleteById(Long id);
 }

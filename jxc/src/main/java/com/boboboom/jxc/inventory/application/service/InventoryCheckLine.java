@@ -26,6 +26,7 @@ public class InventoryCheckLine {
     private BigDecimal profitQty;
     private BigDecimal lossQty;
     private String profitLossReason;
+    private String differenceReasonCode;
     private BigDecimal profitInboundPrice;
     private BigDecimal profitAmount;
     private BigDecimal lossOutboundPrice;
@@ -213,6 +214,16 @@ public class InventoryCheckLine {
     /** 设置ProfitLossReason。 */
     public void setProfitLossReason(String profitLossReasonValue) {
         this.profitLossReason = profitLossReasonValue;
+    }
+
+    /** 获取DifferenceReasonCode。 */
+    public String getDifferenceReasonCode() {
+        return differenceReasonCode;
+    }
+
+    /** 设置DifferenceReasonCode。 */
+    public void setDifferenceReasonCode(String differenceReasonCodeValue) {
+        this.differenceReasonCode = differenceReasonCodeValue;
     }
 
     /** 获取ProfitInboundPrice。 */

@@ -33,6 +33,7 @@ export type ItemVO = {
   image: string;
   createdAt: string;
   updatedAt: string;
+  stocktakeFrequency: string;
 };
 
 export type ItemListParams = {
@@ -45,6 +46,7 @@ export type ItemListParams = {
   statType?: string;
   storageMode?: string;
   tag?: string;
+  stocktakeFrequency?: string;
 };
 
 export const fetchItemsApi = async (params: ItemListParams, orgId?: string) => {
@@ -97,7 +99,7 @@ export type ItemCreatePayload = {
   consumeOnInbound?: string;
   disableStocktake?: string;
   defaultNoStocktake?: string;
-  stocktakeTypes?: string[];
+  stocktakeFrequency?: string;
   purchaseReceiptRule?: string;
   purchaseRuleMaxRatio?: string;
   purchaseRuleMinRatio?: string;

@@ -14,6 +14,7 @@ import jakarta.validation.constraints.NotEmpty;
  * @param checkDate 盘点日期
  * @param warehouseName 盘点仓库
  * @param checkRangeType 盘点范围类型
+ * @param stocktakeFrequency 盘点频次
  * @param freezeStock 是否冻结库存
  * @param collaborativeFlag 是否多人协同盘点
  * @param planName 盘点方案名称
@@ -31,6 +32,8 @@ public record InventoryCheckSaveRequest(
         String warehouseName,
         @NotBlank(message = "盘点范围类型不能为空")
         String checkRangeType,
+        @NotBlank(message = "盘点频次不能为空")
+        String stocktakeFrequency,
         Boolean freezeStock,
         Boolean collaborativeFlag,
         String planName,
@@ -57,6 +60,7 @@ public record InventoryCheckSaveRequest(
      * @param actualQty 实盘数量
      * @param bookPrice 账面单价
      * @param profitLossReason 盈亏原因
+     * @param differenceReasonCode 差异原因编码
      * @param remark 备注
      * @param extraFields 扩展字段
      */
@@ -73,6 +77,7 @@ public record InventoryCheckSaveRequest(
             BigDecimal actualQty,
             BigDecimal bookPrice,
             String profitLossReason,
+            String differenceReasonCode,
             String remark,
             Map<String, String> extraFields
     ) {

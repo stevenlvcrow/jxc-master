@@ -21,6 +21,9 @@ public final class DictionaryCodes {
     public static final String INVENTORY_PERIOD_TYPE = "inventory.period_type";
     public static final String INVENTORY_CHECK_RANGE_TYPE = "inventory.check_range_type";
     public static final String INVENTORY_CHECK_GENERATION_STATUS = "inventory.check_generation_status";
+    public static final String INVENTORY_PROFIT_LOSS_RESULT = "inventory.profit_loss_result";
+    public static final String INVENTORY_STOCKTAKE_FREQUENCY = "inventory.stocktake_frequency";
+    public static final String INVENTORY_CHECK_DIFFERENCE_REASON = "inventory.check_difference_reason";
     public static final String DOCUMENT_PRINT_STATUS = "document.print_status";
     public static final String WORKFLOW_DEFINITION_STATUS = "workflow.definition_status";
     public static final String WORKFLOW_NODE_TYPE = "workflow.node_type";
@@ -44,6 +47,11 @@ public final class DictionaryCodes {
     public static final String UNBOUND = "UNBOUND";
     public static final String GROUP = "GROUP";
     public static final String STORE = "STORE";
+    public static final String DAILY = "DAILY";
+    public static final String WEEKLY = "WEEKLY";
+    public static final String PROFIT = "PROFIT";
+    public static final String LOSS = "LOSS";
+    public static final String NO_DIFF = "NO_DIFF";
 
     private DictionaryCodes() {
     }

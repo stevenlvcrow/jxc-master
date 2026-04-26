@@ -654,6 +654,7 @@ public class InventoryDocumentApplicationService {
                     line.getQuantity().multiply(multiplier),
                     line.getAmount(),
                     header.getDocumentDate(),
+                    batchInfoFromLine(line),
                     reverse ? type.getBusinessCode() + "_UNAPPROVE" : type.getBusinessCode() + "_APPROVE",
                     operatorId
             );
@@ -697,10 +698,21 @@ public class InventoryDocumentApplicationService {
                     resolveWarehouseOpeningBalanceQuantity(line),
                     line.getAmount(),
                     header.getDocumentDate(),
+                    batchInfoFromLine(line),
                     InventoryDocumentType.WAREHOUSE_OPENING_BALANCE.getBusinessCode() + "_CONFIRM",
                     operatorId
             );
         }
+    }
+
+    private InventoryStockMutationService.BatchInfo batchInfoFromLine(InventoryDocumentLine line) {
+        Map<String, String> extraFields = parseExtraJson(line.getExtraJson());
+        return new InventoryStockMutationService.BatchInfo(
+                trimNullable(extraFields.get("batchNo")),
+                trimNullable(extraFields.get("manufacturer")),
+                parseDateNullable(extraFields.get("productionDate"), "生产日期格式不正确"),
+                parseDateNullable(extraFields.get("expiryDate"), "到期日期格式不正确")
+        );
     }
 
     private BigDecimal resolveWarehouseOpeningBalanceQuantity(InventoryDocumentLine line) {
@@ -994,6 +1006,9 @@ public class InventoryDocumentApplicationService {
                 line.getUnitPrice(),
                 line.getAmount(),
                 defaultIfBlank(line.getLineReason(), ""),
+                defaultIfBlank(line.getDishId(), ""),
+                defaultIfBlank(line.getDishName(), ""),
+                defaultIfBlank(line.getDamageReason(), ""),
                 defaultIfBlank(line.getRemark(), ""),
                 parseExtraJson(line.getExtraJson())
         );
@@ -1017,6 +1032,9 @@ public class InventoryDocumentApplicationService {
             }
             line.setAmount(amount.setScale(2, RoundingMode.HALF_UP));
             line.setLineReason(trimNullable(item.lineReason()));
+            line.setDishId(trimNullable(item.dishId()));
+            line.setDishName(trimNullable(item.dishName()));
+            line.setDamageReason(trimNullable(item.damageReason()));
             line.setRemark(trimNullable(item.remark()));
             line.setExtraJson(writeJson(item.extraFields()));
             rows.add(line);
@@ -1265,6 +1283,9 @@ public class InventoryDocumentApplicationService {
      * @param unitPrice 单价
      * @param amount 金额
      * @param lineReason 行原因
+     * @param dishId 菜品ID
+     * @param dishName 菜品名称
+     * @param damageReason 报损原因
      * @param remark 备注
      * @param extraFields 扩展字段
      */
@@ -1278,6 +1299,9 @@ public class InventoryDocumentApplicationService {
                                               BigDecimal unitPrice,
                                               BigDecimal amount,
                                               String lineReason,
+                                              String dishId,
+                                              String dishName,
+                                              String damageReason,
                                               String remark,
                                               Map<String, String> extraFields) {
     }

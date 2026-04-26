@@ -17,6 +17,8 @@ import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplication
 import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.IdPayload;
 import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.InventoryBalanceRow;
 import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PageData;
+import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundBatchDeleteResult;
+import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundDeleteResult;
 import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundDetail;
 import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundPermissionView;
 import com.boboboom.jxc.inventory.application.service.PurchaseInboundApplicationService.PurchaseInboundRow;
@@ -194,10 +196,10 @@ public class PurchaseInboundController {
      */
     @DeleteMapping("/purchase-inbound/{id:\\d+}")
     @PreAuthorize("@requestPermissionGuard.authenticated()")
-    public CodeDataResponse<Void> deletePurchaseInbound(@PathVariable Long id,
-                                                        @RequestParam(required = false) String orgId) {
-        purchaseInboundApplicationService.deletePurchaseInbound(id, orgId);
-        return CodeDataResponse.ok();
+    public CodeDataResponse<PurchaseInboundDeleteResult> deletePurchaseInbound(@PathVariable Long id,
+                                                                               @RequestParam(required = false) String orgId) {
+        PurchaseInboundDeleteResult result = purchaseInboundApplicationService.deletePurchaseInbound(id, orgId);
+        return new CodeDataResponse<>(0, result.message(), result);
     }
 
     /**
@@ -209,10 +211,10 @@ public class PurchaseInboundController {
      */
     @DeleteMapping("/purchase-inbound")
     @PreAuthorize("@requestPermissionGuard.authenticated()")
-    public CodeDataResponse<Void> batchDeletePurchaseInbound(@RequestParam(required = false) String orgId,
-                                                             @Valid @RequestBody PurchaseInboundBatchRequest request) {
-        purchaseInboundApplicationService.batchDeletePurchaseInbound(orgId, request);
-        return CodeDataResponse.ok();
+    public CodeDataResponse<PurchaseInboundBatchDeleteResult> batchDeletePurchaseInbound(@RequestParam(required = false) String orgId,
+                                                                                         @Valid @RequestBody PurchaseInboundBatchRequest request) {
+        PurchaseInboundBatchDeleteResult result = purchaseInboundApplicationService.batchDeletePurchaseInbound(orgId, request);
+        return new CodeDataResponse<>(0, result.message(), result);
     }
 
     /**

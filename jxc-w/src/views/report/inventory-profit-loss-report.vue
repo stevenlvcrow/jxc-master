@@ -4,6 +4,7 @@ import { RefreshRight, Search } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonTableSection from '@/components/CommonTableSection.vue';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
 import { useSessionStore } from '@/stores/session';
 import { fetchInventoryProfitLossReportApi } from '@/api/modules/inventory';
@@ -23,8 +24,9 @@ type TreeNode = {
   children?: TreeNode[];
 };
 
-type ProfitLossResult = '全部' | '盘盈' | '盘亏' | '无差异';
 type UnitType = '库存单位';
+const CHECK_RANGE_TYPE_DICT = 'inventory.check_range_type';
+const PROFIT_LOSS_RESULT_DICT = 'inventory.profit_loss_result';
 
 type ProfitLossReportRow = {
   id: string;
@@ -68,11 +70,12 @@ type ReportColumn = {
 
 const sessionStore = useSessionStore();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
+const { optionsOf } = useDictionaryOptions([CHECK_RANGE_TYPE_DICT, PROFIT_LOSS_RESULT_DICT]);
+const checkTypeOptions = optionsOf(CHECK_RANGE_TYPE_DICT);
+const profitLossResultOptions = optionsOf(PROFIT_LOSS_RESULT_DICT);
 const archiveOrgId = computed(() => resolveArchiveOrgId(sessionStore.currentOrgId, sessionStore.platformAdminMode));
 
-const profitLossResultOptions: ProfitLossResult[] = ['全部', '盘盈', '盘亏', '无差异'];
 const unitTypeOptions: UnitType[] = ['库存单位'];
-const checkTypeOptions = ['全部', '指定物品', '全仓盘点'];
 
 const query = reactive({
   warehouse: '',
@@ -81,7 +84,7 @@ const query = reactive({
   statisticsType: '',
   itemKeyword: '',
   checkType: '',
-  profitLossResult: '全部' as ProfitLossResult,
+  profitLossResult: '',
   unitType: '库存单位' as UnitType,
   showUnitRate: false,
 });
@@ -277,7 +280,7 @@ const fetchReport = async () => {
       statisticsType: query.statisticsType || undefined,
       itemKeyword: query.itemKeyword || undefined,
       checkType: query.checkType || undefined,
-      profitLossResult: query.profitLossResult === '全部' ? undefined : query.profitLossResult,
+      profitLossResult: query.profitLossResult || undefined,
       unitType: query.unitType,
     }, orgId);
     tableRows.value = page.list ?? [];
@@ -299,7 +302,7 @@ const handleReset = async () => {
   query.statisticsType = '';
   query.itemKeyword = '';
   query.checkType = '';
-  query.profitLossResult = '全部';
+  query.profitLossResult = '';
   query.unitType = '库存单位';
   query.showUnitRate = false;
   currentPage.value = 1;
@@ -426,8 +429,9 @@ onMounted(async () => {
       <el-form-item label="盘点类型">
         <el-tree-select
           v-model="query.checkType"
-          :data="checkTypeOptions.map((option) => ({ value: option === '全部' ? '' : option, label: option }))"
+          :data="checkTypeOptions.map((option) => ({ value: option.itemCode, label: option.itemLabel }))"
           :props="{ label: 'label', value: 'value' }"
+          clearable
           check-strictly
           default-expand-all
           placeholder="请选择"
@@ -436,8 +440,13 @@ onMounted(async () => {
       </el-form-item>
 
       <el-form-item label="盈亏结果">
-        <el-select v-model="query.profitLossResult" style="width: 120px">
-          <el-option v-for="option in profitLossResultOptions" :key="option" :label="option" :value="option" />
+        <el-select v-model="query.profitLossResult" clearable style="width: 120px">
+          <el-option
+            v-for="option in profitLossResultOptions"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
+          />
         </el-select>
       </el-form-item>
 

@@ -16,6 +16,7 @@ public class InventoryCheckHeader {
     private LocalDate checkDate;
     private String warehouseName;
     private String checkRangeType;
+    private String stocktakeFrequency;
     private Boolean freezeStock;
     private Boolean collaborativeFlag;
     private String planName;
@@ -107,6 +108,16 @@ public class InventoryCheckHeader {
     /** 设置CheckRangeType。 */
     public void setCheckRangeType(String checkRangeTypeValue) {
         this.checkRangeType = checkRangeTypeValue;
+    }
+
+    /** 获取StocktakeFrequency。 */
+    public String getStocktakeFrequency() {
+        return stocktakeFrequency;
+    }
+
+    /** 设置StocktakeFrequency。 */
+    public void setStocktakeFrequency(String stocktakeFrequencyValue) {
+        this.stocktakeFrequency = stocktakeFrequencyValue;
     }
 
     /** 获取FreezeStock。 */

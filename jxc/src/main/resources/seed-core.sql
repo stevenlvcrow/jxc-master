@@ -94,6 +94,9 @@ WITH dict_type_seed(dict_code, dict_name, category, sort_no, remark) AS (
         ('inventory.workflow_status', '库存流程状态', 'INVENTORY', 510, '库存单据流程状态'),
         ('inventory.period_type', '期初周期类型', 'INVENTORY', 515, '期初库存核算周期类型'),
         ('inventory.check_range_type', '盘点范围类型', 'INVENTORY', 520, '盘点范围类型'),
+        ('inventory.stocktake_frequency', '盘点频次', 'INVENTORY', 525, '餐饮盘点日盘/周盘频次'),
+        ('inventory.check_difference_reason', '盘点差异原因', 'INVENTORY', 526, '餐饮盘点差异原因'),
+        ('inventory.profit_loss_result', '盘点盈亏结果', 'INVENTORY', 527, '盘点盈亏结果筛选'),
         ('inventory.check_generation_status', '盘点生成状态', 'INVENTORY', 530, '多人盘点单生成状态'),
         ('workflow.definition_status', '流程定义状态', 'WORKFLOW', 600, '流程模板发布状态'),
         ('workflow.node_type', '流程节点类型', 'WORKFLOW', 610, '流程配置节点类型'),
@@ -156,6 +159,17 @@ WITH dict_item_seed(dict_code, item_key, item_code, item_label, sort_no) AS (
         ('inventory.check_range_type', 'FULL_WAREHOUSE', 'FULL_WAREHOUSE', '全仓盘点', 10),
         ('inventory.check_range_type', 'PARTITION', 'PARTITION', '分区盘点', 20),
         ('inventory.check_range_type', 'SPECIFIC_ITEM', 'SPECIFIC_ITEM', '指定食材盘点', 30),
+        ('inventory.stocktake_frequency', 'DAILY', 'DAILY', '日盘点', 10),
+        ('inventory.stocktake_frequency', 'WEEKLY', 'WEEKLY', '周盘点', 20),
+        ('inventory.check_difference_reason', 'NATURAL_LOSS', 'NATURAL_LOSS', '自然损耗', 10),
+        ('inventory.check_difference_reason', 'PROCESSING_LOSS', 'PROCESSING_LOSS', '加工损耗', 20),
+        ('inventory.check_difference_reason', 'EXPIRED_SPOILED', 'EXPIRED_SPOILED', '过期变质', 30),
+        ('inventory.check_difference_reason', 'UNBILLED_PICKING', 'UNBILLED_PICKING', '领用未开单', 40),
+        ('inventory.check_difference_reason', 'WEIGHING_ERROR', 'WEIGHING_ERROR', '称重不准', 50),
+        ('inventory.check_difference_reason', 'UNIT_CONVERSION_ERROR', 'UNIT_CONVERSION_ERROR', '单位换算错', 60),
+        ('inventory.profit_loss_result', 'PROFIT', 'PROFIT', '盘盈', 10),
+        ('inventory.profit_loss_result', 'LOSS', 'LOSS', '盘亏', 20),
+        ('inventory.profit_loss_result', 'NO_DIFF', 'NO_DIFF', '无差异', 30),
         ('inventory.check_generation_status', 'UNGENERATED', 'UNGENERATED', '未生成', 10),
         ('inventory.check_generation_status', 'GENERATED', 'GENERATED', '已生成', 20),
         ('workflow.definition_status', 'DRAFT', 'DRAFT', '草稿', 10),
@@ -217,9 +231,11 @@ WITH field_binding_seed(dict_code, table_name, column_name, remark) AS (
         ('inventory.document_status', 'inventory_damage_outbound', 'status', '报损出库状态'),
         ('inventory.document_status', 'inventory_other_inbound', 'status', '其他入库状态'),
         ('inventory.document_status', 'inventory_other_outbound', 'status', '其他出库状态'),
-        ('inventory.document_status', 'inventory_profit_inbound', 'status', '盘盈单状态'),
-        ('inventory.document_status', 'inventory_loss_outbound', 'status', '盘亏单状态'),
         ('inventory.document_status', 'inventory_production_inbound', 'status', '生产入库状态'),
+        ('inventory.stocktake_frequency', 'inventory_inventory_check', 'stocktake_frequency', '盘点频次'),
+        ('inventory.check_difference_reason', 'inventory_inventory_check_line', 'difference_reason_code', '盘点差异原因'),
+        ('inventory.stocktake_frequency', 'inventory_multi_inventory_check', 'stocktake_frequency', '多人盘点频次'),
+        ('inventory.check_difference_reason', 'inventory_multi_inventory_check_line', 'difference_reason_code', '多人盘点差异原因'),
         ('inventory.document_status', 'inventory_customer_sales_outbound', 'status', '客户销售出库状态'),
         ('inventory.document_status', 'inventory_customer_return_inbound', 'status', '客户退货入库状态'),
         ('inventory.document_status', 'inventory_dish_consumption_outbound', 'status', '菜品消耗出库状态'),
@@ -237,8 +253,6 @@ WITH field_binding_seed(dict_code, table_name, column_name, remark) AS (
         ('inventory.workflow_status', 'inventory_damage_outbound', 'workflow_status', '报损出库流程状态'),
         ('inventory.workflow_status', 'inventory_other_inbound', 'workflow_status', '其他入库流程状态'),
         ('inventory.workflow_status', 'inventory_other_outbound', 'workflow_status', '其他出库流程状态'),
-        ('inventory.workflow_status', 'inventory_profit_inbound', 'workflow_status', '盘盈单流程状态'),
-        ('inventory.workflow_status', 'inventory_loss_outbound', 'workflow_status', '盘亏单流程状态'),
         ('inventory.workflow_status', 'inventory_production_inbound', 'workflow_status', '生产入库流程状态'),
         ('inventory.workflow_status', 'inventory_customer_sales_outbound', 'workflow_status', '客户销售出库流程状态'),
         ('inventory.workflow_status', 'inventory_customer_return_inbound', 'workflow_status', '客户退货入库流程状态'),
@@ -1633,38 +1647,6 @@ VALUES (
 )
 ON CONFLICT DO NOTHING;
 
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status, component_key)
-VALUES (
-    'STORE_BIZ_MENU_PROFIT_INBOUND',
-    '盘盈单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_CHECK'),
-    'MENU',
-    '/inventory/profit-inbounds',
-    'store:inventory:profit-inbounds:view',
-    NULL,
-    104023,
-    TRUE,
-    'ENABLED',
-    'inventory.profit-inbound.index'
-)
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status, component_key)
-VALUES (
-    'STORE_BIZ_MENU_LOSS_OUTBOUND',
-    '盘亏单',
-    (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_CHECK'),
-    'MENU',
-    '/inventory/loss-outbounds',
-    'store:inventory:loss-outbounds:view',
-    NULL,
-    104024,
-    TRUE,
-    'ENABLED',
-    'inventory.loss-outbound.index'
-)
-ON CONFLICT DO NOTHING;
-
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
     'STORE_BIZ_GRP_INVENTORY_AUTO_OUTBOUND',
@@ -2612,3 +2594,11 @@ WHERE menu_code LIKE 'STORE_BIZ_MENU_%'
   AND COALESCE(component_key, '') <> ''
   AND route_path ~ '^/[^/]+/[^/]+$';
 -- STORE_MENU_SEED_END
+
+DELETE FROM sys_role_menu_rel
+WHERE menu_id IN (
+    SELECT id
+    FROM sys_menu
+    WHERE menu_code IN ('STORE_BIZ_MENU_PROFIT_INBOUND', 'STORE_BIZ_MENU_LOSS_OUTBOUND')
+);
+DELETE FROM sys_menu WHERE menu_code IN ('STORE_BIZ_MENU_PROFIT_INBOUND', 'STORE_BIZ_MENU_LOSS_OUTBOUND');

@@ -58,14 +58,6 @@ SELECT 'OTHER_OUTBOUND', id, document_code, status, workflow_status, created_by,
 FROM inventory_other_outbound
 WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
 UNION ALL
-SELECT 'PROFIT_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
-FROM inventory_profit_inbound
-WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%' OR COALESCE(upstream_code, '') LIKE 'PD-%'
-UNION ALL
-SELECT 'LOSS_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
-FROM inventory_loss_outbound
-WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%' OR COALESCE(upstream_code, '') LIKE 'PD-%'
-UNION ALL
 SELECT 'PRODUCTION_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
 FROM inventory_production_inbound
 WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
@@ -111,10 +103,6 @@ SELECT 'OTHER_INBOUND', header_id, id, item_code, category, quantity FROM invent
 UNION ALL
 SELECT 'OTHER_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_other_outbound_line
 UNION ALL
-SELECT 'PROFIT_INBOUND', header_id, id, item_code, category, quantity FROM inventory_profit_inbound_line
-UNION ALL
-SELECT 'LOSS_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_loss_outbound_line
-UNION ALL
 SELECT 'PRODUCTION_INBOUND', header_id, id, item_code, category, quantity FROM inventory_production_inbound_line
 UNION ALL
 SELECT 'CUSTOMER_SALES_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_customer_sales_outbound_line
@@ -136,7 +124,6 @@ FROM (VALUES
     ('PRODUCTION_INBOUND', 'INBOUND'),
     ('OTHER_INBOUND', 'INBOUND'),
     ('CUSTOMER_RETURN_INBOUND', 'INBOUND'),
-    ('PROFIT_INBOUND', 'INBOUND'),
     ('PURCHASE_RETURN_OUTBOUND', 'OUTBOUND'),
     ('DEPARTMENT_PICKING', 'OUTBOUND'),
     ('STOCK_TRANSFER', 'OUTBOUND'),
@@ -146,8 +133,7 @@ FROM (VALUES
     ('CUSTOMER_SALES_OUTBOUND', 'OUTBOUND'),
     ('DISH_CONSUMPTION_OUTBOUND', 'OUTBOUND'),
     ('STORE_TRANSFER', 'OUTBOUND'),
-    ('STOCK_TRANSFER_OUTBOUND', 'OUTBOUND'),
-    ('LOSS_OUTBOUND', 'OUTBOUND')
+    ('STOCK_TRANSFER_OUTBOUND', 'OUTBOUND')
 ) AS expected(biz_type, expected_direction);
 
 WITH checks AS (

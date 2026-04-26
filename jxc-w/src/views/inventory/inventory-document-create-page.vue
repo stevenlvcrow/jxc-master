@@ -18,6 +18,7 @@ import {
   type GenericInventoryDocumentLinePayload,
   type GenericInventoryDocumentSavePayload,
 } from '@/api/modules/inventory';
+import { fetchDishesApi, type DishListRow } from '@/api/modules/dish';
 import { fetchItemCategoryTreeApi, fetchItemDetailApi, fetchItemsApi, type ItemCategoryTreeNode, type ItemCreatePayload, type ItemVO } from '@/api/modules/item';
 import { fetchCurrentUserRolesApi } from '@/api/modules/auth';
 import { fetchStoreSalesmenApi, type SalesmanCandidateItem } from '@/api/modules/system-admin';
@@ -79,7 +80,16 @@ type DocumentItemRow = {
   unitPrice: number | null;
   amount: number | null;
   lineReason: string;
+  dishId: string;
+  dishName: string;
+  damageReason: string;
   remark: string;
+};
+
+type DishOption = {
+  value: string;
+  label: string;
+  dishName: string;
 };
 
 const router = useRouter();
@@ -124,6 +134,7 @@ const selectedItemCandidates = ref<Array<Record<string, unknown>>>([]);
 const itemTreeData = ref<SelectorTreeNode[]>([]);
 const itemCandidateSource = ref<ItemCandidate[]>([]);
 const rowSeed = ref(1);
+const dishOptions = ref<DishOption[]>([]);
 const {
   supplierOptions,
   loadSupplierOptions,
@@ -215,6 +226,10 @@ const showReasonColumn = computed(() =>
     && !isDepartmentPicking.value
     && !isProductionInbound.value,
 );
+const showDishColumn = computed(() =>
+  ['customer-sales-outbound', 'dish-consumption-outbound', 'damage-outbound'].includes(props.meta.type),
+);
+const showDamageReasonColumn = computed(() => props.meta.type === 'damage-outbound');
 const showAttachment = computed(() => props.meta.showAttachment === true);
 const isWarehouseOpeningBalance = computed(() => false);
 const totalQuantity = computed(() => rows.value.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0));
@@ -289,6 +304,9 @@ const createEmptyRow = (): DocumentItemRow => ({
   unitPrice: null,
   amount: null,
   lineReason: '',
+  dishId: '',
+  dishName: '',
+  damageReason: '',
   remark: '',
 });
 
@@ -593,6 +611,24 @@ const resolveItemUnitMeta = async (item: ItemCandidate) => {
   }
 };
 
+const loadDishOptions = async () => {
+  if (!showDishColumn.value || !currentOrgId.value) {
+    dishOptions.value = [];
+    return;
+  }
+  const page = await fetchDishesApi({ pageNo: 1, pageSize: 500, deleted: 'N' }, currentOrgId.value);
+  dishOptions.value = (page.list ?? []).map((row: DishListRow) => ({
+    value: row.dishId,
+    label: `${row.spuCode} / ${row.dishName}`,
+    dishName: row.dishName,
+  }));
+};
+
+const handleDishChange = (row: DocumentItemRow) => {
+  const matched = dishOptions.value.find((item) => item.value === row.dishId);
+  row.dishName = matched?.dishName ?? '';
+};
+
 const applyItemToRow = async (row: DocumentItemRow, item: ItemCandidate) => {
   row.itemCode = item.code;
   row.itemName = item.name;
@@ -830,6 +866,9 @@ const fillDetail = async () => {
         unitPrice: item.unitPrice,
         amount: item.amount,
         lineReason: item.lineReason,
+        dishId: item.dishId,
+        dishName: item.dishName,
+        damageReason: item.damageReason,
         remark: item.remark,
       };
     });
@@ -909,6 +948,9 @@ const buildPayload = (): GenericInventoryDocumentSavePayload | null => {
       unitPrice: item.unitPrice,
       amount: item.amount,
       lineReason: item.lineReason || undefined,
+      dishId: item.dishId || undefined,
+      dishName: item.dishName || undefined,
+      damageReason: item.damageReason || undefined,
       remark: item.remark || undefined,
       extraFields: {
         ...(item.unitOptions.length ? { unitOptions: JSON.stringify(item.unitOptions) } : {}),
@@ -1059,7 +1101,7 @@ const reloadPageContext = async () => {
   selectedItemCandidates.value = [];
   itemTreeData.value = [];
   itemCandidateSource.value = [];
-  await Promise.all([loadPermission(), loadWarehouses(), loadSalesmen(), loadCounterpartyOptions()]);
+  await Promise.all([loadPermission(), loadWarehouses(), loadSalesmen(), loadCounterpartyOptions(), loadDishOptions()]);
   await fillDetail();
   applyPresetWarehouse();
 };
@@ -1500,6 +1542,30 @@ onMounted(async () => {
           <el-table-column v-if="showReasonColumn" label="原因" min-width="140">
             <template #default="{ row }">
               <el-input v-model="row.lineReason" :disabled="isReadonlyMode" />
+            </template>
+          </el-table-column>
+          <el-table-column v-if="showDishColumn" label="关联菜品" min-width="180">
+            <template #default="{ row }">
+              <el-select
+                v-model="row.dishId"
+                :disabled="isReadonlyMode"
+                clearable
+                filterable
+                placeholder="请选择"
+                @change="handleDishChange(row)"
+              >
+                <el-option
+                  v-for="option in dishOptions"
+                  :key="option.value"
+                  :label="option.label"
+                  :value="option.value"
+                />
+              </el-select>
+            </template>
+          </el-table-column>
+          <el-table-column v-if="showDamageReasonColumn" label="报损原因" min-width="150">
+            <template #default="{ row }">
+              <el-input v-model="row.damageReason" :disabled="isReadonlyMode" />
             </template>
           </el-table-column>
           <el-table-column label="备注" min-width="160">
