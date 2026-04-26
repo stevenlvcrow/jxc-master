@@ -37,6 +37,9 @@ public class InventoryDocumentPermissionService {
                                                  Long scopeId,
                                                  Long groupId,
                                                  Long operatorId) {
+        if (isSystemGeneratedInventoryCheckDocument(type)) {
+            return new PermissionSnapshot(false, false, false, false, false);
+        }
         boolean canManageAll = canViewAll(scopeType, scopeId, groupId, operatorId);
         if (!type.isWorkflowEnabled()) {
             boolean canApprove = type == InventoryDocumentType.WAREHOUSE_OPENING_BALANCE;
@@ -105,6 +108,9 @@ public class InventoryDocumentPermissionService {
                                           Long groupId,
                                           Long operatorId,
                                           String action) {
+        if (isSystemGeneratedInventoryCheckDocument(type)) {
+            throw new BusinessException(type.getBusinessName() + "由盘点审核自动生成，不允许手工操作");
+        }
         if (!type.isWorkflowEnabled()) {
             return;
         }
@@ -130,6 +136,9 @@ public class InventoryDocumentPermissionService {
                                        Long scopeId,
                                        Long groupId,
                                        Long operatorId) {
+        if (isSystemGeneratedInventoryCheckDocument(type)) {
+            throw new BusinessException(type.getBusinessName() + "由盘点审核自动生成，不支持手工审核");
+        }
         if (type == InventoryDocumentType.WAREHOUSE_OPENING_BALANCE) {
             return;
         }
@@ -155,6 +164,10 @@ public class InventoryDocumentPermissionService {
                 operatorId,
                 action
         );
+    }
+
+    private boolean isSystemGeneratedInventoryCheckDocument(InventoryDocumentType type) {
+        return type == InventoryDocumentType.PROFIT_INBOUND || type == InventoryDocumentType.LOSS_OUTBOUND;
     }
 
     /**

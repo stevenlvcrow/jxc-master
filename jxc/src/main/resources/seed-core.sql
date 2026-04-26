@@ -92,6 +92,7 @@ WITH dict_type_seed(dict_code, dict_name, category, sort_no, remark) AS (
         ('item.status', '物品启停状态', 'ARCHIVE', 400, '物品档案启停状态'),
         ('inventory.document_status', '库存单据状态', 'INVENTORY', 500, '库存与采购单据状态'),
         ('inventory.workflow_status', '库存流程状态', 'INVENTORY', 510, '库存单据流程状态'),
+        ('inventory.period_type', '期初周期类型', 'INVENTORY', 515, '期初库存核算周期类型'),
         ('inventory.check_range_type', '盘点范围类型', 'INVENTORY', 520, '盘点范围类型'),
         ('inventory.check_generation_status', '盘点生成状态', 'INVENTORY', 530, '多人盘点单生成状态'),
         ('workflow.definition_status', '流程定义状态', 'WORKFLOW', 600, '流程模板发布状态'),
@@ -149,6 +150,9 @@ WITH dict_item_seed(dict_code, item_key, item_code, item_label, sort_no) AS (
         ('inventory.workflow_status', 'RUNNING', 'RUNNING', '流程中', 20),
         ('inventory.workflow_status', 'COMPLETED', 'COMPLETED', '已完成', 30),
         ('inventory.workflow_status', 'REVOKED', 'REVOKED', '已撤回', 40),
+        ('inventory.period_type', 'DAY', 'DAY', '日期初', 10),
+        ('inventory.period_type', 'MONTH', 'MONTH', '月期初', 20),
+        ('inventory.period_type', 'YEAR', 'YEAR', '年初期初', 30),
         ('inventory.check_range_type', 'FULL_WAREHOUSE', 'FULL_WAREHOUSE', '全仓盘点', 10),
         ('inventory.check_range_type', 'PARTITION', 'PARTITION', '分区盘点', 20),
         ('inventory.check_range_type', 'SPECIFIC_ITEM', 'SPECIFIC_ITEM', '指定食材盘点', 30),
@@ -213,11 +217,14 @@ WITH field_binding_seed(dict_code, table_name, column_name, remark) AS (
         ('inventory.document_status', 'inventory_damage_outbound', 'status', '报损出库状态'),
         ('inventory.document_status', 'inventory_other_inbound', 'status', '其他入库状态'),
         ('inventory.document_status', 'inventory_other_outbound', 'status', '其他出库状态'),
+        ('inventory.document_status', 'inventory_profit_inbound', 'status', '盘盈单状态'),
+        ('inventory.document_status', 'inventory_loss_outbound', 'status', '盘亏单状态'),
         ('inventory.document_status', 'inventory_production_inbound', 'status', '生产入库状态'),
         ('inventory.document_status', 'inventory_customer_sales_outbound', 'status', '客户销售出库状态'),
         ('inventory.document_status', 'inventory_customer_return_inbound', 'status', '客户退货入库状态'),
         ('inventory.document_status', 'inventory_dish_consumption_outbound', 'status', '菜品消耗出库状态'),
         ('inventory.document_status', 'inventory_warehouse_opening_balance', 'status', '期初库存状态'),
+        ('inventory.document_status', 'inventory_period_opening', 'status', '期初库存状态'),
         ('inventory.document_status', 'inventory_store_transfer', 'status', '门店调拨状态'),
         ('inventory.document_status', 'inventory_stock_transfer_outbound', 'status', '移库出库状态'),
         ('inventory.workflow_status', 'inventory_purchase_inbound', 'workflow_status', '采购入库流程状态'),
@@ -230,11 +237,15 @@ WITH field_binding_seed(dict_code, table_name, column_name, remark) AS (
         ('inventory.workflow_status', 'inventory_damage_outbound', 'workflow_status', '报损出库流程状态'),
         ('inventory.workflow_status', 'inventory_other_inbound', 'workflow_status', '其他入库流程状态'),
         ('inventory.workflow_status', 'inventory_other_outbound', 'workflow_status', '其他出库流程状态'),
+        ('inventory.workflow_status', 'inventory_profit_inbound', 'workflow_status', '盘盈单流程状态'),
+        ('inventory.workflow_status', 'inventory_loss_outbound', 'workflow_status', '盘亏单流程状态'),
         ('inventory.workflow_status', 'inventory_production_inbound', 'workflow_status', '生产入库流程状态'),
         ('inventory.workflow_status', 'inventory_customer_sales_outbound', 'workflow_status', '客户销售出库流程状态'),
         ('inventory.workflow_status', 'inventory_customer_return_inbound', 'workflow_status', '客户退货入库流程状态'),
         ('inventory.workflow_status', 'inventory_dish_consumption_outbound', 'workflow_status', '菜品消耗出库流程状态'),
         ('inventory.workflow_status', 'inventory_warehouse_opening_balance', 'workflow_status', '期初库存流程状态'),
+        ('inventory.workflow_status', 'inventory_period_opening', 'workflow_status', '期初库存流程状态'),
+        ('inventory.period_type', 'inventory_period_opening', 'period_type', '期初库存周期类型'),
         ('inventory.workflow_status', 'inventory_store_transfer', 'workflow_status', '门店调拨流程状态'),
         ('inventory.workflow_status', 'inventory_stock_transfer_outbound', 'workflow_status', '移库出库流程状态')
 )
@@ -273,6 +284,7 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('PURCHASE_ORDER', '采购订单流程'),
         ('PURCHASE_RECEIPT', '采购收货单流程'),
         ('PURCHASE_RETURN', '采购退货单流程'),
+        ('PERIOD_OPENING_BALANCE', '期初库存流程'),
         ('PURCHASE_INBOUND', '采购入库流程'),
         ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
         ('DEPARTMENT_PICKING', '部门领料流程'),
@@ -287,6 +299,8 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
         ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
         ('DISH_CONSUMPTION_OUTBOUND', '菜品消耗出库流程'),
+        ('STORE_TRANSFER', '店间调拨流程'),
+        ('STOCK_TRANSFER_OUTBOUND', '移库出库流程'),
         ('INVENTORY_CHECK', '盘点单流程'),
         ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
 )
@@ -308,6 +322,7 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('PURCHASE_ORDER', '采购订单流程'),
         ('PURCHASE_RECEIPT', '采购收货单流程'),
         ('PURCHASE_RETURN', '采购退货单流程'),
+        ('PERIOD_OPENING_BALANCE', '期初库存流程'),
         ('PURCHASE_INBOUND', '采购入库流程'),
         ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
         ('DEPARTMENT_PICKING', '部门领料流程'),
@@ -322,6 +337,8 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
         ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
         ('DISH_CONSUMPTION_OUTBOUND', '菜品消耗出库流程'),
+        ('STORE_TRANSFER', '店间调拨流程'),
+        ('STOCK_TRANSFER_OUTBOUND', '移库出库流程'),
         ('INVENTORY_CHECK', '盘点单流程'),
         ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
 )
@@ -340,6 +357,7 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('PURCHASE_ORDER', '采购订单流程'),
         ('PURCHASE_RECEIPT', '采购收货单流程'),
         ('PURCHASE_RETURN', '采购退货单流程'),
+        ('PERIOD_OPENING_BALANCE', '期初库存流程'),
         ('PURCHASE_INBOUND', '采购入库流程'),
         ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
         ('DEPARTMENT_PICKING', '部门领料流程'),
@@ -354,6 +372,8 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
         ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
         ('DISH_CONSUMPTION_OUTBOUND', '菜品消耗出库流程'),
+        ('STORE_TRANSFER', '店间调拨流程'),
+        ('STOCK_TRANSFER_OUTBOUND', '移库出库流程'),
         ('INVENTORY_CHECK', '盘点单流程'),
         ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
 )
@@ -593,6 +613,10 @@ INSERT INTO sys_role (role_code, role_name, builtin, role_type, data_scope_type,
 VALUES ('GROUP_ADMIN', '集团管理员', TRUE, 'GROUP', 'GROUP', '系统初始化集团管理员角色', 'ENABLED')
 ON CONFLICT DO NOTHING;
 
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES (0, 'GROUP_MEMBER', '集团成员', TRUE, 'GROUP', 'SELF', '用户所属集团归属角色', 'ENABLED')
+ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
+
 INSERT INTO sys_role (role_code, role_name, builtin, role_type, data_scope_type, description, status)
 VALUES ('STORE_ADMIN', '门店管理员', TRUE, 'STORE', 'STORE', '系统初始化门店管理员角色', 'ENABLED')
 ON CONFLICT DO NOTHING;
@@ -611,6 +635,22 @@ ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
 
 INSERT INTO sys_role (tenant_group_id, role_code, role_name, builtin, role_type, data_scope_type, description, status)
 VALUES (0, 'CASHIER', '收银员', TRUE, 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
+
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, builtin, role_type, data_scope_type, description, status)
+SELECT g.id,
+       template.role_code,
+       template.role_name,
+       template.builtin,
+       template.role_type,
+       template.data_scope_type,
+       template.description,
+       template.status
+FROM sys_group g
+CROSS JOIN sys_role template
+WHERE template.tenant_group_id = 0
+  AND template.builtin = TRUE
+  AND template.role_type IN ('GROUP', 'STORE')
 ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
@@ -945,6 +985,17 @@ INSERT INTO sys_user_role_rel (user_id, role_id, scope_type, scope_id, assigned_
 VALUES (
     (SELECT id FROM sys_user WHERE phone = '13800000001'),
     (SELECT id FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_ADMIN'),
+    'GROUP',
+    (SELECT id FROM sys_group WHERE group_code = 'GP00001'),
+    (SELECT id FROM sys_user WHERE phone = '13800000000'),
+    'ENABLED'
+)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_user_role_rel (user_id, role_id, scope_type, scope_id, assigned_by, status)
+VALUES (
+    (SELECT id FROM sys_user WHERE phone = '13800000002'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = (SELECT id FROM sys_group WHERE group_code = 'GP00001') AND role_code = 'GROUP_MEMBER'),
     'GROUP',
     (SELECT id FROM sys_group WHERE group_code = 'GP00001'),
     (SELECT id FROM sys_user WHERE phone = '13800000000'),
@@ -1300,11 +1351,11 @@ ON CONFLICT DO NOTHING;
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
     'STORE_BIZ_MENU_WAREHOUSE_OPENING_BALANCE',
-    '仓库期初',
+    '期初库存',
     (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
-    '/inventory/warehouse-opening-balances',
-    'store:inventory:warehouse-opening-balances:view',
+    '/inventory/period-openings',
+    'store:inventory:period-openings:view',
     NULL,
     104011,
     TRUE,
@@ -1598,7 +1649,7 @@ VALUES (
 )
 ON CONFLICT DO NOTHING;
 
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
+INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status, component_key)
 VALUES (
     'STORE_BIZ_MENU_LOSS_OUTBOUND',
     '盘亏单',
@@ -1609,7 +1660,8 @@ VALUES (
     NULL,
     104024,
     TRUE,
-    'ENABLED'
+    'ENABLED',
+    'inventory.loss-outbound.index'
 )
 ON CONFLICT DO NOTHING;
 
@@ -1717,6 +1769,13 @@ VALUES (
     'ENABLED'
 )
 ON CONFLICT DO NOTHING;
+
+UPDATE sys_menu
+SET menu_name = '期初库存',
+    route_path = '/inventory/period-openings',
+    permission_code = 'store:inventory:period-openings:view',
+    component_key = 'inventory.period-opening.index'
+WHERE menu_code = 'STORE_BIZ_MENU_WAREHOUSE_OPENING_BALANCE';
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
@@ -2101,6 +2160,7 @@ ON CONFLICT DO NOTHING;
 
 UPDATE sys_menu
 SET component_key = CASE menu_code
+    WHEN 'STORE_BIZ_MENU_WAREHOUSE_OPENING_BALANCE' THEN 'inventory.period-opening.index'
     WHEN 'STORE_BIZ_MENU_REALTIME_STOCK_QUERY' THEN 'report.realtime-stock-query.index'
     WHEN 'STORE_BIZ_MENU_DISH_CONSUMPTION_OUTBOUND_QUERY' THEN 'report.dish-consumption-outbound-report.index'
     WHEN 'STORE_BIZ_MENU_INVENTORY_PROFIT_LOSS' THEN 'report.inventory-profit-loss.index'
@@ -2117,6 +2177,7 @@ SET component_key = CASE menu_code
     ELSE component_key
 END
 WHERE menu_code IN (
+    'STORE_BIZ_MENU_WAREHOUSE_OPENING_BALANCE',
     'STORE_BIZ_MENU_REALTIME_STOCK_QUERY',
     'STORE_BIZ_MENU_DISH_CONSUMPTION_OUTBOUND_QUERY',
     'STORE_BIZ_MENU_INVENTORY_PROFIT_LOSS',

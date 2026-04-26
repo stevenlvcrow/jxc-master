@@ -17,7 +17,7 @@ import {
 import { fetchStoreWarehousesApi, type WarehouseRow } from '@/api/modules/warehouse';
 import { useSessionStore } from '@/stores/session';
 import type { InventoryDocumentListColumn, InventoryDocumentMeta } from '@/views/inventory/document-meta';
-import { normalizeOrgId, parseStoreId } from '@/utils/org';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 const props = defineProps<{
@@ -25,6 +25,7 @@ const props = defineProps<{
 }>();
 
 const sessionStore = useSessionStore();
+const { orgId, storeId } = useRequiredOrgScope();
 const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
 const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT]);
 const inventoryStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
@@ -58,10 +59,9 @@ const query = reactive({
   remark: '',
 });
 
-const orgId = computed(() => normalizeOrgId(sessionStore.currentOrgId) || undefined);
 const tableHeight = computed(() => props.meta.listTableHeight ?? 350);
 const showToolbar = computed(() => props.meta.showToolbar !== false);
-const isWarehouseOpeningBalance = computed(() => props.meta.type === 'warehouse-opening-balance');
+const isWarehouseOpeningBalance = computed(() => false);
 const primaryQueryUsesSelect = computed(() => props.meta.listPrimaryQueryKind === 'select');
 const visibleQueryFields = computed(() => props.meta.listQueryFields ?? [
   'dateRange',
@@ -175,13 +175,12 @@ const loadWarehouseOptions = async () => {
     warehouseOptions.value = [];
     return;
   }
-  const storeId = parseStoreId(orgId.value);
-  if (!storeId) {
+  if (!storeId.value) {
     warehouseOptions.value = [];
     return;
   }
   try {
-    const result = await fetchStoreWarehousesApi(storeId, { status: 'ENABLED' });
+    const result = await fetchStoreWarehousesApi(storeId.value, { status: 'ENABLED' });
     warehouseOptions.value = result.map((item: WarehouseRow) => ({
       id: item.id,
       code: item.warehouseCode,
@@ -535,14 +534,12 @@ onMounted(() => {
                 <el-button v-if="canConfirmCurrentType" text type="primary" @click="handleApprove(row)">确认期初</el-button>
               </template>
               <template v-else-if="row.status === approvedStatus">
-                <el-button text type="primary" @click="handleView(row)">查看</el-button>
                 <el-button v-if="permissions.canUnapprove" text type="danger" @click="handleUnapprove(row)">
                   撤销期初
                 </el-button>
               </template>
             </template>
             <template v-else>
-              <el-button text type="primary" @click="handleView(row)">查看</el-button>
               <el-button v-if="permissions.canUpdate" text @click="handleEdit(row)">编辑</el-button>
               <el-button v-if="permissions.canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
             </template>
@@ -557,7 +554,15 @@ onMounted(() => {
           show-overflow-tooltip
         >
           <template #default="{ row }">
-            {{ formatColumnValue(column, row) }}
+            <el-button
+              v-if="column.prop === 'documentCode' && row.documentCode"
+              text
+              type="primary"
+              @click="handleView(row)"
+            >
+              {{ row.documentCode }}
+            </el-button>
+            <template v-else>{{ formatColumnValue(column, row) }}</template>
           </template>
         </el-table-column>
       </template>

@@ -27,6 +27,7 @@ import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
 import com.boboboom.jxc.identity.interfaces.rest.response.PageData;
 import com.boboboom.jxc.inventory.domain.repository.InventoryCheckRepository;
+import com.boboboom.jxc.inventory.domain.repository.InventoryDocumentRepository;
 import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckBatchRequest;
 import com.boboboom.jxc.inventory.interfaces.rest.request.InventoryCheckSaveRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -50,27 +51,34 @@ public class InventoryCheckApplicationService {
     private static final String PRINT_STATUS_PRINTED = "PRINTED";
     private static final String GENERATED_STATUS_UNGENERATED = "UNGENERATED";
     private static final String GENERATED_STATUS_GENERATED = "GENERATED";
+    private static final String PENDING_OPERATION_NONE = "NONE";
 
     private final InventoryCheckRepository inventoryCheckRepository;
+    private final InventoryDocumentRepository inventoryDocumentRepository;
     private final InventoryCheckPermissionService inventoryCheckPermissionService;
     private final InventoryStockMutationService inventoryStockMutationService;
     private final OrgScopeService orgScopeService;
     private final ObjectMapper objectMapper;
     private final DictionaryLookupService dictionaryLookupService;
+    private final InventoryItemCategoryValidator inventoryItemCategoryValidator;
 
     /** 盘点单业务服务，负责盘点单保存、审核、差异计算和盈亏单生成。 */
     public InventoryCheckApplicationService(InventoryCheckRepository inventoryCheckRepositoryValue,
+                                            InventoryDocumentRepository inventoryDocumentRepositoryValue,
                                             InventoryCheckPermissionService inventoryCheckPermissionServiceValue,
                                             InventoryStockMutationService inventoryStockMutationServiceValue,
                                             OrgScopeService orgScopeServiceValue,
                                             ObjectMapper objectMapperValue,
-                                            DictionaryLookupService dictionaryLookupServiceValue) {
+                                            DictionaryLookupService dictionaryLookupServiceValue,
+                                            InventoryItemCategoryValidator inventoryItemCategoryValidatorValue) {
         this.inventoryCheckRepository = inventoryCheckRepositoryValue;
+        this.inventoryDocumentRepository = inventoryDocumentRepositoryValue;
         this.inventoryCheckPermissionService = inventoryCheckPermissionServiceValue;
         this.inventoryStockMutationService = inventoryStockMutationServiceValue;
         this.orgScopeService = orgScopeServiceValue;
         this.objectMapper = objectMapperValue;
         this.dictionaryLookupService = dictionaryLookupServiceValue;
+        this.inventoryItemCategoryValidator = inventoryItemCategoryValidatorValue;
     }
 
     /**
@@ -114,7 +122,7 @@ public class InventoryCheckApplicationService {
         List<InventoryCheckHeader> headers = inventoryCheckRepository.findHeadersByScopeAndKindOrdered(kind, scope.scopeType(), scope.scopeId());
         if (!canViewAll) {
             headers = headers.stream()
-                    .filter(item -> Objects.equals(item.getCreatedBy(), operatorId))
+                    .filter(item -> belongsToOperator(item, operatorId))
                     .toList();
         }
         Map<Long, List<InventoryCheckLine>> lineMap = loadLineMap(kind, headers.stream().map(InventoryCheckHeader::getId).toList());
@@ -439,6 +447,7 @@ public class InventoryCheckApplicationService {
         header.setCreatedBy(createMode ? operatorId : header.getCreatedBy());
         header.setItemCount(request.items() == null ? 0 : request.items().size());
         List<InventoryCheckLine> lines = normalizeLines(request.items());
+        validateItemCategories(scope, lines);
         applyHeaderTotals(header, lines);
         if (createMode) {
             header.setDocumentCode(generateDocumentCode(kind, scope));
@@ -526,21 +535,8 @@ public class InventoryCheckApplicationService {
         if (!Objects.equals(header.getStatus(), submittedStatus())) {
             throw new BusinessException("单据未提交，无法审核");
         }
-        for (InventoryCheckLine line : lines) {
-            BigDecimal targetQuantity = normalizeNonNegative(line.getActualQty());
-            inventoryStockMutationService.applyAbsolute(
-                    scope.scopeType(),
-                    scope.scopeId(),
-                    header.getWarehouseName(),
-                    header.getId(),
-                    line.getId(),
-                    line.getItemCode(),
-                    line.getItemName(),
-                    targetQuantity,
-                    kind.name() + "_APPROVE",
-                    operatorId
-            );
-        }
+        validateItemCategories(scope, lines);
+        generateInventoryCheckDifferenceDocuments(scope, header, lines, operatorId, false);
         header.setStatus(approvedStatus());
         header.setApprovedBy(operatorId);
         header.setApprovedAt(LocalDateTime.now());
@@ -560,26 +556,155 @@ public class InventoryCheckApplicationService {
             inventoryCheckRepository.updateHeader(kind, header);
             return;
         }
-        for (InventoryCheckLine line : lines) {
-            BigDecimal targetQuantity = normalizeNonNegative(line.getBookQty());
-            inventoryStockMutationService.applyAbsolute(
-                    scope.scopeType(),
-                    scope.scopeId(),
-                    header.getWarehouseName(),
-                    header.getId(),
-                    line.getId(),
-                    line.getItemCode(),
-                    line.getItemName(),
-                    targetQuantity,
-                    kind.name() + "_UNAPPROVE",
-                    operatorId
+        throw new BusinessException("盘点单已审核并生成盘盈/盘亏单，不支持反审核");
+    }
+
+    private void generateInventoryCheckDifferenceDocuments(InventoryScope scope,
+                                                           InventoryCheckHeader checkHeader,
+                                                           List<InventoryCheckLine> lines,
+                                                           Long operatorId,
+                                                           boolean reverse) {
+        List<InventoryCheckLine> profitLines = lines.stream()
+                .filter(line -> defaultQuantity(line.getProfitQty()).compareTo(BigDecimal.ZERO) > 0)
+                .toList();
+        List<InventoryCheckLine> lossLines = lines.stream()
+                .filter(line -> defaultQuantity(line.getLossQty()).compareTo(BigDecimal.ZERO) > 0)
+                .toList();
+        if (!profitLines.isEmpty()) {
+            createGeneratedInventoryDocument(
+                    InventoryDocumentType.PROFIT_INBOUND,
+                    scope,
+                    checkHeader,
+                    profitLines,
+                    operatorId,
+                    reverse
             );
         }
-        header.setStatus(submittedStatus());
-        header.setApprovedBy(null);
-        header.setApprovedAt(null);
-        header.setRejectionReason(rejectionReason);
-        inventoryCheckRepository.updateHeader(kind, header);
+        if (!lossLines.isEmpty()) {
+            createGeneratedInventoryDocument(
+                    InventoryDocumentType.LOSS_OUTBOUND,
+                    scope,
+                    checkHeader,
+                    lossLines,
+                    operatorId,
+                    reverse
+            );
+        }
+    }
+
+    private void createGeneratedInventoryDocument(InventoryDocumentType type,
+                                                  InventoryScope scope,
+                                                  InventoryCheckHeader checkHeader,
+                                                  List<InventoryCheckLine> checkLines,
+                                                  Long operatorId,
+                                                  boolean reverse) {
+        InventoryDocumentHeader documentHeader = buildGeneratedDocumentHeader(type, scope, checkHeader, checkLines, operatorId, reverse);
+        inventoryDocumentRepository.saveHeader(type, documentHeader);
+        for (InventoryCheckLine checkLine : checkLines) {
+            InventoryDocumentLine documentLine = buildGeneratedDocumentLine(type, checkLine, reverse);
+            documentLine.setHeaderId(documentHeader.getId());
+            inventoryDocumentRepository.saveLine(type, documentLine);
+            applyGeneratedDocumentStockDelta(type, scope, documentHeader, documentLine, operatorId, reverse);
+        }
+    }
+
+    private InventoryDocumentHeader buildGeneratedDocumentHeader(InventoryDocumentType type,
+                                                                 InventoryScope scope,
+                                                                 InventoryCheckHeader checkHeader,
+                                                                 List<InventoryCheckLine> checkLines,
+                                                                 Long operatorId,
+                                                                 boolean reverse) {
+        InventoryDocumentHeader header = new InventoryDocumentHeader();
+        header.setScopeType(scope.scopeType());
+        header.setScopeId(scope.scopeId());
+        header.setDocumentCode(generateDocumentCode(type, scope));
+        header.setDocumentDate(checkHeader.getCheckDate() == null ? LocalDate.now() : checkHeader.getCheckDate());
+        header.setPrimaryName(defaultIfBlank(checkHeader.getWarehouseName(), type.getBusinessName()));
+        header.setReason(reverse ? "盘点反审核冲回" : type.getBusinessName());
+        header.setUpstreamCode(defaultIfBlank(checkHeader.getDocumentCode(), ""));
+        header.setSalesmanUserId(checkHeader.getSalesmanUserId());
+        header.setSalesmanName(checkHeader.getSalesmanName());
+        header.setTotalAmount(calculateGeneratedDocumentTotalAmount(type, checkLines));
+        header.setStatus(approvedStatus());
+        header.setWorkflowStatus(workflowCompletedStatus());
+        header.setPendingOperation(PENDING_OPERATION_NONE);
+        header.setRemark(buildGeneratedDocumentRemark(checkHeader, reverse));
+        header.setCreatedBy(operatorId);
+        header.setApprovedBy(operatorId);
+        header.setApprovedAt(LocalDateTime.now());
+        return header;
+    }
+
+    private String buildGeneratedDocumentRemark(InventoryCheckHeader checkHeader, boolean reverse) {
+        String source = "来源盘点单：" + defaultIfBlank(checkHeader.getDocumentCode(), "");
+        String originalRemark = trimNullable(checkHeader.getRemark());
+        String suffix = reverse ? "；盘点反审核自动冲回" : "；盘点审核自动生成";
+        return originalRemark == null ? source + suffix : source + suffix + "；" + originalRemark;
+    }
+
+    private BigDecimal calculateGeneratedDocumentTotalAmount(InventoryDocumentType type, List<InventoryCheckLine> checkLines) {
+        return checkLines.stream()
+                .map(line -> type == InventoryDocumentType.PROFIT_INBOUND ? line.getProfitAmount() : line.getLossAmount())
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private InventoryDocumentLine buildGeneratedDocumentLine(InventoryDocumentType type,
+                                                             InventoryCheckLine checkLine,
+                                                             boolean reverse) {
+        InventoryDocumentLine line = new InventoryDocumentLine();
+        line.setItemCode(checkLine.getItemCode());
+        line.setItemName(checkLine.getItemName());
+        line.setSpec(checkLine.getSpec());
+        line.setCategory(checkLine.getCategory());
+        line.setUnitName(checkLine.getUnitName());
+        line.setAvailableQty(checkLine.getBookQty());
+        BigDecimal quantity = type == InventoryDocumentType.PROFIT_INBOUND
+                ? defaultQuantity(checkLine.getProfitQty())
+                : defaultQuantity(checkLine.getLossQty());
+        line.setQuantity(quantity);
+        BigDecimal unitPrice = type == InventoryDocumentType.PROFIT_INBOUND
+                ? defaultQuantity(checkLine.getProfitInboundPrice())
+                : defaultQuantity(checkLine.getLossOutboundPrice());
+        line.setUnitPrice(unitPrice);
+        line.setAmount(quantity.multiply(unitPrice).setScale(2, RoundingMode.HALF_UP));
+        line.setLineReason(reverse ? "盘点反审核冲回" : defaultIfBlank(checkLine.getProfitLossReason(), type.getBusinessName()));
+        line.setRemark(checkLine.getRemark());
+        return line;
+    }
+
+    private void applyGeneratedDocumentStockDelta(InventoryDocumentType type,
+                                                  InventoryScope scope,
+                                                  InventoryDocumentHeader header,
+                                                  InventoryDocumentLine line,
+                                                  Long operatorId,
+                                                  boolean reverse) {
+        BigDecimal multiplier = resolveGeneratedDocumentStockMultiplier(type, reverse);
+        inventoryStockMutationService.applyDelta(
+                scope.scopeType(),
+                scope.scopeId(),
+                header.getPrimaryName(),
+                header.getId(),
+                line.getId(),
+                line.getItemCode(),
+                line.getItemName(),
+                line.getQuantity().multiply(multiplier),
+                line.getAmount(),
+                header.getDocumentDate(),
+                reverse ? type.getBusinessCode() + "_UNAPPROVE" : type.getBusinessCode(),
+                operatorId
+        );
+    }
+
+    private BigDecimal resolveGeneratedDocumentStockMultiplier(InventoryDocumentType type, boolean reverse) {
+        if (type == InventoryDocumentType.PROFIT_INBOUND) {
+            return reverse ? BigDecimal.valueOf(-1) : BigDecimal.ONE;
+        }
+        if (type == InventoryDocumentType.LOSS_OUTBOUND) {
+            return reverse ? BigDecimal.ONE : BigDecimal.valueOf(-1);
+        }
+        return BigDecimal.ZERO;
     }
 
     private void deleteInternal(InventoryCheckKind kind, InventoryCheckHeader header) {
@@ -616,6 +741,10 @@ public class InventoryCheckApplicationService {
                                                boolean viewAll) {
         return inventoryCheckRepository.findHeaderByScopeAndKindAndId(kind, scope.scopeType(), scope.scopeId(), operatorId, viewAll, id)
                 .orElseThrow(() -> new BusinessException("单据不存在或无权查看"));
+    }
+
+    private boolean belongsToOperator(InventoryCheckHeader header, Long operatorId) {
+        return Objects.equals(header.getCreatedBy(), operatorId) || Objects.equals(header.getSalesmanUserId(), operatorId);
     }
 
     private Map<Long, List<InventoryCheckLine>> loadLineMap(InventoryCheckKind kind, List<Long> headerIds) {
@@ -703,6 +832,16 @@ public class InventoryCheckApplicationService {
         return rows;
     }
 
+    private void validateItemCategories(InventoryScope scope, List<InventoryCheckLine> lines) {
+        inventoryItemCategoryValidator.validateLines(
+                scope.scopeType(),
+                scope.scopeId(),
+                lines.stream()
+                        .map(line -> new InventoryItemCategoryValidator.LineCategory(line.getItemCode(), line.getCategory()))
+                        .toList()
+        );
+    }
+
     private void applyInventoryCheckLineAmounts(InventoryCheckLine line) {
         line.setBookAmount(calculateInventoryCheckAmount(line.getBookQty(), line.getBookPrice()));
         line.setActualAmount(calculateInventoryCheckAmount(line.getActualQty(), line.getBookPrice()));
@@ -788,6 +927,20 @@ public class InventoryCheckApplicationService {
         throw new BusinessException("单据编号生成失败，请稍后重试");
     }
 
+    private String generateDocumentCode(InventoryDocumentType type, InventoryScope scope) {
+        String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMM", Locale.ROOT));
+        for (int cursor = 1; cursor < DOCUMENT_CODE_MAX_ATTEMPTS; cursor++) {
+            int seed = ThreadLocalRandom.current().nextInt(1, DOCUMENT_CODE_MAX_ATTEMPTS);
+            String suffix = String.format(Locale.ROOT, DOCUMENT_CODE_SUFFIX_FORMAT,
+                    (cursor + seed) % DOCUMENT_CODE_SUFFIX_MODULUS);
+            String candidate = type.getDocumentPrefix() + "-" + datePart + "-" + suffix;
+            if (inventoryDocumentRepository.countByScopeAndDocumentCode(type, scope.scopeType(), scope.scopeId(), candidate) == 0) {
+                return candidate;
+            }
+        }
+        throw new BusinessException("单据编号生成失败，请稍后重试");
+    }
+
     private LocalDate parseRequiredDate(String value, String message) {
         String normalized = requiredTrim(value, message);
         try {
@@ -829,6 +982,10 @@ public class InventoryCheckApplicationService {
         return value.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
     }
 
+    private BigDecimal defaultQuantity(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP) : value;
+    }
+
     private String requiredTrim(String value, String message) {
         String normalized = trimNullable(value);
         if (normalized == null) {
@@ -858,6 +1015,10 @@ public class InventoryCheckApplicationService {
 
     private String approvedStatus() {
         return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_DOCUMENT_STATUS, DictionaryCodes.APPROVED);
+    }
+
+    private String workflowCompletedStatus() {
+        return dictionaryLookupService.codeOf(DictionaryCodes.INVENTORY_WORKFLOW_STATUS, DictionaryCodes.COMPLETED);
     }
 
     private String printStatusUnprinted() {
@@ -906,7 +1067,7 @@ public class InventoryCheckApplicationService {
         try {
             return objectMapper.readValue(extraJson, objectMapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, String.class));
         } catch (JsonProcessingException ex) {
-            return Map.of();
+            throw new BusinessException("盘点扩展字段格式错误，请清理脏数据");
         }
     }
 

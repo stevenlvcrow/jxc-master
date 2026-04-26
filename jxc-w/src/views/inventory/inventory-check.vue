@@ -17,8 +17,8 @@ import {
 } from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
-import { normalizeOrgId } from '@/utils/org';
 import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 
 type TimeType = '盘点日期' | '创建时间';
 type PrintFilter = '' | 'UNPRINTED' | 'PRINTED';
@@ -26,6 +26,7 @@ type PrintFilter = '' | 'UNPRINTED' | 'PRINTED';
 const router = useRouter();
 const sessionStore = useSessionStore();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
+const { orgId, requireOrgId } = useRequiredOrgScope();
 const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
 const INVENTORY_CHECK_RANGE_TYPE_DICT = 'inventory.check_range_type';
 const DOCUMENT_PRINT_STATUS_DICT = 'document.print_status';
@@ -87,8 +88,6 @@ const permissions = reactive({
   canUnapprove: false,
 });
 
-const orgId = computed(() => normalizeOrgId(sessionStore.currentOrgId) || undefined);
-
 const loadPermissions = async () => {
   if (!orgId.value) {
     permissions.canCreate = false;
@@ -145,7 +144,7 @@ const loadRows = async () => {
 const fetchAllPages = async <T>(loader: (pageNum: number, pageSizeValue: number) => Promise<{ list: T[]; total: number; pageSize: number }>) => {
   const collected: T[] = [];
   let pageNum = 1;
-  let totalCount = 0;
+  let totalCount: number;
   do {
     const page = await loader(pageNum, 200);
     const list = Array.isArray(page.list) ? page.list : [];
@@ -162,8 +161,8 @@ const fetchAllPages = async <T>(loader: (pageNum: number, pageSizeValue: number)
 const toCsvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
 const handleExport = async () => {
-  if (!orgId.value) {
-    ElMessage.warning('未选择机构');
+  const currentOrgId = requireOrgId();
+  if (!currentOrgId) {
     return;
   }
   exportLoading.value = true;
@@ -182,7 +181,7 @@ const handleExport = async () => {
         checkRangeType: query.checkRangeType || undefined,
         printStatus: query.printStatus || undefined,
         remark: query.remark || undefined,
-      }, orgId.value);
+      }, currentOrgId);
       return {
         list: page.list,
         total: Number(page.total ?? 0),
@@ -479,7 +478,14 @@ onMounted(() => {
     >
       <el-table-column type="selection" width="44" fixed="left" />
       <el-table-column type="index" label="序号" width="56" fixed="left" />
-      <el-table-column prop="documentCode" label="单据编号" min-width="150" show-overflow-tooltip />
+      <el-table-column prop="documentCode" label="单据编号" min-width="150" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-button v-if="row.documentCode" text type="primary" @click="handleView(row)">
+            {{ row.documentCode }}
+          </el-button>
+          <template v-else>-</template>
+        </template>
+      </el-table-column>
       <el-table-column prop="checkDate" label="盘点日期" min-width="110" show-overflow-tooltip />
       <el-table-column prop="warehouseName" label="仓库" min-width="120" show-overflow-tooltip />
       <el-table-column prop="itemCount" label="物品数" min-width="90" show-overflow-tooltip />
@@ -502,7 +508,6 @@ onMounted(() => {
       <el-table-column prop="remark" label="备注" min-width="140" show-overflow-tooltip />
       <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
-          <el-button text type="primary" @click="handleView(row)">查看</el-button>
           <el-button v-if="permissions.canUpdate" text @click="handleEdit(row)">编辑</el-button>
           <el-button v-if="permissions.canDelete" text type="danger" @click="handleDelete(row)">删除</el-button>
         </template>

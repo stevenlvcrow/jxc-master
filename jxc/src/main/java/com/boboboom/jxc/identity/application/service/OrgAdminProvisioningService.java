@@ -28,6 +28,7 @@ public class OrgAdminProvisioningService {
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
     private static final String GROUP_ADMIN_ROLE_CODE = "GROUP_ADMIN";
+    private static final String GROUP_MEMBER_ROLE_CODE = "GROUP_MEMBER";
     private static final String STORE_ADMIN_ROLE_CODE = "STORE_ADMIN";
     private static final String DEFAULT_PASSWORD = "123654";
 
@@ -91,6 +92,9 @@ public class OrgAdminProvisioningService {
                 .orElseThrow(() -> new BusinessException("请选择有效的门店管理员"));
         RoleDO role = roleRepository.findByTenantGroupIdAndRoleCode(groupId, STORE_ADMIN_ROLE_CODE)
                 .orElseThrow(() -> new BusinessException("门店管理员角色未初始化"));
+        RoleDO groupMemberRole = roleRepository.findByTenantGroupIdAndRoleCode(groupId, GROUP_MEMBER_ROLE_CODE)
+                .orElseThrow(() -> new BusinessException("集团成员角色未初始化"));
+        bindRole(user.getId(), groupMemberRole.getId(), SCOPE_GROUP, groupId, operatorId);
         bindRole(user.getId(), role.getId(), SCOPE_STORE, storeId, operatorId);
         bindStoreAdmin(storeId, user.getId(), operatorId);
     }

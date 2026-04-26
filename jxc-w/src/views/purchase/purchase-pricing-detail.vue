@@ -7,10 +7,8 @@ import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptio
 import { useSessionStore } from '@/stores/session';
 import { fetchItemsApi, type ItemVO } from '@/api/modules/item';
 import { resolveArchiveOrgId } from '@/views/items/org';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
-type PricingDetailType = '供应商定价' | '仓库定价' | '活动定价';
-type EnabledStatus = '启用' | '停用';
-type LadderPriceStatus = '全部' | '是' | '否';
 type TreeNode = { value: string; label: string; children?: TreeNode[] };
 type PricingDetailRow = {
   id: number;
@@ -19,7 +17,7 @@ type PricingDetailRow = {
   spec: string;
   itemCategory: string;
   purchaseUnit: string;
-  pricingDetailType: PricingDetailType;
+  pricingDetailType: string;
   supplier: string;
   spotPrice: number;
   taxIncludedPrice: number;
@@ -28,9 +26,9 @@ type PricingDetailRow = {
   priceLimit: string;
   effectiveDate: string;
   expireDate: string;
-  enabledStatus: EnabledStatus;
+  enabledStatus: string;
   remark: string;
-  ladderPrice: Exclude<LadderPriceStatus, '全部'>;
+  ladderPrice: string;
 };
 
 const sessionStore = useSessionStore();
@@ -39,17 +37,20 @@ const {
   supplierLoading,
   loadSupplierOptions,
 } = useSupplierArchiveOptions();
+const COMMON_ENABLED_STATUS_DICT = 'common.enabled_status';
+const COMMON_YES_NO_DICT = 'common.yes_no';
+const { optionsOf } = useDictionaryOptions([COMMON_ENABLED_STATUS_DICT, COMMON_YES_NO_DICT]);
 
-const pricingDetailTypeOptions: PricingDetailType[] = ['供应商定价', '仓库定价', '活动定价'];
-const ladderPriceOptions: LadderPriceStatus[] = ['全部', '是', '否'];
-const enabledStatusOptions: EnabledStatus[] = ['启用', '停用'];
+const pricingDetailTypeOptions = ref<Array<{ value: string; label: string }>>([]);
+const ladderPriceOptions = optionsOf(COMMON_YES_NO_DICT, { enabled: true });
+const enabledStatusOptions = optionsOf(COMMON_ENABLED_STATUS_DICT);
 
 const query = reactive({
   priceDate: '',
   pricingDetailType: '',
   supplier: '',
   itemCode: '',
-  ladderPrice: '全部' as LadderPriceStatus,
+  ladderPrice: 'ALL',
   enabledStatus: '',
 });
 
@@ -59,68 +60,7 @@ const selectedIds = ref<number[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
 
-const tableData = ref<PricingDetailRow[]>([
-  {
-    id: 1,
-    itemCode: 'ITEM-001',
-    itemName: '鸡胸肉',
-    spec: '10kg/箱',
-    itemCategory: '生鲜原料',
-    purchaseUnit: '箱',
-    pricingDetailType: '供应商定价',
-    supplier: '鲜达食品',
-    spotPrice: 182,
-    taxIncludedPrice: 185,
-    taxRate: 9,
-    taxExcludedPrice: 169.72,
-    priceLimit: '170.00-195.00',
-    effectiveDate: '2026-04-01',
-    expireDate: '2026-04-30',
-    enabledStatus: '启用',
-    remark: '四月统配价',
-    ladderPrice: '否',
-  },
-  {
-    id: 2,
-    itemCode: 'ITEM-002',
-    itemName: '牛腩',
-    spec: '5kg/包',
-    itemCategory: '生鲜原料',
-    purchaseUnit: '包',
-    pricingDetailType: '供应商定价',
-    supplier: '优选农场',
-    spotPrice: 255,
-    taxIncludedPrice: 260,
-    taxRate: 9,
-    taxExcludedPrice: 238.53,
-    priceLimit: '245.00-275.00',
-    effectiveDate: '2026-04-08',
-    expireDate: '2026-05-08',
-    enabledStatus: '启用',
-    remark: '阶梯价待接入',
-    ladderPrice: '是',
-  },
-  {
-    id: 3,
-    itemCode: 'ITEM-003',
-    itemName: '包装盒',
-    spec: '500个/箱',
-    itemCategory: '包材',
-    purchaseUnit: '箱',
-    pricingDetailType: '活动定价',
-    supplier: '盒马包材',
-    spotPrice: 96,
-    taxIncludedPrice: 96,
-    taxRate: 13,
-    taxExcludedPrice: 84.96,
-    priceLimit: '90.00-105.00',
-    effectiveDate: '2026-04-10',
-    expireDate: '2026-06-30',
-    enabledStatus: '停用',
-    remark: '活动价',
-    ladderPrice: '否',
-  },
-]);
+const tableData = ref<PricingDetailRow[]>([]);
 
 const supplierTree = computed<TreeNode[]>(() => supplierOptions.value.map((item) => ({
   value: item.value,
@@ -172,7 +112,7 @@ const filteredRows = computed(() => tableData.value.filter((row) => {
   const matchedType = !query.pricingDetailType || row.pricingDetailType === query.pricingDetailType;
   const matchedSupplier = !query.supplier || row.supplier === query.supplier;
   const matchedItem = !query.itemCode || row.itemCode === query.itemCode;
-  const matchedLadder = query.ladderPrice === '全部' || row.ladderPrice === query.ladderPrice;
+  const matchedLadder = query.ladderPrice === 'ALL' || row.ladderPrice === query.ladderPrice;
   const matchedEnabled = !query.enabledStatus || row.enabledStatus === query.enabledStatus;
   return matchedDate && matchedType && matchedSupplier && matchedItem && matchedLadder && matchedEnabled;
 }));
@@ -194,7 +134,7 @@ const handleReset = () => {
   query.pricingDetailType = '';
   query.supplier = '';
   query.itemCode = '';
-  query.ladderPrice = '全部';
+  query.ladderPrice = 'ALL';
   query.enabledStatus = '';
   currentPage.value = 1;
 };
@@ -210,14 +150,6 @@ const handlePageChange = (page: number) => {
 const handlePageSizeChange = (size: number) => {
   pageSize.value = size;
   currentPage.value = 1;
-};
-
-const handleToolbarAction = (action: string) => {
-  ElMessage.info(`${action}功能待接入`);
-};
-
-const handleEdit = (row: PricingDetailRow) => {
-  ElMessage.info(`调整定价：${row.itemName}`);
 };
 
 watch(
@@ -240,7 +172,7 @@ onMounted(() => {
       </el-form-item>
       <el-form-item label="定价明细类型">
         <el-select v-model="query.pricingDetailType" clearable placeholder="请选择" style="width: 150px">
-          <el-option v-for="option in pricingDetailTypeOptions" :key="option" :label="option" :value="option" />
+          <el-option v-for="option in pricingDetailTypeOptions" :key="option.value" :label="option.label" :value="option.value" />
         </el-select>
       </el-form-item>
       <el-form-item label="供应商">
@@ -263,12 +195,22 @@ onMounted(() => {
       </el-form-item>
       <el-form-item label="是否阶梯价">
         <el-select v-model="query.ladderPrice" style="width: 120px">
-          <el-option v-for="option in ladderPriceOptions" :key="option" :label="option" :value="option" />
+          <el-option
+            v-for="option in ladderPriceOptions"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
+          />
         </el-select>
       </el-form-item>
       <el-form-item label="启用状态">
         <el-select v-model="query.enabledStatus" clearable placeholder="请选择" style="width: 120px">
-          <el-option v-for="option in enabledStatusOptions" :key="option" :label="option" :value="option" />
+          <el-option
+            v-for="option in enabledStatusOptions"
+            :key="option.itemCode"
+            :label="option.itemLabel"
+            :value="option.itemCode"
+          />
         </el-select>
       </el-form-item>
       <el-form-item>
@@ -278,10 +220,10 @@ onMounted(() => {
     </CommonQuerySection>
 
     <div class="table-toolbar">
-      <el-button :disabled="!selectedIds.length" @click="handleToolbarAction('批量调整')">批量调整</el-button>
-      <el-button :disabled="!selectedIds.length" @click="handleToolbarAction('批量启用')">批量启用</el-button>
-      <el-button :disabled="!selectedIds.length" @click="handleToolbarAction('批量停用')">批量停用</el-button>
-      <el-button @click="handleToolbarAction('导出')"><el-icon><Download /></el-icon>导出</el-button>
+      <el-button disabled>批量调整</el-button>
+      <el-button disabled>批量启用</el-button>
+      <el-button disabled>批量停用</el-button>
+      <el-button disabled><el-icon><Download /></el-icon>导出</el-button>
     </div>
 
     <el-table
@@ -319,11 +261,6 @@ onMounted(() => {
       <el-table-column prop="expireDate" label="价格失效日期" min-width="130" show-overflow-tooltip />
       <el-table-column prop="enabledStatus" label="启用状态" min-width="100" show-overflow-tooltip />
       <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
-      <el-table-column label="操作" width="100" fixed="right">
-        <template #default="{ row }">
-          <el-button type="primary" link @click="handleEdit(row)">调整</el-button>
-        </template>
-      </el-table-column>
     </el-table>
 
     <div class="table-pagination">

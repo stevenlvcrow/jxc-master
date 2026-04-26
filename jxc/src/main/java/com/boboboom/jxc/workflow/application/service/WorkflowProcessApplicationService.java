@@ -51,6 +51,7 @@ public class WorkflowProcessApplicationService {
             "PURCHASE_ORDER",
             "PURCHASE_RECEIPT",
             "PURCHASE_RETURN",
+            "PERIOD_OPENING_BALANCE",
             "INVENTORY_CHECK",
             "MULTI_INVENTORY_CHECK"
     ).collect(Collectors.toUnmodifiableSet());

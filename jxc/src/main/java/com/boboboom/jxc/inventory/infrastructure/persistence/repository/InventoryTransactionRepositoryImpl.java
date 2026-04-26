@@ -1,5 +1,6 @@
 package com.boboboom.jxc.inventory.infrastructure.persistence.repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -38,6 +39,25 @@ public class InventoryTransactionRepositoryImpl implements InventoryTransactionR
                                                                      LocalDateTime startTime,
                                                                      LocalDateTime endTime) {
         return inventoryTransactionMapper.selectByScopeAndCreatedAtRange(scopeType, scopeId, startTime, endTime);
+    }
+
+    @Override
+    public List<InventoryTransactionDO> findByScopeAndBusinessDateRange(String scopeType,
+                                                                        Long scopeId,
+                                                                        LocalDate startDate,
+                                                                        LocalDate endDate) {
+        return inventoryTransactionMapper.selectByScopeAndBusinessDateRange(scopeType, scopeId, startDate, endDate);
+    }
+
+    @Override
+    public boolean existsByScopeWarehouseAndBusinessDateOnOrAfter(String scopeType,
+                                                                  Long scopeId,
+                                                                  String warehouseName,
+                                                                  LocalDate businessDate) {
+        Long count = inventoryTransactionMapper.countByScopeWarehouseAndBusinessDateOnOrAfter(
+                scopeType, scopeId, warehouseName, businessDate
+        );
+        return count != null && count > 0;
     }
 
     @Override

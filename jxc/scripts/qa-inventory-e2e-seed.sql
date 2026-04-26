@@ -22,6 +22,9 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_ADMIN') THEN
         RAISE EXCEPTION 'Builtin role GROUP_ADMIN is missing.';
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'GROUP_MEMBER') THEN
+        RAISE EXCEPTION 'Builtin role GROUP_MEMBER is missing.';
+    END IF;
     IF NOT EXISTS (SELECT 1 FROM sys_role WHERE tenant_group_id = 0 AND role_code = 'STORE_ADMIN') THEN
         RAISE EXCEPTION 'Builtin role STORE_ADMIN is missing.';
     END IF;
@@ -68,6 +71,7 @@ FROM sys_group g
 CROSS JOIN (
     VALUES
         ('QA_GROUP_AUDITOR', 'QA集团审核员', 'GROUP', 'GROUP'),
+        ('GROUP_MEMBER', 'QA集团成员', 'GROUP', 'SELF'),
         ('SALESMAN', 'QA门店仅自己业务员', 'STORE', 'SELF'),
         ('FINANCE', 'QA门店审核员', 'STORE', 'STORE')
 ) AS seed(role_code, role_name, role_type, data_scope_type)
@@ -345,10 +349,15 @@ SELECT u.id, r.id, seed.scope_type, seed.scope_id, admin_user.id, 'ENABLED'
 FROM (
     SELECT '13990000000' AS phone, 'PLATFORM_SUPER_ADMIN' AS role_code, 0::BIGINT AS tenant_group_id, 'PLATFORM' AS scope_type, NULL::BIGINT AS scope_id
     UNION ALL SELECT '13990000001', 'GROUP_ADMIN', 0, 'GROUP', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A')
+    UNION ALL SELECT '13990000002', 'GROUP_MEMBER', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A'), 'GROUP', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A')
     UNION ALL SELECT '13990000002', 'STORE_ADMIN', 0, 'STORE', (SELECT id FROM sys_store WHERE store_code = 'QA-A1')
+    UNION ALL SELECT '13990000003', 'GROUP_MEMBER', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A'), 'GROUP', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A')
     UNION ALL SELECT '13990000003', 'SALESMAN', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A'), 'STORE', (SELECT id FROM sys_store WHERE store_code = 'QA-A1')
+    UNION ALL SELECT '13990000004', 'GROUP_MEMBER', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A'), 'GROUP', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A')
     UNION ALL SELECT '13990000004', 'FINANCE', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A'), 'STORE', (SELECT id FROM sys_store WHERE store_code = 'QA-A1')
+    UNION ALL SELECT '13990000005', 'GROUP_MEMBER', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A'), 'GROUP', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A')
     UNION ALL SELECT '13990000005', 'SALESMAN', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-A'), 'STORE', (SELECT id FROM sys_store WHERE store_code = 'QA-A2')
+    UNION ALL SELECT '13990000006', 'GROUP_MEMBER', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-B'), 'GROUP', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-B')
     UNION ALL SELECT '13990000006', 'SALESMAN', (SELECT id FROM sys_group WHERE group_code = 'QA-GRP-B'), 'STORE', (SELECT id FROM sys_store WHERE store_code = 'QA-B1')
 ) seed
 JOIN sys_user u ON u.phone = seed.phone

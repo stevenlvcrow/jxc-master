@@ -17,8 +17,8 @@ import {
 } from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
 import { useStoreWarehouseTree } from '@/composables/useStoreWarehouseTree';
-import { normalizeOrgId } from '@/utils/org';
 import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 
 type TimeType = '盘点日期' | '创建时间';
 type PrintFilter = '' | 'UNPRINTED' | 'PRINTED';
@@ -26,6 +26,7 @@ type PrintFilter = '' | 'UNPRINTED' | 'PRINTED';
 const sessionStore = useSessionStore();
 const router = useRouter();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
+const { orgId, requireOrgId } = useRequiredOrgScope();
 const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
 const INVENTORY_CHECK_RANGE_TYPE_DICT = 'inventory.check_range_type';
 const INVENTORY_CHECK_GENERATION_STATUS_DICT = 'inventory.check_generation_status';
@@ -45,12 +46,6 @@ const printStatusOptions = computed(() => [
 ]);
 const statusLabelMap = computed(() =>
   documentStatusOptions.value.reduce<Record<string, string>>((result, item) => {
-    result[item.itemCode] = item.itemLabel;
-    return result;
-  }, {}),
-);
-const checkRangeLabelMap = computed(() =>
-  checkRangeTypeOptions.value.reduce<Record<string, string>>((result, item) => {
     result[item.itemCode] = item.itemLabel;
     return result;
   }, {}),
@@ -96,8 +91,6 @@ const permissions = reactive({
   canApprove: false,
   canUnapprove: false,
 });
-
-const orgId = computed(() => normalizeOrgId(sessionStore.currentOrgId) || undefined);
 
 const loadPermissions = async () => {
   if (!orgId.value) {
@@ -156,7 +149,7 @@ const loadRows = async () => {
 const fetchAllPages = async <T>(loader: (pageNum: number, pageSizeValue: number) => Promise<{ list: T[]; total: number; pageSize: number }>) => {
   const collected: T[] = [];
   let pageNum = 1;
-  let totalCount = 0;
+  let totalCount: number;
   do {
     const page = await loader(pageNum, 200);
     const list = Array.isArray(page.list) ? page.list : [];
@@ -173,8 +166,8 @@ const fetchAllPages = async <T>(loader: (pageNum: number, pageSizeValue: number)
 const toCsvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
 const handleExport = async () => {
-  if (!orgId.value) {
-    ElMessage.warning('未选择机构');
+  const currentOrgId = requireOrgId();
+  if (!currentOrgId) {
     return;
   }
   exportLoading.value = true;
@@ -194,7 +187,7 @@ const handleExport = async () => {
         printStatus: query.printStatus || undefined,
         generatedStatus: query.generatedStatus || undefined,
         remark: query.remark || undefined,
-      }, orgId.value);
+      }, currentOrgId);
       return {
         list: page.list,
         total: Number(page.total ?? 0),

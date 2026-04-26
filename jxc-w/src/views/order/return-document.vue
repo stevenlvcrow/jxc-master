@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { Download, Plus, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import { useSessionStore } from '@/stores/session';
 
@@ -15,12 +14,11 @@ const orgTree = computed<TreeNode[]>(() => sessionStore.rootGroups.map((node) =>
 const query = reactive({ dateType: '退货日期', startDate: '', endDate: '', documentCode: '', documentStatus: '', refundStatus: '全部', returnMode: '全部', includePresale: '', processOrg: '', supplierOrg: '', deliveryOrg: '', businessMode: '', returnType: '', createType: '', documentTag: '', item: '', reconciliationStatus: '', returnReason: '', adjustedPrice: '', printStatus: '全部', remark: '', queryScheme: '系统默认方案' });
 const currentPage = ref(1);
 const pageSize = ref(10);
-const rows = ref<Row[]>([{ id: 1, documentCode: 'RT-202604-001', processOrg: '朝阳门店', supplierOrg: '华东配送中心', deliveryOrg: '朝阳门店', returnAmount: 220, originalAmount: 260, promoDiscount: 10, manualDiscount: 0, couponDiscount: 5, giftDiscount: 0, lossAmount: 25, finalAmount: 220, documentStatus: '已提交', refundStatus: '未退款', returnMode: '按单返货', businessMode: '统配', returnType: '普通返货', returnDate: '2026-04-24', shipDate: '2026-04-25', lastOperatedAt: '2026-04-25 11:20:00', remark: '临期返货', printStatus: '未打印', reconciliationStatus: '未对账', submitter: '张敏' }]);
+const rows = ref<Row[]>([]);
 const filteredRows = computed(() => rows.value.filter((row) => (!query.documentCode || row.documentCode.includes(query.documentCode)) && (!query.documentStatus || row.documentStatus === query.documentStatus)));
 const pagedRows = computed(() => filteredRows.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value));
 const money = (v: number) => v.toFixed(2);
 const reset = () => Object.assign(query, { dateType: '退货日期', startDate: '', endDate: '', documentCode: '', documentStatus: '', refundStatus: '全部', returnMode: '全部', includePresale: '', processOrg: '', supplierOrg: '', deliveryOrg: '', businessMode: '', returnType: '', createType: '', documentTag: '', item: '', reconciliationStatus: '', returnReason: '', adjustedPrice: '', printStatus: '全部', remark: '', queryScheme: '系统默认方案' });
-const action = (name: string) => ElMessage.info(`${name}功能待接入`);
 </script>
 
 <template>
@@ -49,11 +47,11 @@ const action = (name: string) => ElMessage.info(`${name}功能待接入`);
       <el-form-item label="查询方案"><el-select v-model="query.queryScheme" style="width:150px"><el-option label="系统默认方案" value="系统默认方案" /></el-select></el-form-item>
       <el-form-item><el-button type="primary" @click="currentPage=1"><el-icon><Search /></el-icon>查询</el-button><el-button @click="reset"><el-icon><RefreshRight /></el-icon>重置</el-button></el-form-item>
     </CommonQuerySection>
-    <div class="table-toolbar"><el-button type="primary" @click="action('新增-按单返货')"><el-icon><Plus /></el-icon>新增-按单返货</el-button><el-button @click="action('批量打印')"><el-icon><Printer /></el-icon>批量打印</el-button><el-button @click="action('批量导出')"><el-icon><Download /></el-icon>批量导出</el-button></div>
+    <div class="table-toolbar"><el-button type="primary" disabled><el-icon><Plus /></el-icon>新增-按单返货</el-button><el-button disabled><el-icon><Printer /></el-icon>批量打印</el-button><el-button disabled><el-icon><Download /></el-icon>批量导出</el-button></div>
     <el-table :data="pagedRows" border stripe class="erp-table" :fit="false" height="460">
       <el-table-column type="index" label="序号" width="56" fixed="left" /><el-table-column prop="documentCode" label="单据号" min-width="150" fixed="left" /><el-table-column prop="processOrg" label="处理机构" min-width="120" /><el-table-column prop="supplierOrg" label="供货机构" min-width="130" /><el-table-column prop="deliveryOrg" label="送货机构" min-width="130" />
       <el-table-column v-for="col in ['returnAmount','originalAmount','promoDiscount','manualDiscount','couponDiscount','giftDiscount','lossAmount','finalAmount']" :key="col" :prop="col" :label="{returnAmount:'返货金额',originalAmount:'折前金额',promoDiscount:'促销折扣',manualDiscount:'手动折扣',couponDiscount:'支付折扣-优惠券',giftDiscount:'支付折扣-赠送金额',lossAmount:'折损金额',finalAmount:'折后金额'}[col]" min-width="130" align="right"><template #default="{ row }">{{ money(row[col]) }}</template></el-table-column>
-      <el-table-column prop="documentStatus" label="单据状态" min-width="100" /><el-table-column prop="refundStatus" label="退款状态" min-width="100" /><el-table-column prop="returnMode" label="返货模式" min-width="110" /><el-table-column prop="businessMode" label="业务模式" min-width="100" /><el-table-column prop="returnType" label="返货单类型" min-width="120" /><el-table-column prop="returnDate" label="退货日期" min-width="120" /><el-table-column prop="shipDate" label="发货日期" min-width="120" /><el-table-column prop="lastOperatedAt" label="最后操作时间" min-width="170" /><el-table-column prop="remark" label="备注" min-width="150" /><el-table-column prop="printStatus" label="打印状态" min-width="100" /><el-table-column prop="reconciliationStatus" label="对账状态" min-width="100" /><el-table-column prop="submitter" label="提交人" min-width="100" /><el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button type="primary" link @click="action(`查看：${row.documentCode}`)">查看</el-button></template></el-table-column>
+      <el-table-column prop="documentStatus" label="单据状态" min-width="100" /><el-table-column prop="refundStatus" label="退款状态" min-width="100" /><el-table-column prop="returnMode" label="返货模式" min-width="110" /><el-table-column prop="businessMode" label="业务模式" min-width="100" /><el-table-column prop="returnType" label="返货单类型" min-width="120" /><el-table-column prop="returnDate" label="退货日期" min-width="120" /><el-table-column prop="shipDate" label="发货日期" min-width="120" /><el-table-column prop="lastOperatedAt" label="最后操作时间" min-width="170" /><el-table-column prop="remark" label="备注" min-width="150" /><el-table-column prop="printStatus" label="打印状态" min-width="100" /><el-table-column prop="reconciliationStatus" label="对账状态" min-width="100" /><el-table-column prop="submitter" label="提交人" min-width="100" />
     </el-table>
     <div class="table-pagination"><el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :total="filteredRows.length" :page-sizes="[10,20,50]" background small layout="total, sizes, prev, pager, next, jumper" /></div>
   </section>

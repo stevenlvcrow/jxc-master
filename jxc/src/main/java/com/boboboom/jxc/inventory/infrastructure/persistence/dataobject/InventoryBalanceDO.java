@@ -15,6 +15,8 @@ public class InventoryBalanceDO extends BaseAuditDO {
     private String itemCode;
     private String itemName;
     private BigDecimal quantity;
+    private BigDecimal costAmount;
+    private BigDecimal avgCost;
 
     /** 获取ScopeType。 */
     public String getScopeType() {
@@ -74,6 +76,26 @@ public class InventoryBalanceDO extends BaseAuditDO {
     /** 设置Quantity。 */
     public void setQuantity(BigDecimal quantityValue) {
         this.quantity = quantityValue;
+    }
+
+    /** 获取CostAmount。 */
+    public BigDecimal getCostAmount() {
+        return costAmount;
+    }
+
+    /** 设置CostAmount。 */
+    public void setCostAmount(BigDecimal costAmountValue) {
+        this.costAmount = costAmountValue;
+    }
+
+    /** 获取AvgCost。 */
+    public BigDecimal getAvgCost() {
+        return avgCost;
+    }
+
+    /** 设置AvgCost。 */
+    public void setAvgCost(BigDecimal avgCostValue) {
+        this.avgCost = avgCostValue;
     }
 }
 

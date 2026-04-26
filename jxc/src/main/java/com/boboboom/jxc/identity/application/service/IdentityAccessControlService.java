@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
+import com.boboboom.jxc.identity.domain.repository.RoleRepository;
 import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
@@ -24,16 +25,21 @@ import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleR
 public class IdentityAccessControlService {
 
     private final UserRoleRelRepository userRoleRelRepository;
+    private final RoleRepository roleRepository;
     private final StoreRepository storeRepository;
     private final OrgScopeService orgScopeService;
     private final DictionaryLookupService dictionaryLookupService;
+    private static final String SCOPE_GROUP = "GROUP";
+    private static final String DATA_SCOPE_GROUP = "GROUP";
 
     /** 身份与权限服务，负责相关业务规则和流程协作。 */
     public IdentityAccessControlService(UserRoleRelRepository userRoleRelRepositoryValue,
+                                        RoleRepository roleRepositoryValue,
                                         StoreRepository storeRepositoryValue,
                                         OrgScopeService orgScopeServiceValue,
                                         DictionaryLookupService dictionaryLookupServiceValue) {
         this.userRoleRelRepository = userRoleRelRepositoryValue;
+        this.roleRepository = roleRepositoryValue;
         this.storeRepository = storeRepositoryValue;
         this.orgScopeService = orgScopeServiceValue;
         this.dictionaryLookupService = dictionaryLookupServiceValue;
@@ -43,6 +49,7 @@ public class IdentityAccessControlService {
     public List<Long> listManagedGroupIds(Long operatorId) {
         return userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, "GROUP", enabledStatus())
                 .stream()
+                .filter(this::isGroupManagementRel)
                 .map(UserRoleRelDO::getScopeId)
                 .filter(Objects::nonNull)
                 .distinct()
@@ -69,6 +76,7 @@ public class IdentityAccessControlService {
         }
         boolean hasGroupScope = userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, "GROUP", enabledStatus())
                 .stream()
+                .filter(this::isGroupManagementRel)
                 .map(UserRoleRelDO::getScopeId)
                 .filter(Objects::nonNull)
                 .anyMatch(scopeId -> scopeId.equals(groupId));
@@ -136,6 +144,16 @@ public class IdentityAccessControlService {
 
     private boolean isGroupOrStoreRole(RoleDO role) {
         return "GROUP".equals(role.getRoleType()) || "STORE".equals(role.getRoleType());
+    }
+
+    private boolean isGroupManagementRel(UserRoleRelDO rel) {
+        if (rel == null || !SCOPE_GROUP.equals(rel.getScopeType()) || rel.getRoleId() == null) {
+            return false;
+        }
+        return roleRepository.findById(rel.getRoleId())
+                .filter(role -> SCOPE_GROUP.equals(role.getRoleType()))
+                .filter(role -> DATA_SCOPE_GROUP.equals(role.getDataScopeType()))
+                .isPresent();
     }
 
     /** 校验并保证角色菜单Assignable满足业务规则。 */

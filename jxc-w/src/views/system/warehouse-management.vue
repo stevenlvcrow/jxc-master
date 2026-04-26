@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import CommonToolbarSection, { type ToolbarButton } from '@/components/CommonToolbarSection.vue';
-import { useSessionStore } from '@/stores/session';
+import { useSessionStore, type OrgNode } from '@/stores/session';
 import {
   fetchStoreWarehousesApi,
   createStoreWarehouseApi,
@@ -14,7 +14,6 @@ import {
   type WarehouseRow,
   type WarehouseCreatePayload,
 } from '@/api/modules/warehouse';
-import type { OrgNode } from '@/stores/session';
 import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 const sessionStore = useSessionStore();
@@ -240,6 +239,13 @@ const handleSelectionChange = (rows: WarehouseRow[]) => {
 /** Map UI status to API status */
 const toApiStatus = (enabled: boolean) => enabled ? enabledStatus.value : disabledStatus.value;
 
+const stripPercentSuffix = (value?: string | null) => String(value ?? '').replace(/%/g, '').trim();
+
+const formatPercentValue = (value?: string | null) => {
+  const normalized = stripPercentSuffix(value);
+  return normalized ? `${normalized}%` : '-';
+};
+
 /** Build payload from form */
 const buildPayload = (): WarehouseCreatePayload => ({
   warehouseName: form.warehouseName.trim(),
@@ -250,8 +256,8 @@ const buildPayload = (): WarehouseCreatePayload => ({
   contactPhone: form.contactPhone.trim(),
   regionPath: form.region.length > 0 ? form.region.join('/') : undefined,
   address: form.address.trim(),
-  targetGrossMargin: form.targetGrossMargin.trim(),
-  idealPurchaseSaleRatio: form.idealPurchaseSaleRatio.trim(),
+  targetGrossMargin: stripPercentSuffix(form.targetGrossMargin),
+  idealPurchaseSaleRatio: stripPercentSuffix(form.idealPurchaseSaleRatio),
 });
 
 /** Format datetime for display */
@@ -318,8 +324,8 @@ const handleEdit = async (row: WarehouseRow) => {
     form.address = '';
   }
 
-  form.targetGrossMargin = row.targetGrossMargin?.replace('%', '') || '';
-  form.idealPurchaseSaleRatio = row.idealPurchaseSaleRatio || '';
+  form.targetGrossMargin = stripPercentSuffix(row.targetGrossMargin);
+  form.idealPurchaseSaleRatio = stripPercentSuffix(row.idealPurchaseSaleRatio);
 
   dialogVisible.value = true;
 };
@@ -500,9 +506,11 @@ const handlePageSizeChange = (size: number) => {
       <el-table-column prop="contactPhone" label="联系电话" min-width="130" show-overflow-tooltip />
       <el-table-column prop="address" label="详细地址" min-width="220" show-overflow-tooltip />
       <el-table-column prop="targetGrossMargin" label="目标毛利率" min-width="100" show-overflow-tooltip>
-        <template #default="{ row }">{{ row.targetGrossMargin }}%</template>
+        <template #default="{ row }">{{ formatPercentValue(row.targetGrossMargin) }}</template>
       </el-table-column>
-      <el-table-column prop="idealPurchaseSaleRatio" label="理想采销比" min-width="100" show-overflow-tooltip />
+      <el-table-column prop="idealPurchaseSaleRatio" label="理想采销比" min-width="100" show-overflow-tooltip>
+        <template #default="{ row }">{{ formatPercentValue(row.idealPurchaseSaleRatio) }}</template>
+      </el-table-column>
       <el-table-column prop="updatedAt" label="操作时间" min-width="170" show-overflow-tooltip>
         <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
       </el-table-column>
@@ -647,10 +655,10 @@ const handlePageSizeChange = (size: number) => {
       <el-descriptions-item label="联系电话">{{ viewingRow?.contactPhone || '-' }}</el-descriptions-item>
       <el-descriptions-item label="详细地址" :span="2">{{ viewingRow?.address || '-' }}</el-descriptions-item>
       <el-descriptions-item label="目标毛利率">
-        {{ viewingRow?.targetGrossMargin ? `${viewingRow.targetGrossMargin}%` : '-' }}
+        {{ formatPercentValue(viewingRow?.targetGrossMargin) }}
       </el-descriptions-item>
       <el-descriptions-item label="理想采销比">
-        {{ viewingRow?.idealPurchaseSaleRatio ? `${viewingRow.idealPurchaseSaleRatio}%` : '-' }}
+        {{ formatPercentValue(viewingRow?.idealPurchaseSaleRatio) }}
       </el-descriptions-item>
       <el-descriptions-item label="操作时间" :span="2">{{ formatDateTime(viewingRow?.updatedAt) }}</el-descriptions-item>
     </el-descriptions>

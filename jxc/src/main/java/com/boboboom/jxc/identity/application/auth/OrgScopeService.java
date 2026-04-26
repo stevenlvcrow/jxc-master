@@ -25,6 +25,7 @@ public class OrgScopeService {
 
     private static final String PLATFORM_SUPER_ADMIN_ROLE_CODE = "PLATFORM_SUPER_ADMIN";
     private static final String PLATFORM_ADMIN_ROLE_CODE = "PLATFORM_ADMIN";
+    private static final String DATA_SCOPE_GROUP = "GROUP";
 
     private final RoleRepository roleRepository;
     private final UserRoleRelRepository userRoleRelRepository;
@@ -63,7 +64,7 @@ public class OrgScopeService {
             throw new BusinessException("请先选择有权限的机构");
         }
         if (SCOPE_GROUP.equals(requested.scopeType())) {
-            if (!hasScope(userId, SCOPE_GROUP, requested.scopeId())) {
+            if (!hasGroupWideScope(userId, requested.scopeId())) {
                 throw new BusinessException("当前账号无该集团权限");
             }
             return toAccessibleScope(requested);
@@ -72,7 +73,7 @@ public class OrgScopeService {
             return toAccessibleScope(requested);
         }
         Long groupId = findGroupIdByStoreId(requested.scopeId());
-        if (groupId != null && hasScope(userId, SCOPE_GROUP, groupId)) {
+        if (groupId != null && hasGroupWideScope(userId, groupId)) {
             return new AccessibleScope(SCOPE_STORE, requested.scopeId(), groupId);
         }
         throw new BusinessException("当前账号无该门店权限");
@@ -114,7 +115,7 @@ public class OrgScopeService {
             return new AccessibleScope(SCOPE_STORE, storeId, store.getGroupId());
         }
         Long groupId = store.getGroupId();
-        if (hasScope(userId, SCOPE_GROUP, groupId)) {
+        if (hasGroupWideScope(userId, groupId)) {
             return new AccessibleScope(SCOPE_STORE, storeId, groupId);
         }
         throw new BusinessException("当前账号无该门店权限");
@@ -140,7 +141,7 @@ public class OrgScopeService {
         }
         if (!isPlatformAdmin(userId)) {
             boolean hasStoreScope = hasScope(userId, SCOPE_STORE, requested.scopeId());
-            boolean hasGroupScope = hasScope(userId, SCOPE_GROUP, store.getGroupId());
+            boolean hasGroupScope = hasGroupWideScope(userId, store.getGroupId());
             if (!hasStoreScope && !hasGroupScope) {
                 throw new BusinessException("当前账号无该门店权限");
             }
@@ -153,7 +154,7 @@ public class OrgScopeService {
         if (group == null) {
             throw new BusinessException("集团不存在");
         }
-        if (!isPlatformAdmin(userId) && !hasScope(userId, SCOPE_GROUP, groupId)) {
+        if (!isPlatformAdmin(userId) && !hasGroupWideScope(userId, groupId)) {
             throw new BusinessException("当前账号无该集团权限");
         }
         return new WorkflowScope(SCOPE_GROUP, groupId, groupId);
@@ -179,7 +180,7 @@ public class OrgScopeService {
         if (group == null) {
             throw new BusinessException("集团不存在");
         }
-        if (isPlatformAdmin(userId) || hasScope(userId, SCOPE_GROUP, groupId)) {
+        if (isPlatformAdmin(userId) || hasGroupWideScope(userId, groupId)) {
             return groupId;
         }
         throw new BusinessException("当前账号无该集团权限");
@@ -238,6 +239,19 @@ public class OrgScopeService {
                 scopeId,
                 enabledStatus()
         );
+    }
+
+    private boolean hasGroupWideScope(Long userId, Long groupId) {
+        if (userId == null || groupId == null) {
+            return false;
+        }
+        return userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(userId, SCOPE_GROUP, enabledStatus())
+                .stream()
+                .filter(rel -> groupId.equals(rel.getScopeId()))
+                .anyMatch(rel -> roleRepository.findById(rel.getRoleId())
+                        .map(RoleDO::getDataScopeType)
+                        .filter(DATA_SCOPE_GROUP::equals)
+                        .isPresent());
     }
 
     private boolean hasPlatformRole(Long userId, String roleCode) {

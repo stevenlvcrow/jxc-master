@@ -10,6 +10,8 @@ public interface InventoryBalanceRepository {
 
     List<InventoryBalanceDO> findByScopeOrdered(String scopeType, Long scopeId);
 
+    List<InventoryBalanceDO> findByScopeAndWarehouseOrdered(String scopeType, Long scopeId, String warehouseName);
+
     Optional<InventoryBalanceDO> findByScopeWarehouseAndItem(String scopeType, Long scopeId, String warehouseName, String itemCode);
 
     Optional<InventoryBalanceDO> lockByScopeWarehouseAndItem(String scopeType, Long scopeId, String warehouseName, String itemCode);

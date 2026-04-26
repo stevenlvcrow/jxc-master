@@ -64,6 +64,7 @@ public class InventoryWorkflowBootstrapService {
             new WorkflowProcessSeed("PURCHASE_ORDER", "采购订单流程"),
             new WorkflowProcessSeed("PURCHASE_RECEIPT", "采购收货单流程"),
             new WorkflowProcessSeed("PURCHASE_RETURN", "采购退货单流程"),
+            new WorkflowProcessSeed("PERIOD_OPENING_BALANCE", "期初库存流程"),
             new WorkflowProcessSeed("INVENTORY_CHECK", "盘点单流程"),
             new WorkflowProcessSeed("MULTI_INVENTORY_CHECK", "多人盘点单流程")
     );

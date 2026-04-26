@@ -5,15 +5,150 @@
 
 SET search_path TO dev;
 
-DO $$
-BEGIN
-    IF to_regclass('dev.sys_group') IS NULL
-        OR to_regclass('dev.item_profile') IS NULL
-        OR to_regclass('dev.inventory_balance') IS NULL
-        OR to_regclass('dev.inventory_transaction') IS NULL THEN
-        RAISE EXCEPTION 'Required schema is missing. Run schema and QA seed first.';
-    END IF;
-END $$;
+WITH schema_checks AS (
+    SELECT 'schema.required_tables' AS check_name,
+           to_regclass('dev.sys_group') IS NOT NULL
+           AND to_regclass('dev.item_profile') IS NOT NULL
+           AND to_regclass('dev.inventory_balance') IS NOT NULL
+           AND to_regclass('dev.inventory_transaction') IS NOT NULL AS passed,
+           'sys_group,item_profile,inventory_balance,inventory_transaction' AS details
+)
+SELECT CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END AS status,
+       check_name,
+       details
+FROM schema_checks;
+
+DROP VIEW IF EXISTS qa_inventory_docs;
+CREATE TEMP VIEW qa_inventory_docs AS
+SELECT 'PURCHASE_INBOUND' AS biz_type, id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_purchase_inbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%'
+   OR COALESCE(document_code, '') LIKE 'QA-%'
+   OR COALESCE(upstream_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'PURCHASE_RETURN_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_purchase_return_outbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'DEPARTMENT_PICKING', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_department_picking
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'STOCK_TRANSFER', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_stock_transfer
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'STOCK_TRANSFER_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_stock_transfer_inbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'DEPARTMENT_TRANSFER', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_department_transfer
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'DAMAGE_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_damage_outbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'OTHER_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_other_inbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'OTHER_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_other_outbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'PROFIT_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_profit_inbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%' OR COALESCE(upstream_code, '') LIKE 'PD-%'
+UNION ALL
+SELECT 'LOSS_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_loss_outbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%' OR COALESCE(upstream_code, '') LIKE 'PD-%'
+UNION ALL
+SELECT 'PRODUCTION_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_production_inbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'CUSTOMER_SALES_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_customer_sales_outbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'CUSTOMER_RETURN_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_customer_return_inbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'DISH_CONSUMPTION_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_dish_consumption_outbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'STORE_TRANSFER', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_store_transfer
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+UNION ALL
+SELECT 'STOCK_TRANSFER_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id, upstream_code
+FROM inventory_stock_transfer_outbound
+WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%';
+
+DROP VIEW IF EXISTS qa_inventory_doc_lines;
+CREATE TEMP VIEW qa_inventory_doc_lines AS
+SELECT 'PURCHASE_INBOUND' AS biz_type, inbound_id AS header_id, id AS line_id, item_code, category, quantity
+FROM inventory_purchase_inbound_line
+UNION ALL
+SELECT 'PURCHASE_RETURN_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_purchase_return_outbound_line
+UNION ALL
+SELECT 'DEPARTMENT_PICKING', header_id, id, item_code, category, quantity FROM inventory_department_picking_line
+UNION ALL
+SELECT 'STOCK_TRANSFER', header_id, id, item_code, category, quantity FROM inventory_stock_transfer_line
+UNION ALL
+SELECT 'STOCK_TRANSFER_INBOUND', header_id, id, item_code, category, quantity FROM inventory_stock_transfer_inbound_line
+UNION ALL
+SELECT 'DEPARTMENT_TRANSFER', header_id, id, item_code, category, quantity FROM inventory_department_transfer_line
+UNION ALL
+SELECT 'DAMAGE_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_damage_outbound_line
+UNION ALL
+SELECT 'OTHER_INBOUND', header_id, id, item_code, category, quantity FROM inventory_other_inbound_line
+UNION ALL
+SELECT 'OTHER_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_other_outbound_line
+UNION ALL
+SELECT 'PROFIT_INBOUND', header_id, id, item_code, category, quantity FROM inventory_profit_inbound_line
+UNION ALL
+SELECT 'LOSS_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_loss_outbound_line
+UNION ALL
+SELECT 'PRODUCTION_INBOUND', header_id, id, item_code, category, quantity FROM inventory_production_inbound_line
+UNION ALL
+SELECT 'CUSTOMER_SALES_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_customer_sales_outbound_line
+UNION ALL
+SELECT 'CUSTOMER_RETURN_INBOUND', header_id, id, item_code, category, quantity FROM inventory_customer_return_inbound_line
+UNION ALL
+SELECT 'DISH_CONSUMPTION_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_dish_consumption_outbound_line
+UNION ALL
+SELECT 'STORE_TRANSFER', header_id, id, item_code, category, quantity FROM inventory_store_transfer_line
+UNION ALL
+SELECT 'STOCK_TRANSFER_OUTBOUND', header_id, id, item_code, category, quantity FROM inventory_stock_transfer_outbound_line;
+
+DROP VIEW IF EXISTS qa_expected_inventory_business;
+CREATE TEMP VIEW qa_expected_inventory_business AS
+SELECT *
+FROM (VALUES
+    ('PURCHASE_INBOUND', 'INBOUND'),
+    ('STOCK_TRANSFER_INBOUND', 'INBOUND'),
+    ('PRODUCTION_INBOUND', 'INBOUND'),
+    ('OTHER_INBOUND', 'INBOUND'),
+    ('CUSTOMER_RETURN_INBOUND', 'INBOUND'),
+    ('PROFIT_INBOUND', 'INBOUND'),
+    ('PURCHASE_RETURN_OUTBOUND', 'OUTBOUND'),
+    ('DEPARTMENT_PICKING', 'OUTBOUND'),
+    ('STOCK_TRANSFER', 'OUTBOUND'),
+    ('DEPARTMENT_TRANSFER', 'OUTBOUND'),
+    ('DAMAGE_OUTBOUND', 'OUTBOUND'),
+    ('OTHER_OUTBOUND', 'OUTBOUND'),
+    ('CUSTOMER_SALES_OUTBOUND', 'OUTBOUND'),
+    ('DISH_CONSUMPTION_OUTBOUND', 'OUTBOUND'),
+    ('STORE_TRANSFER', 'OUTBOUND'),
+    ('STOCK_TRANSFER_OUTBOUND', 'OUTBOUND'),
+    ('LOSS_OUTBOUND', 'OUTBOUND')
+) AS expected(biz_type, expected_direction);
 
 WITH checks AS (
     SELECT 'master.groups' AS check_name,
@@ -212,112 +347,119 @@ SELECT CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END AS status,
 FROM checks
 ORDER BY status, check_name;
 
-WITH inventory_docs AS (
-    SELECT 'PURCHASE_INBOUND' AS biz_type, id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_purchase_inbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%'
-       OR COALESCE(document_code, '') LIKE 'QA-%'
-       OR COALESCE(upstream_code, '') LIKE 'QA-%'
+WITH doc_checks AS (
+    SELECT 'docs.required_business_types_approved' AS check_name,
+           COUNT(*) = 0 AS passed,
+           COALESCE(string_agg(e.biz_type, ', ' ORDER BY e.biz_type), 'none') AS details
+    FROM qa_expected_inventory_business e
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM qa_inventory_docs d
+        WHERE d.biz_type = e.biz_type
+          AND d.status = '已审核'
+    )
+
     UNION ALL
-    SELECT 'PURCHASE_RETURN_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_purchase_return_outbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+    SELECT 'docs.approved_rows_have_report_source',
+           COUNT(*) = 0,
+           COALESCE(string_agg(d.biz_type || ':' || d.document_code, ', ' ORDER BY d.biz_type, d.document_code), 'none')
+    FROM qa_inventory_docs d
+    WHERE d.status = '已审核'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM qa_inventory_doc_lines line
+          WHERE line.biz_type = d.biz_type
+            AND line.header_id = d.id
+      )
+
     UNION ALL
-    SELECT 'DEPARTMENT_PICKING', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_department_picking
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
+    SELECT 'docs.report_line_category_matches_item_profile',
+           COUNT(*) = 0,
+           COALESCE(string_agg(d.biz_type || ':' || d.document_code || ':' || line.item_code
+               || ':line=' || COALESCE(line.category, '')
+               || ':profile=' || COALESCE(item.detail_json::JSONB ->> 'category', ''),
+               ', ' ORDER BY d.biz_type, d.document_code, line.item_code), 'none')
+    FROM qa_inventory_docs d
+    JOIN qa_inventory_doc_lines line ON line.biz_type = d.biz_type AND line.header_id = d.id
+    JOIN item_profile item ON item.scope_type = d.scope_type
+                          AND item.scope_id = d.scope_id
+                          AND item.item_code = line.item_code
+                          AND item.is_draft = FALSE
+    WHERE d.status = '已审核'
+      AND COALESCE(line.category, '') <> COALESCE(item.detail_json::JSONB ->> 'category', '')
+
     UNION ALL
-    SELECT 'STOCK_TRANSFER', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_stock_transfer
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'STOCK_TRANSFER_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_stock_transfer_inbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'DEPARTMENT_TRANSFER', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_department_transfer
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'DAMAGE_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_damage_outbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'OTHER_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_other_inbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'OTHER_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_other_outbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'PRODUCTION_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_production_inbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'CUSTOMER_SALES_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_customer_sales_outbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'CUSTOMER_RETURN_INBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_customer_return_inbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'DISH_CONSUMPTION_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_dish_consumption_outbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'STORE_TRANSFER', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_store_transfer
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-    UNION ALL
-    SELECT 'STOCK_TRANSFER_OUTBOUND', id, document_code, status, workflow_status, created_by, scope_type, scope_id
-    FROM inventory_stock_transfer_outbound
-    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%'
-),
-doc_checks AS (
     SELECT 'docs.approved_have_transactions' AS check_name,
            NOT EXISTS (
                SELECT 1
-               FROM inventory_docs d
+               FROM qa_inventory_docs d
                WHERE d.status = '已审核'
                  AND NOT EXISTS (
                      SELECT 1
                      FROM inventory_transaction t
-                     WHERE t.biz_type = d.biz_type
+                     WHERE t.biz_type IN (d.biz_type, d.biz_type || '_APPROVE', d.biz_type || '_CONFIRM')
                        AND t.biz_id = d.id
                  )
            ) AS passed,
            COALESCE(string_agg(d.biz_type || ':' || d.document_code, ', '), 'none') AS details
-    FROM inventory_docs d
+    FROM qa_inventory_docs d
     WHERE d.status = '已审核'
       AND NOT EXISTS (
           SELECT 1
           FROM inventory_transaction t
-          WHERE t.biz_type = d.biz_type
+          WHERE t.biz_type IN (d.biz_type, d.biz_type || '_APPROVE', d.biz_type || '_CONFIRM')
             AND t.biz_id = d.id
+      )
+
+    UNION ALL
+    SELECT 'docs.approved_line_has_transaction',
+           COUNT(*) = 0,
+           COALESCE(string_agg(d.biz_type || ':' || d.document_code || ':line=' || line.line_id, ', ' ORDER BY d.biz_type, d.document_code, line.line_id), 'none')
+    FROM qa_inventory_docs d
+    JOIN qa_inventory_doc_lines line ON line.biz_type = d.biz_type AND line.header_id = d.id
+    WHERE d.status = '已审核'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM inventory_transaction t
+          WHERE t.biz_type IN (d.biz_type, d.biz_type || '_APPROVE', d.biz_type || '_CONFIRM')
+            AND t.biz_id = d.id
+            AND t.biz_line_id = line.line_id
+      )
+
+    UNION ALL
+    SELECT 'docs.transaction_direction_matches_business',
+           COUNT(*) = 0,
+           COALESCE(string_agg(d.biz_type || ':' || d.document_code || ':delta=' || t.quantity_delta, ', ' ORDER BY d.biz_type, d.document_code), 'none')
+    FROM qa_inventory_docs d
+    JOIN qa_expected_inventory_business e ON e.biz_type = d.biz_type
+    JOIN inventory_transaction t ON t.biz_type IN (d.biz_type, d.biz_type || '_APPROVE', d.biz_type || '_CONFIRM')
+                                AND t.biz_id = d.id
+    WHERE d.status = '已审核'
+      AND (
+          (e.expected_direction = 'INBOUND' AND t.quantity_delta <= 0)
+          OR (e.expected_direction = 'OUTBOUND' AND t.quantity_delta >= 0)
       )
 
     UNION ALL
     SELECT 'docs.unapproved_have_no_transactions',
            NOT EXISTS (
                SELECT 1
-               FROM inventory_docs d
+               FROM qa_inventory_docs d
                WHERE d.status <> '已审核'
                  AND EXISTS (
                      SELECT 1
                      FROM inventory_transaction t
-                     WHERE t.biz_type = d.biz_type
+                     WHERE t.biz_type IN (d.biz_type, d.biz_type || '_APPROVE', d.biz_type || '_CONFIRM')
                        AND t.biz_id = d.id
                  )
            ),
            COALESCE(string_agg(d.biz_type || ':' || d.document_code || ':' || d.status, ', '), 'none')
-    FROM inventory_docs d
+    FROM qa_inventory_docs d
     WHERE d.status <> '已审核'
       AND EXISTS (
           SELECT 1
           FROM inventory_transaction t
-          WHERE t.biz_type = d.biz_type
+          WHERE t.biz_type IN (d.biz_type, d.biz_type || '_APPROVE', d.biz_type || '_CONFIRM')
             AND t.biz_id = d.id
       )
 
@@ -325,16 +467,26 @@ doc_checks AS (
     SELECT 'docs.approved_workflow_completed',
            NOT EXISTS (
                SELECT 1
-               FROM inventory_docs d
+               FROM qa_inventory_docs d
                WHERE d.status = '已审核'
-                 AND d.biz_type NOT IN ('STORE_TRANSFER', 'STOCK_TRANSFER_OUTBOUND')
                  AND COALESCE(d.workflow_status, '') <> 'COMPLETED'
            ),
            COALESCE(string_agg(d.biz_type || ':' || d.document_code || ':' || COALESCE(d.workflow_status, 'NULL'), ', '), 'none')
-    FROM inventory_docs d
+    FROM qa_inventory_docs d
     WHERE d.status = '已审核'
-      AND d.biz_type NOT IN ('STORE_TRANSFER', 'STOCK_TRANSFER_OUTBOUND')
       AND COALESCE(d.workflow_status, '') <> 'COMPLETED'
+
+    UNION ALL
+    SELECT 'docs.store_transfer_requires_source_and_target_warehouse',
+           COUNT(*) = 0,
+           COALESCE(string_agg(document_code, ', ' ORDER BY document_code), 'none')
+    FROM inventory_store_transfer
+    WHERE status = '已审核'
+      AND (COALESCE(remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(document_code, '') LIKE 'QA-%')
+      AND (
+          COALESCE(extra_json::JSONB ->> 'sourceWarehouse', '') = ''
+          OR COALESCE(extra_json::JSONB ->> 'targetWarehouse', '') = ''
+      )
 )
 SELECT CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END AS status,
        check_name,
@@ -382,11 +534,128 @@ purchase_checks AS (
     FROM purchase_chain
     WHERE document_type IN ('ORDER', 'RECEIPT')
       AND COALESCE(source_document_code, '') = ''
+
+    UNION ALL
+    SELECT 'purchase.inbound_links_receipt_order_application',
+           COUNT(*) = 0,
+           COALESCE(string_agg(pi.document_code || ':upstream=' || COALESCE(pi.upstream_code, ''), ', ' ORDER BY pi.document_code), 'none')
+    FROM inventory_purchase_inbound pi
+    LEFT JOIN purchase_document receipt ON receipt.document_type = 'RECEIPT'
+                                       AND receipt.document_code = pi.upstream_code
+    LEFT JOIN purchase_document purchase_order ON purchase_order.document_type = 'ORDER'
+                                              AND purchase_order.document_code = receipt.source_document_code
+    LEFT JOIN purchase_document application ON application.document_type = 'APPLICATION'
+                                           AND application.document_code = purchase_order.source_document_code
+    WHERE pi.status = '已审核'
+      AND (COALESCE(pi.remark, '') LIKE '%QA_INV_E2E%' OR COALESCE(pi.document_code, '') LIKE 'QA-%')
+      AND (
+          receipt.id IS NULL
+          OR purchase_order.id IS NULL
+          OR application.id IS NULL
+          OR receipt.review_status <> '已审核'
+          OR purchase_order.review_status <> '已审核'
+          OR application.review_status <> '已审核'
+      )
 )
 SELECT CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END AS status,
        check_name,
        details
 FROM purchase_checks
+ORDER BY status, check_name;
+
+WITH inventory_check_docs AS (
+    SELECT 'INVENTORY_CHECK' AS check_type,
+           id,
+           document_code,
+           status,
+           diff_status,
+           warehouse_name,
+           created_by,
+           scope_type,
+           scope_id
+    FROM inventory_inventory_check
+    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%'
+       OR COALESCE(document_code, '') LIKE 'PD-%'
+    UNION ALL
+    SELECT 'MULTI_INVENTORY_CHECK',
+           id,
+           document_code,
+           status,
+           '' AS diff_status,
+           warehouse_name,
+           created_by,
+           scope_type,
+           scope_id
+    FROM inventory_multi_inventory_check
+    WHERE COALESCE(remark, '') LIKE '%QA_INV_E2E%'
+       OR COALESCE(document_code, '') LIKE 'MPD-%'
+),
+inventory_check_lines AS (
+    SELECT 'INVENTORY_CHECK' AS check_type, header_id, item_code, profit_qty, loss_qty
+    FROM inventory_inventory_check_line
+    UNION ALL
+    SELECT 'MULTI_INVENTORY_CHECK', header_id, item_code, profit_qty, loss_qty
+    FROM inventory_multi_inventory_check_line
+),
+inventory_check_assertions AS (
+    SELECT 'check.approved_profit_and_loss_source_exists' AS check_name,
+           EXISTS (
+               SELECT 1
+               FROM inventory_check_docs h
+               JOIN inventory_check_lines l ON l.check_type = h.check_type AND l.header_id = h.id
+               WHERE h.status = '已审核'
+                 AND l.profit_qty > 0
+           )
+           AND EXISTS (
+               SELECT 1
+               FROM inventory_check_docs h
+               JOIN inventory_check_lines l ON l.check_type = h.check_type AND l.header_id = h.id
+               WHERE h.status = '已审核'
+                 AND l.loss_qty > 0
+           ) AS passed,
+           COALESCE(string_agg(DISTINCT h.document_code || ':' || h.status || ':' || h.diff_status, ', ' ORDER BY h.document_code || ':' || h.status || ':' || h.diff_status), 'none') AS details
+    FROM inventory_check_docs h
+
+    UNION ALL
+    SELECT 'check.profit_lines_generated_profit_inbound',
+           COUNT(*) = 0,
+           COALESCE(string_agg(h.document_code || ':' || l.item_code, ', ' ORDER BY h.document_code, l.item_code), 'none')
+    FROM inventory_check_docs h
+    JOIN inventory_check_lines l ON l.check_type = h.check_type AND l.header_id = h.id
+    WHERE h.status = '已审核'
+      AND l.profit_qty > 0
+      AND NOT EXISTS (
+          SELECT 1
+          FROM inventory_profit_inbound p
+          JOIN inventory_profit_inbound_line pl ON pl.header_id = p.id
+          WHERE p.upstream_code = h.document_code
+            AND p.status = '已审核'
+            AND pl.item_code = l.item_code
+            AND pl.quantity = l.profit_qty
+      )
+
+    UNION ALL
+    SELECT 'check.loss_lines_generated_loss_outbound',
+           COUNT(*) = 0,
+           COALESCE(string_agg(h.document_code || ':' || l.item_code, ', ' ORDER BY h.document_code, l.item_code), 'none')
+    FROM inventory_check_docs h
+    JOIN inventory_check_lines l ON l.check_type = h.check_type AND l.header_id = h.id
+    WHERE h.status = '已审核'
+      AND l.loss_qty > 0
+      AND NOT EXISTS (
+          SELECT 1
+          FROM inventory_loss_outbound lo
+          JOIN inventory_loss_outbound_line ll ON ll.header_id = lo.id
+          WHERE lo.upstream_code = h.document_code
+            AND lo.status = '已审核'
+            AND ll.item_code = l.item_code
+            AND ll.quantity = l.loss_qty
+      )
+)
+SELECT CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END AS status,
+       check_name,
+       details
+FROM inventory_check_assertions
 ORDER BY status, check_name;
 
 WITH balance_recon AS (
@@ -459,6 +728,31 @@ permission_checks AS (
            EXISTS (SELECT 1 FROM qa_scope WHERE group_code = 'QA-GRP-A')
            AND EXISTS (SELECT 1 FROM qa_scope WHERE group_code = 'QA-GRP-B'),
            'QA-GRP-A and QA-GRP-B must both exist'
+
+    UNION ALL
+    SELECT 'permission.store_roles_require_group_membership',
+           COUNT(*) = 0,
+           COALESCE(string_agg(u.phone || ':' || g.group_code, ', ' ORDER BY u.phone, g.group_code), 'none')
+    FROM sys_user_role_rel store_rel
+    JOIN sys_role store_role ON store_role.id = store_rel.role_id
+    JOIN sys_store s ON store_rel.scope_type = 'STORE' AND store_rel.scope_id = s.id
+    JOIN sys_group g ON g.id = s.group_id
+    JOIN sys_user u ON u.id = store_rel.user_id
+    WHERE store_rel.status = 'ENABLED'
+      AND store_role.role_type = 'STORE'
+      AND u.phone LIKE '139900000%'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM sys_user_role_rel group_rel
+          JOIN sys_role group_role ON group_role.id = group_rel.role_id
+          WHERE group_rel.user_id = store_rel.user_id
+            AND group_rel.status = 'ENABLED'
+            AND group_rel.scope_type = 'GROUP'
+            AND group_rel.scope_id = s.group_id
+            AND group_role.role_type = 'GROUP'
+            AND group_role.role_code = 'GROUP_MEMBER'
+            AND group_role.data_scope_type = 'SELF'
+      )
 )
 SELECT CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END AS status,
        check_name,

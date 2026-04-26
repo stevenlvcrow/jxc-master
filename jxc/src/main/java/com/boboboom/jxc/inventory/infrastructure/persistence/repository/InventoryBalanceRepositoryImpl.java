@@ -31,6 +31,16 @@ public class InventoryBalanceRepositoryImpl implements InventoryBalanceRepositor
                 .orderByAsc(InventoryBalanceDO::getItemCode));
     }
 
+    /** 按仓库查询库存余额。 */
+    @Override
+    public List<InventoryBalanceDO> findByScopeAndWarehouseOrdered(String scopeType, Long scopeId, String warehouseName) {
+        return inventoryBalanceMapper.selectList(new LambdaQueryWrapper<InventoryBalanceDO>()
+                .eq(InventoryBalanceDO::getScopeType, scopeType)
+                .eq(InventoryBalanceDO::getScopeId, scopeId)
+                .eq(InventoryBalanceDO::getWarehouseName, warehouseName)
+                .orderByAsc(InventoryBalanceDO::getItemCode));
+    }
+
     /** 库存明细项模型，承载子表或批量操作明细。 */
     @Override
     public Optional<InventoryBalanceDO> findByScopeWarehouseAndItem(String scopeType, Long scopeId, String warehouseName, String itemCode) {

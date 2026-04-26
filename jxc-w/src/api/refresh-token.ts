@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import { authStorage } from '@/api/auth-storage';
 
 type RefreshPayload = {
@@ -10,7 +10,22 @@ type RefreshResult = {
   refreshToken?: string;
 };
 
+type RefreshResponse = {
+  code: number;
+  message: string;
+  data: RefreshResult;
+};
+
 let refreshingPromise: Promise<string> | null = null;
+
+const isRefreshResponse = (payload: unknown): payload is RefreshResponse => (
+  Boolean(payload)
+  && typeof payload === 'object'
+  && typeof (payload as RefreshResponse).code === 'number'
+  && typeof (payload as RefreshResponse).message === 'string'
+  && Boolean((payload as RefreshResponse).data)
+  && typeof (payload as RefreshResponse).data.accessToken === 'string'
+);
 
 const refreshTokenRequest = async (refreshToken: string) => {
   const { data } = await axios.post('/api/identity/auth/refresh', { refreshToken } satisfies RefreshPayload, {
@@ -18,11 +33,11 @@ const refreshTokenRequest = async (refreshToken: string) => {
     timeout: 12000,
   });
 
-  const res: RefreshResult = data?.data ?? data;
-  if (!res?.accessToken) {
+  if (!isRefreshResponse(data) || (data.code !== 0 && data.code !== 200)) {
     throw new Error('Invalid refresh response');
   }
 
+  const res = data.data;
   authStorage.setTokens(res.accessToken, res.refreshToken ?? refreshToken);
   return res.accessToken;
 };

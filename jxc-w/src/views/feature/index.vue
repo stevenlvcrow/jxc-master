@@ -19,7 +19,7 @@ import WarehouseItemRuleManagementView from '@/views/system/warehouse-item-rule-
 import OrgManagementView from '@/views/system/org-management.vue';
 import PurchasePricingView from '@/views/purchase/purchase-pricing.vue';
 import PricingAdjustmentManagementView from '@/views/purchase/pricing-adjustment-management.vue';
-import WarehouseOpeningBalanceView from '@/views/inventory/warehouse-opening-balance.vue';
+import PeriodOpeningView from '@/views/inventory/period-opening.vue';
 import PurchaseInboundView from '@/views/inventory/purchase-inbound.vue';
 import PurchaseReturnOutboundView from '@/views/inventory/purchase-return-outbound.vue';
 import StockTransferView from '@/views/inventory/stock-transfer.vue';
@@ -76,7 +76,7 @@ const isWarehouseItemRuleManagement = computed(() => title.value === '仓库物�
 const isOrgManagement = computed(() => title.value === '机构管理');
 const isPurchasePricing = computed(() => title.value === '采购单定价');
 const isPricingAdjustmentManagement = computed(() => title.value === '采购定价明细调整单');
-const isWarehouseOpeningBalance = computed(() => title.value === '仓库期初');
+const isPeriodOpening = computed(() => title.value === '期初库存');
 const isPurchaseInbound = computed(() => title.value === '采购入库');
 const isPurchaseReturnOutbound = computed(() => title.value === '采购退货出库');
 const isStockTransfer = computed(() => title.value === '移库单');
@@ -168,8 +168,8 @@ const pendingTasks = [
   <div v-else-if="isPricingAdjustmentManagement" class="page-grid single">
     <PricingAdjustmentManagementView />
   </div>
-  <div v-else-if="isWarehouseOpeningBalance" class="page-grid single">
-    <WarehouseOpeningBalanceView />
+  <div v-else-if="isPeriodOpening" class="page-grid single">
+    <PeriodOpeningView />
   </div>
   <div v-else-if="isPurchaseInbound" class="page-grid single">
     <PurchaseInboundView />

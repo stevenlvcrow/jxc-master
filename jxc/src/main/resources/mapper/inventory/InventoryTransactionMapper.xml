@@ -14,9 +14,14 @@
         <result property="warehouseName" column="warehouse_name"/>
         <result property="itemCode" column="item_code"/>
         <result property="itemName" column="item_name"/>
+        <result property="businessDate" column="business_date"/>
         <result property="quantityDelta" column="quantity_delta"/>
         <result property="beforeQty" column="before_qty"/>
         <result property="afterQty" column="after_qty"/>
+        <result property="amountDelta" column="amount_delta"/>
+        <result property="beforeAmount" column="before_amount"/>
+        <result property="afterAmount" column="after_amount"/>
+        <result property="costPrice" column="cost_price"/>
         <result property="operatorId" column="operator_id"/>
         <result property="createdAt" column="created_at"/>
     </resultMap>
@@ -29,13 +34,16 @@
         <result property="itemCode" column="item_code"/>
         <result property="itemName" column="item_name"/>
         <result property="quantity" column="quantity"/>
+        <result property="costAmount" column="cost_amount"/>
+        <result property="avgCost" column="avg_cost"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
     <sql id="InventoryTransactionColumns">
         id, scope_type, scope_id, biz_type, biz_id, biz_line_id, warehouse_name, item_code, item_name,
-        quantity_delta, before_qty, after_qty, operator_id, created_at
+        business_date, quantity_delta, before_qty, after_qty, amount_delta, before_amount, after_amount,
+        cost_price, operator_id, created_at
     </sql>
 
     <select id="selectByScopeOrdered" resultMap="InventoryTransactionDOResultMap">
@@ -62,8 +70,33 @@
         order by created_at asc, id asc
     </select>
 
+    <select id="selectByScopeAndBusinessDateRange" resultMap="InventoryTransactionDOResultMap">
+        select
+        <include refid="InventoryTransactionColumns"/>
+        from inventory_transaction
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+        <if test="startDate != null">
+          and business_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+          and business_date &lt;= #{endDate}
+        </if>
+        order by business_date asc, id asc
+    </select>
+
+    <select id="countByScopeWarehouseAndBusinessDateOnOrAfter" resultType="java.lang.Long">
+        select count(1)
+        from inventory_transaction
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and warehouse_name = #{warehouseName}
+          and business_date &gt;= #{businessDate}
+    </select>
+
     <select id="selectLatestBalancesBefore" resultMap="InventoryBalanceDOResultMap">
-        select id, scope_type, scope_id, warehouse_name, item_code, item_name, quantity, created_at, updated_at
+        select id, scope_type, scope_id, warehouse_name, item_code, item_name, quantity,
+               cost_amount, avg_cost, created_at, updated_at
         from (
             select id,
                    scope_type,
@@ -72,6 +105,8 @@
                    item_code,
                    item_name,
                    after_qty as quantity,
+                   after_amount as cost_amount,
+                   cost_price as avg_cost,
                    created_at,
                    created_at as updated_at,
                    row_number() over (partition by warehouse_name, item_code order by created_at desc, id desc) rn

@@ -12,6 +12,8 @@ public interface ItemProfileRepository {
 
     List<ItemProfileDO> findByScopeAndItemIds(String scopeType, Long scopeId, List<String> itemIds);
 
+    List<ItemProfileDO> findByScopeAndItemCodes(String scopeType, Long scopeId, List<String> itemCodes);
+
     Optional<ItemProfileDO> findByItemId(String itemId);
 
     void save(ItemProfileDO itemProfile);

@@ -11,6 +11,7 @@ public class OrgNodeResult {
     private String code;
     private String city;
     private String type;
+    private Boolean selectable;
     private List<OrgNodeResult> children;
 
     /** 获取Id。 */
@@ -71,6 +72,16 @@ public class OrgNodeResult {
     /** 设置Type。 */
     public void setType(String typeValue) {
         this.type = typeValue;
+    }
+
+    /** 获取Selectable。 */
+    public Boolean getSelectable() {
+        return selectable;
+    }
+
+    /** 设置Selectable。 */
+    public void setSelectable(Boolean selectableValue) {
+        this.selectable = selectableValue;
     }
 
     /** 获取Children。 */

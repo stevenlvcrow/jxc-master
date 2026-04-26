@@ -138,10 +138,6 @@ const handleSave = () => {
   ElMessage.success('采购定价单保存成功');
 };
 
-const handleToolbarAction = (action: string) => {
-  ElMessage.info(`${action}功能待接入`);
-};
-
 onMounted(() => {
   void loadSupplierOptions();
 });
@@ -337,12 +333,12 @@ const removeItemRow = (index: number) => {
         <h3 class="form-section-title">定价物品</h3>
 
         <div class="table-toolbar">
-          <el-button @click="handleToolbarAction('批量修改时价')">批量修改时价</el-button>
-          <el-button @click="handleToolbarAction('批量修改定价')">批量修改定价</el-button>
-          <el-button @click="handleToolbarAction('批量修改税率')">批量修改税率</el-button>
-          <el-button @click="handleToolbarAction('批量修改不含税定价')">批量修改不含税定价</el-button>
-          <el-button @click="handleToolbarAction('批量修改单价限制')">批量修改单价限制</el-button>
-          <el-button @click="handleToolbarAction('导入')">导入</el-button>
+          <el-button disabled>批量修改时价</el-button>
+          <el-button disabled>批量修改定价</el-button>
+          <el-button disabled>批量修改税率</el-button>
+          <el-button disabled>批量修改不含税定价</el-button>
+          <el-button disabled>批量修改单价限制</el-button>
+          <el-button disabled>导入</el-button>
         </div>
 
         <el-table :data="itemRows" border stripe class="erp-table purchase-pricing-table" :fit="false">

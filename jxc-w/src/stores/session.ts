@@ -11,6 +11,7 @@ export type OrgNode = {
   code: string;
   city: string;
   type: OrgNodeType;
+  selectable?: boolean;
   children?: OrgNode[];
 };
 
@@ -112,6 +113,7 @@ const normalizeOrgTree = (nodes: OrgNode[]): OrgNode[] => nodes.map((node) => {
     code: String(node.code ?? ''),
     city: String(node.city ?? ''),
     type,
+    selectable: node.selectable !== false,
     children: node.children?.length ? normalizeOrgTree(node.children) : undefined,
   };
 });

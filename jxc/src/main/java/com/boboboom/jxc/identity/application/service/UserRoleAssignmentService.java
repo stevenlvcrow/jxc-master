@@ -1,8 +1,10 @@
 package com.boboboom.jxc.identity.application.service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.springframework.stereotype.Service;
@@ -10,9 +12,11 @@ import org.springframework.stereotype.Service;
 import com.boboboom.jxc.common.BusinessException;
 import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.domain.repository.RoleRepository;
+import com.boboboom.jxc.identity.domain.repository.StoreRepository;
 import com.boboboom.jxc.identity.domain.repository.UserAccountRepository;
 import com.boboboom.jxc.identity.domain.repository.UserRoleRelRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.RoleDO;
+import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserAccountDO;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.UserRoleRelDO;
 import com.boboboom.jxc.identity.interfaces.rest.request.UserRoleAssignRequest;
@@ -26,18 +30,22 @@ public class UserRoleAssignmentService {
     private static final String SCOPE_PLATFORM = "PLATFORM";
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_STORE = "STORE";
+    private static final String GROUP_MEMBER_ROLE_CODE = "GROUP_MEMBER";
 
     private final RoleRepository roleRepository;
+    private final StoreRepository storeRepository;
     private final UserAccountRepository userAccountRepository;
     private final UserRoleRelRepository userRoleRelRepository;
     private final DictionaryLookupService dictionaryLookupService;
 
     /** 身份与权限服务，负责相关业务规则和流程协作。 */
     public UserRoleAssignmentService(RoleRepository roleRepositoryValue,
+                                     StoreRepository storeRepositoryValue,
                                      UserAccountRepository userAccountRepositoryValue,
                                      UserRoleRelRepository userRoleRelRepositoryValue,
                                      DictionaryLookupService dictionaryLookupServiceValue) {
         this.roleRepository = roleRepositoryValue;
+        this.storeRepository = storeRepositoryValue;
         this.userAccountRepository = userAccountRepositoryValue;
         this.userRoleRelRepository = userRoleRelRepositoryValue;
         this.dictionaryLookupService = dictionaryLookupServiceValue;
@@ -58,6 +66,7 @@ public class UserRoleAssignmentService {
 
         List<UserRoleRelDO> toInsert = new ArrayList<>();
         LinkedHashSet<String> seenKeys = new LinkedHashSet<>();
+        Map<Long, Long> storeGroupIds = new HashMap<>();
         List<UserRoleAssignRequest.UserRoleAssignment> safeAssignments = assignments == null ? List.of() : assignments;
         boolean containsPlatformSuperAdminRole = false;
         for (UserRoleAssignRequest.UserRoleAssignment assignment : safeAssignments) {
@@ -70,6 +79,9 @@ public class UserRoleAssignmentService {
             Long scopeId = normalizeScopeId(scopeType, assignment.getScopeId());
             ensureRoleScopeMatches(role, scopeType);
             ensureAllowedAssignmentScope(platformAdmin, scopeType, scopeId, managedGroupIds, managedStoreIds);
+            if (SCOPE_STORE.equals(scopeType)) {
+                storeGroupIds.put(scopeId, requireStoreGroupId(scopeId));
+            }
             String key = buildAssignmentKey(scopeType, scopeId, assignment.getRoleId());
             if (!seenKeys.add(key)) {
                 throw new BusinessException("同一用户同一门店只能分配一个角色");
@@ -84,6 +96,8 @@ public class UserRoleAssignmentService {
             rel.setStatus(enabledStatus());
             toInsert.add(rel);
         }
+
+        appendRequiredGroupMemberAssignments(toInsert, storeGroupIds, platformAdmin, managedGroupIds, seenKeys, operatorId, targetUserId);
 
         if (ADMIN_USERNAME.equalsIgnoreCase(targetUser.getUsername()) && !containsPlatformSuperAdminRole) {
             throw new BusinessException("admin 账号必须保留 PLATFORM_SUPER_ADMIN");
@@ -208,6 +222,47 @@ public class UserRoleAssignmentService {
             return scopeId != null && managedStoreIds.contains(scopeId);
         }
         return false;
+    }
+
+    private Long requireStoreGroupId(Long storeId) {
+        StoreDO store = storeRepository.findById(storeId)
+                .orElseThrow(() -> new BusinessException("门店不存在"));
+        Long groupId = store.getGroupId();
+        if (groupId == null || groupId <= 0) {
+            throw new BusinessException("门店未绑定集团");
+        }
+        return groupId;
+    }
+
+    private void appendRequiredGroupMemberAssignments(List<UserRoleRelDO> toInsert,
+                                                       Map<Long, Long> storeGroupIds,
+                                                       boolean platformAdmin,
+                                                       Set<Long> managedGroupIds,
+                                                       Set<String> seenKeys,
+                                                       Long operatorId,
+                                                       Long targetUserId) {
+        if (storeGroupIds.isEmpty()) {
+            return;
+        }
+        for (Long groupId : new LinkedHashSet<>(storeGroupIds.values())) {
+            if (!platformAdmin && (managedGroupIds == null || !managedGroupIds.contains(groupId))) {
+                throw new BusinessException("门店角色必须同时具备所属集团授权");
+            }
+            RoleDO groupMemberRole = roleRepository.findByTenantGroupIdAndRoleCode(groupId, GROUP_MEMBER_ROLE_CODE)
+                    .orElseThrow(() -> new BusinessException("集团成员角色未初始化"));
+            String key = buildAssignmentKey(SCOPE_GROUP, groupId, groupMemberRole.getId());
+            if (!seenKeys.add(key)) {
+                continue;
+            }
+            UserRoleRelDO rel = new UserRoleRelDO();
+            rel.setUserId(targetUserId);
+            rel.setRoleId(groupMemberRole.getId());
+            rel.setScopeType(SCOPE_GROUP);
+            rel.setScopeId(groupId);
+            rel.setAssignedBy(operatorId);
+            rel.setStatus(enabledStatus());
+            toInsert.add(rel);
+        }
     }
 
     private void ensureCanManageUser(Long targetUserId,

@@ -29,7 +29,8 @@ import {
   type InventoryCheckSavePayload,
 } from '@/api/modules/inventory';
 import { useSessionStore } from '@/stores/session';
-import { normalizeOrgId } from '@/utils/org';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
+import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
 
 type SalesmanOption = {
   userId: number;
@@ -100,6 +101,14 @@ const checkRangeTypeLabelMap: Record<string, CheckTypeOption> = {
 const router = useRouter();
 const route = useRoute();
 const sessionStore = useSessionStore();
+const { orgId: currentOrgId, storeId } = useRequiredOrgScope();
+const ITEM_STATUS_DICT = 'item.status';
+const { optionsOf } = useDictionaryOptions([ITEM_STATUS_DICT]);
+const itemStatusOptions = optionsOf(ITEM_STATUS_DICT, { enabled: true, label: '全部', value: '' });
+const normalizedItemStatusOptions = computed(() => itemStatusOptions.value.map((item) => ({
+  label: item.itemLabel,
+  value: item.itemCode,
+})));
 const activeNav = ref('basic');
 const basicSectionRef = ref<HTMLElement | null>(null);
 const itemSectionRef = ref<HTMLElement | null>(null);
@@ -121,7 +130,6 @@ const routeId = computed(() => {
 const isCreateMode = computed(() => route.name === 'InventoryCheckCreate');
 const isViewMode = computed(() => route.name === 'InventoryCheckView');
 const isEditMode = computed(() => route.name === 'InventoryCheckEdit');
-const currentOrgId = computed(() => normalizeOrgId(sessionStore.currentOrgId) || undefined);
 const canCreate = ref(false);
 const canUpdate = ref(false);
 const canApprove = ref(false);
@@ -149,7 +157,7 @@ const salesmanSelectOptions = computed(() => {
 
 const itemSelectorVisible = ref(false);
 const itemSelectorKeyword = ref('');
-const itemSelectorStatus = ref('启用');
+const itemSelectorStatus = ref('');
 const activeItemTreeId = ref<string>('all');
 const itemSelectorCurrentPage = ref(1);
 const itemSelectorPageSize = ref(10);
@@ -264,32 +272,6 @@ const resolveOrgId = () => {
   return currentOrgId.value;
 };
 
-const resolveWarehouseStoreId = () => {
-  const currentOrgId = String(sessionStore.currentOrgId ?? '').trim().toLowerCase();
-  if (!currentOrgId) {
-    return undefined;
-  }
-  if (currentOrgId.startsWith('store-')) {
-    const storeId = Number(currentOrgId.slice('store-'.length));
-    return Number.isNaN(storeId) ? undefined : storeId;
-  }
-  const currentOrg = sessionStore.currentOrg;
-  if (currentOrg?.type === 'group') {
-    const firstStore = currentOrg.children?.[0];
-    if (!firstStore) {
-      return undefined;
-    }
-    const storeId = Number(String(firstStore.id).slice('store-'.length));
-    return Number.isNaN(storeId) ? undefined : storeId;
-  }
-  const firstStore = sessionStore.flatOrgs.find((item) => item.type === 'store');
-  if (!firstStore) {
-    return undefined;
-  }
-  const storeId = Number(String(firstStore.id).slice('store-'.length));
-  return Number.isNaN(storeId) ? undefined : storeId;
-};
-
 const resetForm = () => {
   detailStatus.value = 'DRAFT';
   form.warehouseId = 0;
@@ -309,12 +291,11 @@ const resetForm = () => {
 };
 
 const loadWarehouseOptions = async () => {
-  const storeId = resolveWarehouseStoreId();
-  if (!storeId) {
+  if (!storeId.value) {
     warehouseOptions.value = [];
     return;
   }
-  const result = await fetchStoreWarehousesApi(storeId, { status: 'ENABLED' });
+  const result = await fetchStoreWarehousesApi(storeId.value, { status: 'ENABLED' });
   warehouseOptions.value = result
     .map((item: ApiWarehouseRow) => ({
       id: item.id,
@@ -410,7 +391,7 @@ const loadItemCandidates = async () => {
 const fetchAllPages = async <T>(loader: (pageNum: number, pageSize: number) => Promise<{ list: T[]; total: number; pageSize: number }>) => {
   const collected: T[] = [];
   let pageNum = 1;
-  let totalCount = 0;
+  let totalCount: number;
   do {
     const page = await loader(pageNum, 200);
     const list = Array.isArray(page.list) ? page.list : [];
@@ -1252,11 +1233,7 @@ watch(
       keyword-label="物品"
       keyword-placeholder="支持按物品编码和名称查询..."
       status-label="启用状态"
-      :status-options="[
-        { label: '全部', value: '' },
-        { label: '启用', value: '启用' },
-        { label: '停用', value: '停用' },
-      ]"
+      :status-options="normalizedItemStatusOptions"
       :total="itemSelectorTotal"
       :current-page="itemSelectorCurrentPage"
       :page-size="itemSelectorPageSize"

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import type { UploadFile, UploadUserFile } from 'element-plus';
+import { ElMessage, ElMessageBox, type UploadFile, type UploadUserFile } from 'element-plus';
 import { useRoute, useRouter } from 'vue-router';
 import CommonFormSection from '@/components/CommonFormSection.vue';
 import CommonNumberInput from '@/components/CommonNumberInput.vue';
@@ -26,8 +25,8 @@ import { fetchStoreWarehousesApi, type WarehouseRow, type WarehouseType } from '
 import { useSupplierArchiveOptions } from '@/composables/useSupplierArchiveOptions';
 import { useSessionStore } from '@/stores/session';
 import type { InventoryDocumentMeta } from '@/views/inventory/document-meta';
-import { normalizeOrgId, parseStoreId } from '@/utils/org';
 import { useDictionaryOptions } from '@/composables/useDictionaryOptions';
+import { useRequiredOrgScope } from '@/composables/useRequiredOrgScope';
 
 const props = defineProps<{
   meta: InventoryDocumentMeta;
@@ -86,9 +85,16 @@ type DocumentItemRow = {
 const router = useRouter();
 const route = useRoute();
 const sessionStore = useSessionStore();
+const { orgId: currentOrgId, storeId } = useRequiredOrgScope();
+const ITEM_STATUS_DICT = 'item.status';
 const INVENTORY_DOCUMENT_STATUS_DICT = 'inventory.document_status';
-const { optionsOf } = useDictionaryOptions([INVENTORY_DOCUMENT_STATUS_DICT]);
+const { optionsOf } = useDictionaryOptions([ITEM_STATUS_DICT, INVENTORY_DOCUMENT_STATUS_DICT]);
+const itemStatusOptions = optionsOf(ITEM_STATUS_DICT, { enabled: true, label: '全部', value: '' });
 const inventoryDocumentStatusOptions = optionsOf(INVENTORY_DOCUMENT_STATUS_DICT);
+const normalizedItemStatusOptions = computed(() => itemStatusOptions.value.map((item) => ({
+  label: item.itemLabel,
+  value: item.itemCode,
+})));
 const submittedStatus = computed(() => (
   inventoryDocumentStatusOptions.value.find((item) => item.itemKey === 'SUBMITTED')?.itemCode ?? '已提交'
 ));
@@ -107,7 +113,7 @@ const warehouses = ref<WarehouseOption[]>([]);
 const salesmen = ref<SalesmanOption[]>([]);
 const itemSelectorVisible = ref(false);
 const itemSelectorKeyword = ref('');
-const itemSelectorStatus = ref('启用');
+const itemSelectorStatus = ref('');
 const activeItemTreeId = ref<string>('all');
 const itemSelectorCurrentPage = ref(1);
 const itemSelectorPageSize = ref(10);
@@ -210,7 +216,7 @@ const showReasonColumn = computed(() =>
     && !isProductionInbound.value,
 );
 const showAttachment = computed(() => props.meta.showAttachment === true);
-const isWarehouseOpeningBalance = computed(() => props.meta.type === 'warehouse-opening-balance');
+const isWarehouseOpeningBalance = computed(() => false);
 const totalQuantity = computed(() => rows.value.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0));
 const totalAmount = computed(() => rows.value.reduce((sum, row) => sum + Number(row.amount ?? 0), 0));
 const totalBaseUnitQuantity = computed(() => rows.value.reduce((sum, row) => sum + Number(row.baseUnitQuantity ?? 0), 0));
@@ -247,7 +253,6 @@ const form = reactive({
 
 const rows = ref<DocumentItemRow[]>([]);
 
-const currentOrgId = computed(() => normalizeOrgId(sessionStore.currentOrgId));
 const presetWarehouseId = computed(() => {
   const raw = route.query.warehouseId;
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -634,13 +639,12 @@ const handleItemSelectorConfirm = async (selectedRows: Array<Record<string, unkn
 };
 
 const loadWarehouses = async () => {
-  const storeId = parseStoreId(currentOrgId.value);
-  if (!storeId || (!props.meta.primaryField && !props.meta.secondaryField)) {
+  if (!storeId.value || (!props.meta.primaryField && !props.meta.secondaryField)) {
     warehouses.value = [];
     return;
   }
   try {
-    const result = await fetchStoreWarehousesApi(storeId, { status: 'ENABLED' });
+    const result = await fetchStoreWarehousesApi(storeId.value, { status: 'ENABLED' });
     warehouses.value = result.map((item: WarehouseRow) => ({
       id: item.id,
       name: item.warehouseName,
@@ -1046,7 +1050,7 @@ const reloadPageContext = async () => {
   rows.value = [createEmptyRow()];
   itemSelectorVisible.value = false;
   itemSelectorKeyword.value = '';
-  itemSelectorStatus.value = '启用';
+  itemSelectorStatus.value = '';
   activeItemTreeId.value = 'all';
   itemSelectorCurrentPage.value = 1;
   itemSelectorPageSize.value = 10;
@@ -1318,7 +1322,29 @@ onMounted(async () => {
             </el-col>
             <el-col v-for="field in props.meta.extraFields ?? []" :key="field.key" :span="8">
               <el-form-item :label="field.label">
-                <el-input v-model="form.extraFields[field.key]" :disabled="isReadonlyMode" clearable />
+                <el-select
+                  v-if="field.kind === 'warehouse'"
+                  v-model="form.extraFields[field.key]"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  placeholder="请选择"
+                  style="width: 100%"
+                >
+                  <el-option v-for="item in getWarehouseOptions(field)" :key="item.id" :label="item.label" :value="item.name" />
+                </el-select>
+                <el-select
+                  v-else-if="field.kind === 'select'"
+                  v-model="form.extraFields[field.key]"
+                  :disabled="isReadonlyMode"
+                  clearable
+                  filterable
+                  :placeholder="`请选择${field.label}`"
+                  style="width: 100%"
+                >
+                  <el-option v-for="item in field.options ?? []" :key="item" :label="item" :value="item" />
+                </el-select>
+                <el-input v-else v-model="form.extraFields[field.key]" :disabled="isReadonlyMode" clearable />
               </el-form-item>
             </el-col>
             <el-col v-if="showUpstreamCode" :span="8">
@@ -1508,11 +1534,7 @@ onMounted(async () => {
       keyword-label="物品"
       keyword-placeholder="支持按物品编码和名称查询..."
       status-label="启用状态"
-      :status-options="[
-        { label: '全部', value: '' },
-        { label: '启用', value: '启用' },
-        { label: '停用', value: '停用' },
-      ]"
+      :status-options="normalizedItemStatusOptions"
       :total="itemSelectorTotal"
       :current-page="itemSelectorCurrentPage"
       :page-size="itemSelectorPageSize"

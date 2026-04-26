@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch, type ComponentPublicInstance } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import type { ComponentPublicInstance } from 'vue';
 import FixedActionBreadcrumb from '@/components/FixedActionBreadcrumb.vue';
 import CommonNumberInput from '@/components/CommonNumberInput.vue';
 import CommonSelectorDialog, {

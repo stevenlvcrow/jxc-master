@@ -1623,8 +1623,7 @@ watch(
               fill="none"
               @click.stop="openEdgeExpression(edge)"
             />
-            <g v-for="edge in edges" :key="`${edge.id}_label`">
-            </g>
+            <g v-for="edge in edges" :key="`${edge.id}_label`" />
           </svg>
 
           <div

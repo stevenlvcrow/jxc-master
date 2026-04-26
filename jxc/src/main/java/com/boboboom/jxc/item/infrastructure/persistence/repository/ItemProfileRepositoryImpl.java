@@ -45,6 +45,20 @@ public class ItemProfileRepositoryImpl implements ItemProfileRepository {
                 .in(ItemProfileDO::getItemId, itemIds));
     }
 
+    /** 查询By作用域And物品编码。 */
+    @Override
+    public List<ItemProfileDO> findByScopeAndItemCodes(String scopeType, Long scopeId, List<String> itemCodes) {
+        if (itemCodes == null || itemCodes.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return itemProfileMapper.selectList(new LambdaQueryWrapper<ItemProfileDO>()
+                .eq(ItemProfileDO::getScopeType, scopeType)
+                .eq(ItemProfileDO::getScopeId, scopeId)
+                .eq(ItemProfileDO::getDraft, Boolean.FALSE)
+                .in(ItemProfileDO::getItemCode, itemCodes)
+                .orderByDesc(ItemProfileDO::getId));
+    }
+
     /** 查询By物品标识。 */
     @Override
     public Optional<ItemProfileDO> findByItemId(String itemId) {

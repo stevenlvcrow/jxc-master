@@ -107,6 +107,8 @@ public class PurchaseInboundUnapproveService {
                     line.getItemCode(),
                     line.getItemName(),
                     line.getQuantity().negate(),
+                    line.getQuantity().multiply(line.getUnitPrice()),
+                    header.getInboundDate(),
                     INVENTORY_BIZ_TYPE_UNAPPROVE,
                     operatorId
             );

@@ -49,6 +49,8 @@ public class InventoryDocumentApplicationService {
     private static final int INVENTORY_QUANTITY_SCALE = 4;
 
     private static final String PENDING_OPERATION_NONE = "NONE";
+    private static final String STORE_TRANSFER_SOURCE_WAREHOUSE = "sourceWarehouse";
+    private static final String STORE_TRANSFER_TARGET_WAREHOUSE = "targetWarehouse";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
     private final InventoryDocumentRepository inventoryDocumentRepository;
@@ -61,6 +63,7 @@ public class InventoryDocumentApplicationService {
     private final UserAccountRepository userAccountRepository;
     private final ObjectMapper objectMapper;
     private final DictionaryLookupService dictionaryLookupService;
+    private final InventoryItemCategoryValidator inventoryItemCategoryValidator;
 
     /** 通用库存单据业务服务，负责库存单据保存、审核、反审核、列表查询和打印数据组装。 */
     public InventoryDocumentApplicationService(InventoryDocumentRepository inventoryDocumentRepositoryValue,
@@ -72,7 +75,8 @@ public class InventoryDocumentApplicationService {
                                                WarehouseRepository warehouseRepositoryValue,
                                                UserAccountRepository userAccountRepositoryValue,
                                                ObjectMapper objectMapperValue,
-                                               DictionaryLookupService dictionaryLookupServiceValue) {
+                                               DictionaryLookupService dictionaryLookupServiceValue,
+                                               InventoryItemCategoryValidator inventoryItemCategoryValidatorValue) {
         this.inventoryDocumentRepository = inventoryDocumentRepositoryValue;
         this.inventoryStockMutationService = inventoryStockMutationServiceValue;
         this.inventoryDocumentPermissionService = inventoryDocumentPermissionServiceValue;
@@ -83,6 +87,7 @@ public class InventoryDocumentApplicationService {
         this.userAccountRepository = userAccountRepositoryValue;
         this.objectMapper = objectMapperValue;
         this.dictionaryLookupService = dictionaryLookupServiceValue;
+        this.inventoryItemCategoryValidator = inventoryItemCategoryValidatorValue;
     }
 
     /**
@@ -118,7 +123,7 @@ public class InventoryDocumentApplicationService {
         List<InventoryDocumentHeader> headers = inventoryDocumentRepository.findHeadersByScopeOrdered(type, scope.scopeType(), scope.scopeId());
         if (!canViewAll) {
             headers = headers.stream()
-                    .filter(item -> Objects.equals(item.getCreatedBy(), operatorId))
+                    .filter(item -> belongsToOperator(item, operatorId))
                     .toList();
         }
         Map<Long, List<InventoryDocumentLine>> lineMap = loadLineMap(type, headers.stream().map(InventoryDocumentHeader::getId).toList());
@@ -325,6 +330,10 @@ public class InventoryDocumentApplicationService {
                 && inventoryDocumentPermissionService.canReview(type, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
     }
 
+    private boolean belongsToOperator(InventoryDocumentHeader header, Long operatorId) {
+        return Objects.equals(header.getCreatedBy(), operatorId) || Objects.equals(header.getSalesmanUserId(), operatorId);
+    }
+
     /**
      * 更新单据。
      *
@@ -435,6 +444,7 @@ public class InventoryDocumentApplicationService {
         applyDocumentHeader(type, scope, header, request, createMode, operatorId);
 
         List<InventoryDocumentLine> lines = normalizeLines(request.items());
+        validateItemCategories(scope, lines);
         header.setTotalAmount(calculateTotalAmount(lines));
 
         saveDocumentWithLines(type, header, lines, createMode);
@@ -464,8 +474,19 @@ public class InventoryDocumentApplicationService {
         header.setRejectionReason(null);
         header.setCreatedBy(createMode ? operatorId : header.getCreatedBy());
         header.setStatus(submittedStatus());
-        header.setExtraJson(writeJson(request.extraFields()));
+        header.setExtraJson(writeJson(normalizeHeaderExtraFields(type, request.extraFields())));
         initializeWorkflowState(type, header);
+    }
+
+    private Map<String, String> normalizeHeaderExtraFields(InventoryDocumentType type, Map<String, String> extraFields) {
+        Map<String, String> normalized = extraFields == null ? new LinkedHashMap<>() : new LinkedHashMap<>(extraFields);
+        if (type == InventoryDocumentType.STORE_TRANSFER) {
+            normalized.put(STORE_TRANSFER_SOURCE_WAREHOUSE,
+                    requiredTrim(normalized.get(STORE_TRANSFER_SOURCE_WAREHOUSE), "调出仓库不能为空"));
+            normalized.put(STORE_TRANSFER_TARGET_WAREHOUSE,
+                    requiredTrim(normalized.get(STORE_TRANSFER_TARGET_WAREHOUSE), "调入仓库不能为空"));
+        }
+        return normalized;
     }
 
     private BigDecimal calculateTotalAmount(List<InventoryDocumentLine> lines) {
@@ -538,6 +559,7 @@ public class InventoryDocumentApplicationService {
         if (Objects.equals(header.getStatus(), approvedStatus())) {
             return;
         }
+        validateItemCategories(scope, lines);
         String approverRole = null;
         if (type.isWorkflowEnabled()) {
             approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
@@ -579,6 +601,7 @@ public class InventoryDocumentApplicationService {
         if (!Objects.equals(header.getStatus(), approvedStatus())) {
             return;
         }
+        validateItemCategories(scope, lines);
         applyInventoryDelta(type, scope, header, lines, operatorId, true);
         String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
                 type,
@@ -629,6 +652,8 @@ public class InventoryDocumentApplicationService {
                     line.getItemCode(),
                     line.getItemName(),
                     line.getQuantity().multiply(multiplier),
+                    line.getAmount(),
+                    header.getDocumentDate(),
                     reverse ? type.getBusinessCode() + "_UNAPPROVE" : type.getBusinessCode() + "_APPROVE",
                     operatorId
             );
@@ -670,6 +695,8 @@ public class InventoryDocumentApplicationService {
                     line.getItemCode(),
                     line.getItemName(),
                     resolveWarehouseOpeningBalanceQuantity(line),
+                    line.getAmount(),
+                    header.getDocumentDate(),
                     InventoryDocumentType.WAREHOUSE_OPENING_BALANCE.getBusinessCode() + "_CONFIRM",
                     operatorId
             );
@@ -690,6 +717,9 @@ public class InventoryDocumentApplicationService {
     }
 
     private String resolveStockLocation(InventoryDocumentType type, InventoryDocumentHeader header) {
+        if (type == InventoryDocumentType.STORE_TRANSFER) {
+            return requiredStoreTransferWarehouse(header, STORE_TRANSFER_SOURCE_WAREHOUSE, "调出仓库不能为空");
+        }
         if (type == InventoryDocumentType.STOCK_TRANSFER_INBOUND
                 || type == InventoryDocumentType.DEPARTMENT_RETURN
                 || type == InventoryDocumentType.OTHER_INBOUND
@@ -698,6 +728,10 @@ public class InventoryDocumentApplicationService {
             return defaultIfBlank(header.getPrimaryName(), type.getBusinessName());
         }
         return defaultIfBlank(header.getPrimaryName(), type.getBusinessName());
+    }
+
+    private String requiredStoreTransferWarehouse(InventoryDocumentHeader header, String fieldName, String message) {
+        return requiredTrim(parseExtraJson(header.getExtraJson()).get(fieldName), message);
     }
 
     private void deleteInternal(InventoryDocumentType type, InventoryDocumentHeader header) {
@@ -990,6 +1024,16 @@ public class InventoryDocumentApplicationService {
         return rows;
     }
 
+    private void validateItemCategories(InventoryScope scope, List<InventoryDocumentLine> lines) {
+        inventoryItemCategoryValidator.validateLines(
+                scope.scopeType(),
+                scope.scopeId(),
+                lines.stream()
+                        .map(line -> new InventoryItemCategoryValidator.LineCategory(line.getItemCode(), line.getCategory()))
+                        .toList()
+        );
+    }
+
     private InventoryScope resolveInventoryScope(String orgId) {
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
         return new InventoryScope(scope.scopeType(), scope.scopeId(), scope.groupId());
@@ -1115,7 +1159,7 @@ public class InventoryDocumentApplicationService {
         try {
             return objectMapper.readValue(extraJson, objectMapper.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, String.class));
         } catch (JsonProcessingException ex) {
-            return Map.of();
+            throw new BusinessException("单据扩展字段格式错误，请清理脏数据");
         }
     }
 

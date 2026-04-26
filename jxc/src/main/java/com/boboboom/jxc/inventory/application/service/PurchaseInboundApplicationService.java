@@ -60,6 +60,7 @@ public class PurchaseInboundApplicationService {
     private final OrgScopeService orgScopeService;
     private final DictionaryLookupService dictionaryLookupService;
     private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final InventoryItemCategoryValidator inventoryItemCategoryValidator;
 
     /** 采购入库业务服务，负责采购入库单保存、审核、反审核和库存入账。 */
     public PurchaseInboundApplicationService(InventoryBalanceRepository inventoryBalanceRepositoryValue,
@@ -72,7 +73,8 @@ public class PurchaseInboundApplicationService {
                                               InventoryDocumentWorkflowService inventoryDocumentWorkflowServiceValue,
                                               OrgScopeService orgScopeServiceValue,
                                               DictionaryLookupService dictionaryLookupServiceValue,
-                                              InventoryTransactionRepository inventoryTransactionRepositoryValue) {
+                                              InventoryTransactionRepository inventoryTransactionRepositoryValue,
+                                              InventoryItemCategoryValidator inventoryItemCategoryValidatorValue) {
         this.inventoryBalanceRepository = inventoryBalanceRepositoryValue;
         this.purchaseInboundRepository = purchaseInboundRepositoryValue;
         this.purchaseInboundLineRepository = purchaseInboundLineRepositoryValue;
@@ -84,6 +86,7 @@ public class PurchaseInboundApplicationService {
         this.orgScopeService = orgScopeServiceValue;
         this.dictionaryLookupService = dictionaryLookupServiceValue;
         this.inventoryTransactionRepository = inventoryTransactionRepositoryValue;
+        this.inventoryItemCategoryValidator = inventoryItemCategoryValidatorValue;
     }
 
     /** 分页查询采购入库单列表。 */
@@ -471,8 +474,19 @@ public class PurchaseInboundApplicationService {
                                         PurchaseInboundDO header,
                                         PurchaseInboundCreateRequest request,
                                         boolean createMode) {
+        validateItemCategories(scope, request.items());
         persistPurchaseInboundHeader(header, createMode);
         replacePurchaseInboundLines(header, request.items());
+    }
+
+    private void validateItemCategories(InventoryScope scope, List<PurchaseInboundCreateRequest.LineItem> items) {
+        inventoryItemCategoryValidator.validateLines(
+                scope.scopeType(),
+                scope.scopeId(),
+                items.stream()
+                        .map(item -> new InventoryItemCategoryValidator.LineCategory(item.itemCode(), item.category()))
+                        .toList()
+        );
     }
 
     private void persistPurchaseInboundHeader(PurchaseInboundDO header, boolean createMode) {
@@ -563,8 +577,12 @@ public class PurchaseInboundApplicationService {
 
     private List<PurchaseInboundDO> loadVisibleHeaders(InventoryScope scope, PurchaseInboundListAccess access, Long currentUserId) {
         return purchaseInboundRepository.findByScopeOrdered(scope.scopeType(), scope.scopeId()).stream()
-                .filter(header -> access.viewAll() || access.canReview() || Objects.equals(header.getCreatedBy(), currentUserId))
+                .filter(header -> access.viewAll() || access.canReview() || belongsToOperator(header, currentUserId))
                 .toList();
+    }
+
+    private boolean belongsToOperator(PurchaseInboundDO header, Long operatorId) {
+        return Objects.equals(header.getCreatedBy(), operatorId) || Objects.equals(header.getSalesmanUserId(), operatorId);
     }
 
     private PageData<PurchaseInboundRow> emptyPurchaseInboundPage(PurchaseInboundListQuery query) {
@@ -797,6 +815,7 @@ public class PurchaseInboundApplicationService {
                                     PurchaseInboundDO header,
                                     List<PurchaseInboundLineDO> lines,
                                     Long operatorId) {
+        validatePersistedItemCategories(scope, lines);
         for (PurchaseInboundLineDO line : lines) {
             inventoryStockMutationService.applyDelta(
                     scope.scopeType(),
@@ -807,6 +826,8 @@ public class PurchaseInboundApplicationService {
                     line.getItemCode(),
                     line.getItemName(),
                     line.getQuantity(),
+                    line.getQuantity().multiply(line.getUnitPrice()),
+                    header.getInboundDate(),
                     "PURCHASE_INBOUND_APPROVE",
                     operatorId
             );
@@ -816,6 +837,16 @@ public class PurchaseInboundApplicationService {
         header.setApprovedAt(LocalDateTime.now());
         header.setRejectionReason(null);
         header.setPendingOperation("NONE");
+    }
+
+    private void validatePersistedItemCategories(InventoryScope scope, List<PurchaseInboundLineDO> lines) {
+        inventoryItemCategoryValidator.validateLines(
+                scope.scopeType(),
+                scope.scopeId(),
+                lines.stream()
+                        .map(line -> new InventoryItemCategoryValidator.LineCategory(line.getItemCode(), line.getCategory()))
+                        .toList()
+        );
     }
 
     private void markHeaderSubmitted(PurchaseInboundDO header) {

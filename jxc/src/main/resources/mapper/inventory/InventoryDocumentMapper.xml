@@ -108,7 +108,7 @@
             #{id}
         </foreach>
         <if test="!viewAll">
-          and created_by = #{createdBy}
+          and (created_by = #{createdBy} or salesman_user_id = #{createdBy})
         </if>
         order by id desc
     </select>
@@ -121,7 +121,7 @@
           and scope_id = #{scopeId}
           and id = #{id}
         <if test="!viewAll">
-          and created_by = #{createdBy}
+          and (created_by = #{createdBy} or salesman_user_id = #{createdBy})
         </if>
         order by id desc
     </select>

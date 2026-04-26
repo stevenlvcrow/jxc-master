@@ -37,6 +37,7 @@ public class UserAdministrationService {
     private static final String PLATFORM_ADMIN_ROLE_CODE = "PLATFORM_ADMIN";
     private static final String ADMIN_USERNAME = "admin";
     private static final String SALESMAN_ROLE_CODE = "SALESMAN";
+    private static final String GROUP_MEMBER_ROLE_CODE = "GROUP_MEMBER";
     private static final String SCOPE_GROUP = "GROUP";
     private static final String SCOPE_PLATFORM = "PLATFORM";
     private static final String SCOPE_STORE = "STORE";
@@ -168,12 +169,7 @@ public class UserAdministrationService {
         if (platformAdmin) {
             users = userAccountRepository.findAllOrdered();
         } else {
-            List<Long> managedGroupIds = userRoleRelRepository.findByUserIdAndScopeTypeAndStatus(operatorId, SCOPE_GROUP, identityAdminLookupService.enabledStatus())
-                    .stream()
-                    .map(UserRoleRelDO::getScopeId)
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .toList();
+            List<Long> managedGroupIds = identityAccessControlService.listManagedGroupIds(operatorId);
             if (managedGroupIds.isEmpty()) {
                 return Collections.emptyList();
             }
@@ -418,12 +414,15 @@ public class UserAdministrationService {
                 throw new com.boboboom.jxc.common.BusinessException("集团机构非法");
             }
             identityAdminLookupService.ensureGroupBuiltinRoles(groupId, operatorId);
+            RoleDO groupMemberRole = roleRepository.findByTenantGroupIdAndRoleCode(groupId, GROUP_MEMBER_ROLE_CODE)
+                    .orElseThrow(() -> new com.boboboom.jxc.common.BusinessException("集团成员角色未初始化"));
             RoleDO salesmanRole = roleRepository.findByTenantGroupIdAndRoleCode(groupId, SALESMAN_ROLE_CODE)
                     .orElseThrow(() -> new com.boboboom.jxc.common.BusinessException("门店业务员角色未初始化"));
             List<com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO> groupStores = storeRepository.findByGroupId(groupId);
             if (groupStores.isEmpty()) {
                 throw new com.boboboom.jxc.common.BusinessException("集团下没有门店，无法默认分配门店业务员角色");
             }
+            saveRoleRel(userId, groupMemberRole.getId(), SCOPE_GROUP, groupId, operatorId);
             for (com.boboboom.jxc.identity.infrastructure.persistence.dataobject.StoreDO store : groupStores) {
                 saveRoleRel(userId, salesmanRole.getId(), SCOPE_STORE, store.getId(), operatorId);
             }

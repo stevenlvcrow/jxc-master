@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import {
   CloseBold,
   Delete,
@@ -29,6 +29,11 @@ import {
   type PurchaseDocumentType,
 } from '@/api/modules/purchase';
 import { resolveArchiveOrgId } from '@/views/items/org';
+import {
+  normalizeDocumentCode,
+  pushDocumentListByCode,
+  readQueryString,
+} from '@/utils/documentNavigation';
 
 type ManagedDocumentType = Extract<PurchaseDocumentType, 'orders' | 'receipts' | 'returns'>;
 type DialogMode = 'create' | 'edit' | 'view';
@@ -74,6 +79,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const router = useRouter();
+const route = useRoute();
 const sessionStore = useSessionStore();
 const { warehouseTree, loadWarehouseTree } = useStoreWarehouseTree();
 const {
@@ -233,6 +239,19 @@ const loadRows = async () => {
   }
 };
 
+const applyRouteQuery = () => {
+  const documentCode = readQueryString(route.query.documentCode);
+  const sourceDocumentCode = readQueryString(route.query.sourceDocumentCode);
+  const changed = query.documentCode !== documentCode || query.sourceDocumentCode !== sourceDocumentCode;
+  if (!changed) {
+    return false;
+  }
+  query.documentCode = documentCode;
+  query.sourceDocumentCode = sourceDocumentCode;
+  currentPage.value = 1;
+  return true;
+};
+
 const createEmptyLine = (): LineDraft => ({
   key: lineKeySeed.value++,
   itemCode: '',
@@ -254,36 +273,16 @@ const createEmptyLine = (): LineDraft => ({
   remark: '',
 });
 
-const resetForm = () => {
-  editingId.value = null;
-  form.documentDate = new Date().toISOString().slice(0, 10);
-  form.expectedArrivalDate = '';
-  form.purchaseOrg = sessionStore.currentOrg?.name || '';
-  form.warehouse = '';
-  form.supplier = '';
-  form.sourceDocumentCode = '';
-  form.downstreamDocumentCode = '';
-  form.documentBizType = props.defaultBizType;
-  form.shipStatus = props.showReceiveActions ? '未发货' : '';
-  form.receiveStatus = props.showReceiveActions ? '未收货' : '';
-  form.reconciliationStatus = '';
-  form.supplierSplit = '';
-  form.splitReceipt = props.documentType === 'orders' ? '不拆分' : '';
-  form.printStatus = '未打印';
-  form.returnReason = '';
-  form.inspectionStatus = '无需质检';
-  form.adjustedPrice = false;
-  form.submitter = '';
-  form.remark = '';
-  lineRows.value = [createEmptyLine()];
-};
-
 const openCreateDialog = () => {
   router.push(`${listPath.value}/create`);
 };
 
 const openDialogFromRow = (row: PurchaseDocument, mode: DialogMode) => {
   router.push(`${listPath.value}/${mode}/${row.id}`);
+};
+
+const handleSourceDocumentClick = (documentCode: string) => {
+  void pushDocumentListByCode(router, documentCode);
 };
 
 const handleItemChange = (line: LineDraft) => {
@@ -486,7 +485,17 @@ watch(
   },
 );
 
+watch(
+  () => [route.query.documentCode, route.query.sourceDocumentCode],
+  () => {
+    if (applyRouteQuery()) {
+      void loadRows();
+    }
+  },
+);
+
 onMounted(() => {
+  applyRouteQuery();
   void loadOptions();
   void loadRows();
 });
@@ -568,7 +577,14 @@ onMounted(() => {
       <el-table-column type="selection" width="44" fixed="left" />
       <el-table-column type="index" label="序号" width="56" fixed="left" />
       <el-table-column prop="documentDate" :label="dateLabel" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="documentCode" :label="codeLabel" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="documentCode" :label="codeLabel" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-button v-if="row.documentCode" type="primary" link @click="openDialogFromRow(row, 'view')">
+            {{ row.documentCode }}
+          </el-button>
+          <template v-else>-</template>
+        </template>
+      </el-table-column>
       <el-table-column prop="supplier" label="供应商" min-width="150" show-overflow-tooltip />
       <el-table-column prop="warehouse" :label="warehouseLabel" min-width="140" show-overflow-tooltip />
       <el-table-column prop="amount" :label="amountLabel" min-width="110" align="right" />
@@ -581,7 +597,19 @@ onMounted(() => {
       <el-table-column prop="reviewStatus" label="审核状态" min-width="100" />
       <el-table-column prop="workflowTaskName" label="当前审批节点" min-width="130" show-overflow-tooltip />
       <el-table-column v-if="showReceiveActions" prop="receiveStatus" label="收货状态" min-width="100" />
-      <el-table-column prop="sourceDocumentCode" label="来源单号" min-width="150" show-overflow-tooltip />
+      <el-table-column prop="sourceDocumentCode" label="来源单号" min-width="150" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-button
+            v-if="normalizeDocumentCode(row.sourceDocumentCode)"
+            type="primary"
+            link
+            @click.stop="handleSourceDocumentClick(row.sourceDocumentCode)"
+          >
+            {{ row.sourceDocumentCode }}
+          </el-button>
+          <span v-else>-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="downstreamDocumentCode" label="下游单号" min-width="150" show-overflow-tooltip />
       <el-table-column prop="documentBizType" label="单据类型" min-width="120" show-overflow-tooltip />
       <el-table-column v-if="showReturnReason" prop="returnReason" label="退货原因" min-width="130" show-overflow-tooltip />
@@ -591,7 +619,6 @@ onMounted(() => {
       <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link @click="openDialogFromRow(row, 'view')">查看</el-button>
           <el-button type="primary" link @click="openDialogFromRow(row, 'edit')">编辑</el-button>
         </template>
       </el-table-column>

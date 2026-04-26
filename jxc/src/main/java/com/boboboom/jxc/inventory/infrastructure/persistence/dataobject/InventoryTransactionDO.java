@@ -1,6 +1,7 @@
 package com.boboboom.jxc.inventory.infrastructure.persistence.dataobject;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.BaseCreateDO;
@@ -17,9 +18,14 @@ public class InventoryTransactionDO extends BaseCreateDO {
     private String warehouseName;
     private String itemCode;
     private String itemName;
+    private LocalDate businessDate;
     private BigDecimal quantityDelta;
     private BigDecimal beforeQty;
     private BigDecimal afterQty;
+    private BigDecimal amountDelta;
+    private BigDecimal beforeAmount;
+    private BigDecimal afterAmount;
+    private BigDecimal costPrice;
     private Long operatorId;
 
     /** 获取ScopeType。 */
@@ -102,6 +108,16 @@ public class InventoryTransactionDO extends BaseCreateDO {
         this.itemName = itemNameValue;
     }
 
+    /** 获取BusinessDate。 */
+    public LocalDate getBusinessDate() {
+        return businessDate;
+    }
+
+    /** 设置BusinessDate。 */
+    public void setBusinessDate(LocalDate businessDateValue) {
+        this.businessDate = businessDateValue;
+    }
+
     /** 获取QuantityDelta。 */
     public BigDecimal getQuantityDelta() {
         return quantityDelta;
@@ -130,6 +146,46 @@ public class InventoryTransactionDO extends BaseCreateDO {
     /** 设置AfterQty。 */
     public void setAfterQty(BigDecimal afterQtyValue) {
         this.afterQty = afterQtyValue;
+    }
+
+    /** 获取AmountDelta。 */
+    public BigDecimal getAmountDelta() {
+        return amountDelta;
+    }
+
+    /** 设置AmountDelta。 */
+    public void setAmountDelta(BigDecimal amountDeltaValue) {
+        this.amountDelta = amountDeltaValue;
+    }
+
+    /** 获取BeforeAmount。 */
+    public BigDecimal getBeforeAmount() {
+        return beforeAmount;
+    }
+
+    /** 设置BeforeAmount。 */
+    public void setBeforeAmount(BigDecimal beforeAmountValue) {
+        this.beforeAmount = beforeAmountValue;
+    }
+
+    /** 获取AfterAmount。 */
+    public BigDecimal getAfterAmount() {
+        return afterAmount;
+    }
+
+    /** 设置AfterAmount。 */
+    public void setAfterAmount(BigDecimal afterAmountValue) {
+        this.afterAmount = afterAmountValue;
+    }
+
+    /** 获取CostPrice。 */
+    public BigDecimal getCostPrice() {
+        return costPrice;
+    }
+
+    /** 设置CostPrice。 */
+    public void setCostPrice(BigDecimal costPriceValue) {
+        this.costPrice = costPriceValue;
     }
 
     /** 获取OperatorId。 */

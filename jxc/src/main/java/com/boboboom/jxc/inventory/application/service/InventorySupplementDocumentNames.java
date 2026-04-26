@@ -20,6 +20,8 @@ final class InventorySupplementDocumentNames {
         registerOutbound(InventoryDocumentType.DAMAGE_OUTBOUND, "报损出库");
         registerInbound(InventoryDocumentType.OTHER_INBOUND, "其他入库");
         registerOutbound(InventoryDocumentType.OTHER_OUTBOUND, "其他出库");
+        registerInbound(InventoryDocumentType.PROFIT_INBOUND, "盘盈入库");
+        registerOutbound(InventoryDocumentType.LOSS_OUTBOUND, "盘亏出库");
         registerInbound(InventoryDocumentType.PRODUCTION_INBOUND, "生产入库");
         registerOutbound(InventoryDocumentType.CUSTOMER_SALES_OUTBOUND, "客户销售出库");
         registerInbound(InventoryDocumentType.CUSTOMER_RETURN_INBOUND, "客户退货入库");

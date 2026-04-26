@@ -795,36 +795,56 @@ ON CONFLICT DO NOTHING;
 -- ITEM_MASTER_SEED_END
 
 -- 以下为角色模板数据，平台角色模板和集团/门店角色模板均属于模板数据源。
-INSERT INTO sys_role (role_code, role_name, role_type, data_scope_type, description, status)
-VALUES ('PLATFORM_SUPER_ADMIN', '平台超级管理员', 'PLATFORM', 'ALL', '系统初始化平台管理员角色', 'ENABLED')
+INSERT INTO sys_role (role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES ('PLATFORM_SUPER_ADMIN', '平台超级管理员', TRUE, 'PLATFORM', 'ALL', '系统初始化平台管理员角色', 'ENABLED')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO sys_role (role_code, role_name, role_type, data_scope_type, description, status)
-VALUES ('PLATFORM_ADMIN', '平台管理员', 'PLATFORM', 'ALL', '平台新增用户默认角色', 'ENABLED')
+INSERT INTO sys_role (role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES ('PLATFORM_ADMIN', '平台管理员', TRUE, 'PLATFORM', 'ALL', '平台新增用户默认角色', 'ENABLED')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO sys_role (role_code, role_name, role_type, data_scope_type, description, status)
-VALUES ('GROUP_ADMIN', '集团管理员', 'GROUP', 'GROUP', '系统初始化集团管理员角色', 'ENABLED')
+INSERT INTO sys_role (role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES ('GROUP_ADMIN', '集团管理员', TRUE, 'GROUP', 'GROUP', '系统初始化集团管理员角色', 'ENABLED')
 ON CONFLICT DO NOTHING;
 
-INSERT INTO sys_role (role_code, role_name, role_type, data_scope_type, description, status)
-VALUES ('STORE_ADMIN', '门店管理员', 'STORE', 'STORE', '系统初始化门店管理员角色', 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_role (tenant_group_id, role_code, role_name, role_type, data_scope_type, description, status)
-VALUES (0, 'STORE_MANAGER', '店长', 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES (0, 'GROUP_MEMBER', '集团成员', TRUE, 'GROUP', 'SELF', '用户所属集团归属角色', 'ENABLED')
 ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
 
-INSERT INTO sys_role (tenant_group_id, role_code, role_name, role_type, data_scope_type, description, status)
-VALUES (0, 'SALESMAN', '业务员', 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+INSERT INTO sys_role (role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES ('STORE_ADMIN', '门店管理员', TRUE, 'STORE', 'STORE', '系统初始化门店管理员角色', 'ENABLED')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES (0, 'STORE_MANAGER', '店长', TRUE, 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
 ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
 
-INSERT INTO sys_role (tenant_group_id, role_code, role_name, role_type, data_scope_type, description, status)
-VALUES (0, 'FINANCE', '财务', 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES (0, 'SALESMAN', '业务员', TRUE, 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
 ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
 
-INSERT INTO sys_role (tenant_group_id, role_code, role_name, role_type, data_scope_type, description, status)
-VALUES (0, 'CASHIER', '收银员', 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES (0, 'FINANCE', '财务', TRUE, 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
+
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, builtin, role_type, data_scope_type, description, status)
+VALUES (0, 'CASHIER', '收银员', TRUE, 'STORE', 'STORE', 'GROUP_ROLE_TEMPLATE', 'ENABLED')
+ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
+
+INSERT INTO sys_role (tenant_group_id, role_code, role_name, builtin, role_type, data_scope_type, description, status)
+SELECT g.id,
+       template.role_code,
+       template.role_name,
+       template.builtin,
+       template.role_type,
+       template.data_scope_type,
+       template.description,
+       template.status
+FROM sys_group g
+CROSS JOIN sys_role template
+WHERE template.tenant_group_id = 0
+  AND template.builtin = TRUE
+  AND template.role_type IN ('GROUP', 'STORE')
 ON CONFLICT (tenant_group_id, role_code) DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
@@ -1105,6 +1125,17 @@ ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_user (username, real_name, phone, password_hash, password_salt, status, source_type, first_login_changed_pwd)
 VALUES ('mrmdgly0002', '默认门店管理员', '13800000002', '6460662e217c7a9f899208dd70a2c28abdea42f128666a9b78e6c0c064846493', NULL, 'ENABLED', 'SYSTEM_INIT', FALSE)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO sys_user_role_rel (user_id, role_id, scope_type, scope_id, assigned_by, status)
+VALUES (
+    (SELECT id FROM sys_user WHERE phone = '13800000002'),
+    (SELECT id FROM sys_role WHERE tenant_group_id = (SELECT id FROM sys_group WHERE group_code = 'GP00001') AND role_code = 'GROUP_MEMBER'),
+    'GROUP',
+    (SELECT id FROM sys_group WHERE group_code = 'GP00001'),
+    (SELECT id FROM sys_user WHERE phone = '13800000000'),
+    'ENABLED'
+)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_store_admin_rel (store_id, user_id, assigned_by, status)
@@ -1444,11 +1475,11 @@ ON CONFLICT DO NOTHING;
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
     'STORE_BIZ_MENU_WAREHOUSE_OPENING_BALANCE',
-    '仓库期初',
+    '期初库存',
     (SELECT id FROM sys_menu WHERE menu_code = 'STORE_BIZ_GRP_INVENTORY_DOCUMENT'),
     'MENU',
-    '/inventory/warehouse-opening-balances',
-    'store:inventory:warehouse-opening-balances:view',
+    '/inventory/period-openings',
+    'store:inventory:period-openings:view',
     NULL,
     104011,
     TRUE,
@@ -1742,7 +1773,7 @@ VALUES (
 )
 ON CONFLICT DO NOTHING;
 
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
+INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status, component_key)
 VALUES (
     'STORE_BIZ_MENU_LOSS_OUTBOUND',
     '盘亏单',
@@ -1753,7 +1784,8 @@ VALUES (
     NULL,
     104024,
     TRUE,
-    'ENABLED'
+    'ENABLED',
+    'inventory.loss-outbound.index'
 )
 ON CONFLICT DO NOTHING;
 
@@ -1861,6 +1893,13 @@ VALUES (
     'ENABLED'
 )
 ON CONFLICT DO NOTHING;
+
+UPDATE sys_menu
+SET menu_name = '期初库存',
+    route_path = '/inventory/period-openings',
+    permission_code = 'store:inventory:period-openings:view',
+    component_key = 'inventory.period-opening.index'
+WHERE menu_code = 'STORE_BIZ_MENU_WAREHOUSE_OPENING_BALANCE';
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
@@ -2245,6 +2284,7 @@ ON CONFLICT DO NOTHING;
 
 UPDATE sys_menu
 SET component_key = CASE menu_code
+    WHEN 'STORE_BIZ_MENU_WAREHOUSE_OPENING_BALANCE' THEN 'inventory.period-opening.index'
     WHEN 'STORE_BIZ_MENU_REALTIME_STOCK_QUERY' THEN 'report.realtime-stock-query.index'
     WHEN 'STORE_BIZ_MENU_DISH_CONSUMPTION_OUTBOUND_QUERY' THEN 'report.dish-consumption-outbound-report.index'
     WHEN 'STORE_BIZ_MENU_INVENTORY_PROFIT_LOSS' THEN 'report.inventory-profit-loss.index'
@@ -2261,6 +2301,7 @@ SET component_key = CASE menu_code
     ELSE component_key
 END
 WHERE menu_code IN (
+    'STORE_BIZ_MENU_WAREHOUSE_OPENING_BALANCE',
     'STORE_BIZ_MENU_REALTIME_STOCK_QUERY',
     'STORE_BIZ_MENU_DISH_CONSUMPTION_OUTBOUND_QUERY',
     'STORE_BIZ_MENU_INVENTORY_PROFIT_LOSS',
@@ -3547,6 +3588,7 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('PURCHASE_ORDER', '采购订单流程'),
         ('PURCHASE_RECEIPT', '采购收货单流程'),
         ('PURCHASE_RETURN', '采购退货单流程'),
+        ('PERIOD_OPENING_BALANCE', '期初库存流程'),
         ('PURCHASE_INBOUND', '采购入库流程'),
         ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
         ('DEPARTMENT_PICKING', '部门领料流程'),
@@ -3561,6 +3603,8 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
         ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
         ('DISH_CONSUMPTION_OUTBOUND', '菜品消耗出库流程'),
+        ('STORE_TRANSFER', '店间调拨流程'),
+        ('STOCK_TRANSFER_OUTBOUND', '移库出库流程'),
         ('INVENTORY_CHECK', '盘点单流程'),
         ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
 )
@@ -3582,6 +3626,7 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('PURCHASE_ORDER', '采购订单流程'),
         ('PURCHASE_RECEIPT', '采购收货单流程'),
         ('PURCHASE_RETURN', '采购退货单流程'),
+        ('PERIOD_OPENING_BALANCE', '期初库存流程'),
         ('PURCHASE_INBOUND', '采购入库流程'),
         ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
         ('DEPARTMENT_PICKING', '部门领料流程'),
@@ -3596,6 +3641,8 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
         ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
         ('DISH_CONSUMPTION_OUTBOUND', '菜品消耗出库流程'),
+        ('STORE_TRANSFER', '店间调拨流程'),
+        ('STOCK_TRANSFER_OUTBOUND', '移库出库流程'),
         ('INVENTORY_CHECK', '盘点单流程'),
         ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
 )
@@ -3614,6 +3661,7 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('PURCHASE_ORDER', '采购订单流程'),
         ('PURCHASE_RECEIPT', '采购收货单流程'),
         ('PURCHASE_RETURN', '采购退货单流程'),
+        ('PERIOD_OPENING_BALANCE', '期初库存流程'),
         ('PURCHASE_INBOUND', '采购入库流程'),
         ('PURCHASE_RETURN_OUTBOUND', '采购退货出库流程'),
         ('DEPARTMENT_PICKING', '部门领料流程'),
@@ -3628,6 +3676,8 @@ WITH workflow_process_seed(process_code, business_name) AS (
         ('CUSTOMER_SALES_OUTBOUND', '客户销售出库流程'),
         ('CUSTOMER_RETURN_INBOUND', '客户退货入库流程'),
         ('DISH_CONSUMPTION_OUTBOUND', '菜品消耗出库流程'),
+        ('STORE_TRANSFER', '店间调拨流程'),
+        ('STOCK_TRANSFER_OUTBOUND', '移库出库流程'),
         ('INVENTORY_CHECK', '盘点单流程'),
         ('MULTI_INVENTORY_CHECK', '多人盘点单流程')
 )
@@ -3745,6 +3795,8 @@ CREATE TABLE IF NOT EXISTS inventory_balance
     item_code      VARCHAR(64)   NOT NULL,
     item_name      VARCHAR(128)  NOT NULL,
     quantity       NUMERIC(18,4) NOT NULL DEFAULT 0,
+    cost_amount    NUMERIC(18,2) NOT NULL DEFAULT 0,
+    avg_cost       NUMERIC(18,4) NOT NULL DEFAULT 0,
     created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_inventory_balance_scope_wh_item UNIQUE (scope_type, scope_id, warehouse_name, item_code),
@@ -3754,6 +3806,8 @@ CREATE TABLE IF NOT EXISTS inventory_balance
 CREATE INDEX IF NOT EXISTS idx_inventory_balance_scope ON inventory_balance (scope_type, scope_id, warehouse_name);
 
 COMMENT ON TABLE inventory_balance IS '库存结存';
+ALTER TABLE inventory_balance ADD COLUMN IF NOT EXISTS cost_amount NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE inventory_balance ADD COLUMN IF NOT EXISTS avg_cost NUMERIC(18,4) NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS inventory_transaction
 (
@@ -3766,9 +3820,14 @@ CREATE TABLE IF NOT EXISTS inventory_transaction
     warehouse_name VARCHAR(128)  NOT NULL,
     item_code      VARCHAR(64)   NOT NULL,
     item_name      VARCHAR(128)  NOT NULL,
+    business_date  DATE          NOT NULL DEFAULT CURRENT_DATE,
     quantity_delta NUMERIC(18,4) NOT NULL,
     before_qty     NUMERIC(18,4) NOT NULL,
     after_qty      NUMERIC(18,4) NOT NULL,
+    amount_delta   NUMERIC(18,2) NOT NULL DEFAULT 0,
+    before_amount  NUMERIC(18,2) NOT NULL DEFAULT 0,
+    after_amount   NUMERIC(18,2) NOT NULL DEFAULT 0,
+    cost_price     NUMERIC(18,4) NOT NULL DEFAULT 0,
     operator_id    BIGINT,
     created_at     TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT ck_inventory_transaction_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
@@ -3778,6 +3837,67 @@ CREATE INDEX IF NOT EXISTS idx_inventory_transaction_scope ON inventory_transact
 CREATE INDEX IF NOT EXISTS idx_inventory_transaction_biz ON inventory_transaction (biz_type, biz_id);
 
 COMMENT ON TABLE inventory_transaction IS '库存流水';
+ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS business_date DATE NOT NULL DEFAULT CURRENT_DATE;
+ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS amount_delta NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS before_amount NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS after_amount NUMERIC(18,2) NOT NULL DEFAULT 0;
+ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS cost_price NUMERIC(18,4) NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS inventory_period_opening
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    warehouse_name              VARCHAR(128)  NOT NULL,
+    period_type                 VARCHAR(16)   NOT NULL,
+    period_start_date           DATE          NOT NULL,
+    period_end_date             DATE          NOT NULL,
+    source_type                 VARCHAR(16)   NOT NULL,
+    status                      VARCHAR(16)   NOT NULL,
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    total_quantity              NUMERIC(18,4) NOT NULL DEFAULT 0,
+    total_amount                NUMERIC(18,2) NOT NULL DEFAULT 0,
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_period_opening_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT uk_inventory_period_opening_period UNIQUE (scope_type, scope_id, warehouse_name, period_type, period_start_date),
+    CONSTRAINT ck_inventory_period_opening_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_period_opening_scope ON inventory_period_opening (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_period_opening_period ON inventory_period_opening (period_start_date DESC);
+COMMENT ON TABLE inventory_period_opening IS '周期期初库存单';
+
+CREATE TABLE IF NOT EXISTS inventory_period_opening_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64)   NOT NULL,
+    item_name                   VARCHAR(128)  NOT NULL,
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    opening_qty                 NUMERIC(18,4) NOT NULL,
+    opening_amount              NUMERIC(18,2) NOT NULL,
+    opening_avg_cost            NUMERIC(18,4) NOT NULL,
+    remark                      VARCHAR(500),
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_period_opening_line_header FOREIGN KEY (header_id) REFERENCES inventory_period_opening (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_period_opening_line_header ON inventory_period_opening_line (header_id);
+COMMENT ON TABLE inventory_period_opening_line IS '周期期初库存明细';
 
 CREATE TABLE IF NOT EXISTS sys_warehouse
 (
@@ -4510,6 +4630,128 @@ CREATE TABLE IF NOT EXISTS inventory_other_outbound_line
 );
 CREATE INDEX IF NOT EXISTS idx_inventory_other_outbound_line_header ON inventory_other_outbound_line (header_id);
 
+CREATE TABLE IF NOT EXISTS inventory_profit_inbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_profit_inbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_profit_inbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_profit_inbound_scope ON inventory_profit_inbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_profit_inbound_date ON inventory_profit_inbound (document_date DESC);
+COMMENT ON TABLE inventory_profit_inbound IS '盘盈单';
+
+CREATE TABLE IF NOT EXISTS inventory_profit_inbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_profit_inbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_profit_inbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_profit_inbound_line_header ON inventory_profit_inbound_line (header_id);
+
+CREATE TABLE IF NOT EXISTS inventory_loss_outbound
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    scope_type                  VARCHAR(16)   NOT NULL,
+    scope_id                    BIGINT        NOT NULL,
+    document_code               VARCHAR(64)   NOT NULL,
+    document_date               DATE          NOT NULL,
+    primary_name                VARCHAR(128),
+    secondary_name              VARCHAR(128),
+    counterparty_name           VARCHAR(128),
+    counterparty_name2          VARCHAR(128),
+    reason                      VARCHAR(128),
+    upstream_code               VARCHAR(64),
+    salesman_user_id            BIGINT,
+    salesman_name               VARCHAR(64),
+    total_amount                NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    status                      VARCHAR(16)   NOT NULL DEFAULT '草稿',
+    workflow_process_code       VARCHAR(64),
+    workflow_definition_key     VARCHAR(128),
+    workflow_definition_id      VARCHAR(128),
+    workflow_instance_id        VARCHAR(64),
+    workflow_task_id            VARCHAR(64),
+    workflow_task_name          VARCHAR(128),
+    workflow_status             VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    pending_operation           VARCHAR(16)   NOT NULL DEFAULT 'NONE',
+    remark                      VARCHAR(500),
+    rejection_reason            VARCHAR(500),
+    extra_json                  TEXT,
+    created_by                  BIGINT,
+    approved_by                 BIGINT,
+    approved_at                 TIMESTAMP,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_inventory_loss_outbound_scope_code UNIQUE (scope_type, scope_id, document_code),
+    CONSTRAINT ck_inventory_loss_outbound_scope_type CHECK (scope_type IN ('PLATFORM', 'GROUP', 'STORE'))
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_loss_outbound_scope ON inventory_loss_outbound (scope_type, scope_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_loss_outbound_date ON inventory_loss_outbound (document_date DESC);
+COMMENT ON TABLE inventory_loss_outbound IS '盘亏单';
+
+CREATE TABLE IF NOT EXISTS inventory_loss_outbound_line
+(
+    id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    header_id                   BIGINT        NOT NULL,
+    item_code                   VARCHAR(64),
+    item_name                   VARCHAR(128),
+    spec                        VARCHAR(128),
+    category                    VARCHAR(128),
+    unit_name                   VARCHAR(64),
+    available_qty               NUMERIC(18, 4),
+    quantity                    NUMERIC(18, 4) NOT NULL,
+    unit_price                  NUMERIC(18, 4) NOT NULL DEFAULT 0,
+    amount                      NUMERIC(18, 2) NOT NULL DEFAULT 0,
+    line_reason                 VARCHAR(128),
+    remark                      VARCHAR(500),
+    extra_json                  TEXT,
+    created_at                  TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_inventory_loss_outbound_line_header FOREIGN KEY (header_id) REFERENCES inventory_loss_outbound (id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_inventory_loss_outbound_line_header ON inventory_loss_outbound_line (header_id);
+
 CREATE TABLE IF NOT EXISTS inventory_production_inbound
 (
     id                          BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -5003,6 +5245,7 @@ FROM (VALUES
     ('item.status', '物品状态', 'ARCHIVE', 300, '物品及物品基础资料状态'),
     ('inventory.document_status', '库存单据状态', 'INVENTORY', 400, '库存单据审核状态'),
     ('inventory.workflow_status', '库存流程状态', 'INVENTORY', 410, '库存单据流程状态'),
+    ('inventory.period_type', '期初周期类型', 'INVENTORY', 415, '期初库存核算周期类型'),
     ('inventory.check_range_type', '盘点范围类型', 'INVENTORY', 420, '盘点范围类型'),
     ('inventory.check_generation_status', '盘点生成状态', 'INVENTORY', 430, '多人盘点单生成状态'),
     ('workflow.definition_status', '流程定义状态', 'WORKFLOW', 500, '流程模板发布状态'),
@@ -5058,6 +5301,9 @@ FROM (VALUES
     ('inventory.workflow_status', 'RUNNING', 'RUNNING', '流转中', 20),
     ('inventory.workflow_status', 'COMPLETED', 'COMPLETED', '已完成', 30),
     ('inventory.workflow_status', 'REVOKED', 'REVOKED', '已撤回', 40),
+    ('inventory.period_type', 'DAY', 'DAY', '日期初', 10),
+    ('inventory.period_type', 'MONTH', 'MONTH', '月期初', 20),
+    ('inventory.period_type', 'YEAR', 'YEAR', '年初期初', 30),
     ('inventory.check_range_type', 'FULL_WAREHOUSE', 'FULL_WAREHOUSE', '全仓盘点', 10),
     ('inventory.check_range_type', 'PARTITION', 'PARTITION', '分区盘点', 20),
     ('inventory.check_range_type', 'SPECIFIC_ITEM', 'SPECIFIC_ITEM', '指定食材盘点', 30),
@@ -5122,8 +5368,15 @@ FROM (VALUES
     ('inventory.workflow_status', 'inventory_department_picking', 'workflow_status', '部门领料流程状态'),
     ('inventory.document_status', 'inventory_stock_transfer_outbound', 'status', '移库出库状态'),
     ('inventory.workflow_status', 'inventory_stock_transfer_outbound', 'workflow_status', '移库出库流程状态'),
+    ('inventory.document_status', 'inventory_profit_inbound', 'status', '盘盈单状态'),
+    ('inventory.workflow_status', 'inventory_profit_inbound', 'workflow_status', '盘盈单流程状态'),
+    ('inventory.document_status', 'inventory_loss_outbound', 'status', '盘亏单状态'),
+    ('inventory.workflow_status', 'inventory_loss_outbound', 'workflow_status', '盘亏单流程状态'),
     ('inventory.document_status', 'inventory_dish_consumption_outbound', 'status', '菜品消耗出库状态'),
-    ('inventory.workflow_status', 'inventory_dish_consumption_outbound', 'workflow_status', '菜品消耗出库流程状态')
+    ('inventory.workflow_status', 'inventory_dish_consumption_outbound', 'workflow_status', '菜品消耗出库流程状态'),
+    ('inventory.document_status', 'inventory_period_opening', 'status', '期初库存状态'),
+    ('inventory.workflow_status', 'inventory_period_opening', 'workflow_status', '期初库存流程状态'),
+    ('inventory.period_type', 'inventory_period_opening', 'period_type', '期初库存周期类型')
 ) AS v(dict_code, table_name, column_name, remark)
 WHERE NOT EXISTS (
     SELECT 1 FROM sys_dict_field_binding b

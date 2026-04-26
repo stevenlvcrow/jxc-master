@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import type { UploadFile } from 'element-plus';
-import type { ComponentPublicInstance } from 'vue';
-import { ElMessage } from 'element-plus';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { ElMessage, type UploadFile } from 'element-plus';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch, type ComponentPublicInstance } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useSessionStore } from '@/stores/session';
 import {

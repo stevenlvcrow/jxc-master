@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { Download, Finished, Printer, RefreshRight, Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import { useSessionStore } from '@/stores/session';
 
@@ -56,9 +55,7 @@ const query = reactive({
 const selectedIds = ref<number[]>([]);
 const currentPage = ref(1);
 const pageSize = ref(10);
-const tableData = ref<Row[]>([
-  { id: 1, receiptCode: 'RC-202604-001', supplierOrg: '华东配送中心', deliveryOrg: '朝阳门店', orderOrg: '朝阳门店', sourceDeliveryCode: 'DN-202604-001', sourcePurchaseCode: 'PO-202604-001', sourceOrderCode: 'SO-202604-001', shipAmount: 1380, receiptAmount: 1380, freightAmount: 60, documentStatus: '待收货', reviewStatus: '未复审', businessMode: '统配', expressLogistics: '顺丰', receiptMode: '按单收货', orderDate: '2026-04-20', expectedArrivalDate: '2026-04-24', shipDate: '2026-04-22', estimatedArrivalDate: '2026-04-24', receiptDate: '-', lastOperatedAt: '2026-04-22 10:30:00', remark: '常规补货', printStatus: '未打印', arrivalStatus: '待到货' },
-]);
+const tableData = ref<Row[]>([]);
 const filteredRows = computed(() => tableData.value.filter((row) => {
   const code = query.receiptCode.trim().toLowerCase();
   return (!code || row.receiptCode.toLowerCase().includes(code))
@@ -71,7 +68,6 @@ const reset = () => {
   Object.assign(query, { dateType: '订单日期', startDate: '', endDate: '', receiptCode: '', documentStatus: '待收货', transportStatus: '', includePresale: '', reviewStatus: '', supplierOrg: '', shippingWarehouse: '', deliveryCode: '', purchaseCode: '', orderCode: '', deliveryOrg: '', businessMode: '', receiptMode: '', receiptWarehouse: '', paymentMode: '', paymentStatus: '', item: '', arrivalStatus: '', returnStatus: '', adjustedPrice: false, documentTag: '', printStatus: '全部', remark: '' });
   currentPage.value = 1;
 };
-const action = (name: string) => ElMessage.info(`${name}功能待接入`);
 </script>
 
 <template>
@@ -106,11 +102,11 @@ const action = (name: string) => ElMessage.info(`${name}功能待接入`);
       <el-form-item><el-button type="primary" @click="currentPage=1"><el-icon><Search /></el-icon>查询</el-button><el-button @click="reset"><el-icon><RefreshRight /></el-icon>重置</el-button></el-form-item>
     </CommonQuerySection>
     <div class="table-toolbar">
-      <el-button @click="action('批量打印')"><el-icon><Printer /></el-icon>批量打印</el-button><el-button @click="action('批量导出单据明细')"><el-icon><Download /></el-icon>批量导出单据明细</el-button><el-button @click="action('批量导出单据列表')"><el-icon><Download /></el-icon>批量导出单据列表</el-button><el-button type="primary" @click="action('批量收货')"><el-icon><Finished /></el-icon>批量收货</el-button><el-button @click="action('批量复审')">批量复审</el-button><el-button @click="action('批量取消复审')">批量取消复审</el-button><el-button @click="action('批量关闭')">批量关闭</el-button><el-button @click="action('批量取消关闭')">批量取消关闭</el-button><el-button @click="action('批量修改到货状态')">批量修改到货状态</el-button>
+      <el-button disabled><el-icon><Printer /></el-icon>批量打印</el-button><el-button disabled><el-icon><Download /></el-icon>批量导出单据明细</el-button><el-button disabled><el-icon><Download /></el-icon>批量导出单据列表</el-button><el-button type="primary" disabled><el-icon><Finished /></el-icon>批量收货</el-button><el-button disabled>批量复审</el-button><el-button disabled>批量取消复审</el-button><el-button disabled>批量关闭</el-button><el-button disabled>批量取消关闭</el-button><el-button disabled>批量修改到货状态</el-button>
     </div>
     <el-table :data="pagedRows" border stripe class="erp-table" :fit="false" height="460" @selection-change="(rows: Row[]) => selectedIds = rows.map(row => row.id)">
       <el-table-column type="selection" width="44" fixed="left" /><el-table-column type="index" label="序号" width="56" fixed="left" />
-      <el-table-column prop="receiptCode" label="收货单号" min-width="150" fixed="left" show-overflow-tooltip /><el-table-column prop="supplierOrg" label="供货机构" min-width="130" /><el-table-column prop="deliveryOrg" label="送货机构" min-width="130" /><el-table-column prop="orderOrg" label="订货机构" min-width="130" /><el-table-column prop="sourceDeliveryCode" label="来源配送单" min-width="150" /><el-table-column prop="sourcePurchaseCode" label="来源采购订单（配送中心）" min-width="190" /><el-table-column prop="sourceOrderCode" label="来源订货单" min-width="150" /><el-table-column label="发货金额" min-width="110" align="right"><template #default="{ row }">{{ money(row.shipAmount) }}</template></el-table-column><el-table-column label="收货金额" min-width="110" align="right"><template #default="{ row }">{{ money(row.receiptAmount) }}</template></el-table-column><el-table-column label="合计配送运费" min-width="130" align="right"><template #default="{ row }">{{ money(row.freightAmount) }}</template></el-table-column><el-table-column prop="documentStatus" label="单据状态" min-width="100" /><el-table-column prop="reviewStatus" label="复审状态" min-width="100" /><el-table-column prop="businessMode" label="业务模式" min-width="100" /><el-table-column prop="expressLogistics" label="快递配送物流" min-width="130" /><el-table-column prop="receiptMode" label="收货方式" min-width="110" /><el-table-column prop="orderDate" label="订单日期" min-width="120" /><el-table-column prop="expectedArrivalDate" label="期望到货日期" min-width="140" /><el-table-column prop="shipDate" label="发货日期" min-width="120" /><el-table-column prop="estimatedArrivalDate" label="预计到货日期" min-width="140" /><el-table-column prop="receiptDate" label="收货日期" min-width="120" /><el-table-column prop="lastOperatedAt" label="最后操作时间" min-width="170" /><el-table-column prop="remark" label="备注" min-width="150" /><el-table-column prop="printStatus" label="打印状态" min-width="100" /><el-table-column prop="arrivalStatus" label="到货状态" min-width="100" /><el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button type="primary" link @click="action(`查看：${row.receiptCode}`)">查看</el-button></template></el-table-column>
+      <el-table-column prop="receiptCode" label="收货单号" min-width="150" fixed="left" show-overflow-tooltip /><el-table-column prop="supplierOrg" label="供货机构" min-width="130" /><el-table-column prop="deliveryOrg" label="送货机构" min-width="130" /><el-table-column prop="orderOrg" label="订货机构" min-width="130" /><el-table-column prop="sourceDeliveryCode" label="来源配送单" min-width="150" /><el-table-column prop="sourcePurchaseCode" label="来源采购订单（配送中心）" min-width="190" /><el-table-column prop="sourceOrderCode" label="来源订货单" min-width="150" /><el-table-column label="发货金额" min-width="110" align="right"><template #default="{ row }">{{ money(row.shipAmount) }}</template></el-table-column><el-table-column label="收货金额" min-width="110" align="right"><template #default="{ row }">{{ money(row.receiptAmount) }}</template></el-table-column><el-table-column label="合计配送运费" min-width="130" align="right"><template #default="{ row }">{{ money(row.freightAmount) }}</template></el-table-column><el-table-column prop="documentStatus" label="单据状态" min-width="100" /><el-table-column prop="reviewStatus" label="复审状态" min-width="100" /><el-table-column prop="businessMode" label="业务模式" min-width="100" /><el-table-column prop="expressLogistics" label="快递配送物流" min-width="130" /><el-table-column prop="receiptMode" label="收货方式" min-width="110" /><el-table-column prop="orderDate" label="订单日期" min-width="120" /><el-table-column prop="expectedArrivalDate" label="期望到货日期" min-width="140" /><el-table-column prop="shipDate" label="发货日期" min-width="120" /><el-table-column prop="estimatedArrivalDate" label="预计到货日期" min-width="140" /><el-table-column prop="receiptDate" label="收货日期" min-width="120" /><el-table-column prop="lastOperatedAt" label="最后操作时间" min-width="170" /><el-table-column prop="remark" label="备注" min-width="150" /><el-table-column prop="printStatus" label="打印状态" min-width="100" /><el-table-column prop="arrivalStatus" label="到货状态" min-width="100" />
     </el-table>
     <div class="table-pagination"><el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10,20,50]" :total="filteredRows.length" background small layout="total, sizes, prev, pager, next, jumper" /></div>
   </section>

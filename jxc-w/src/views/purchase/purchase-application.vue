@@ -180,17 +180,6 @@ const loadRows = async () => {
   }
 };
 
-const resetForm = () => {
-  editingId.value = null;
-  form.documentDate = new Date().toISOString().slice(0, 10);
-  form.expectedArrivalDate = '';
-  form.warehouse = '';
-  form.sourceDocumentCode = '';
-  form.downstreamDocumentCode = '';
-  form.remark = '';
-  lineRows.value = [createEmptyLine()];
-};
-
 const createEmptyLine = (): ApplicationLineDraft => ({
   key: lineKeySeed.value++,
   itemCode: '',
@@ -381,7 +370,14 @@ onMounted(() => {
       <el-table-column type="selection" width="44" fixed="left" />
       <el-table-column type="index" label="序号" width="56" fixed="left" />
       <el-table-column prop="documentDate" label="单据日期" min-width="120" show-overflow-tooltip />
-      <el-table-column prop="applicationCode" label="申请单号" min-width="150" show-overflow-tooltip />
+      <el-table-column prop="applicationCode" label="申请单号" min-width="150" show-overflow-tooltip>
+        <template #default="{ row }">
+          <el-button v-if="row.applicationCode" type="primary" link @click="handleView(row)">
+            {{ row.applicationCode }}
+          </el-button>
+          <template v-else>-</template>
+        </template>
+      </el-table-column>
       <el-table-column prop="warehouse" label="仓库" min-width="130" show-overflow-tooltip />
       <el-table-column prop="itemCount" label="物品（项）" min-width="100" align="right" />
       <el-table-column prop="documentStatus" label="单据状态" min-width="100">
@@ -398,7 +394,6 @@ onMounted(() => {
       <el-table-column prop="createdAt" label="创建时间" min-width="170" show-overflow-tooltip />
       <el-table-column label="操作" width="120" fixed="right">
         <template #default="{ row }">
-          <el-button type="primary" link @click="handleView(row)">查看</el-button>
           <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
         </template>
       </el-table-column>

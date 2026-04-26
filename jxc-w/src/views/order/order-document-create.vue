@@ -41,8 +41,6 @@ const sectionNavs = [
 ];
 const logisticsModeOptions: LogisticsMode[] = ['--', '自提', '配送', '三方物流'];
 const orderTypeOptions: OrderType[] = ['普通订单', '预售订单', '代店订单'];
-const receiverOptions = ['王总', '李总', '赵总'];
-
 const supplierOrgTree = computed<TreeNode[]>(() => sessionStore.rootGroups.map((node) => ({
   value: node.id,
   label: node.name,
@@ -61,11 +59,11 @@ const form = reactive({
   orderDate: '',
   expectedArrivalDate: '',
   estimatedArrivalDate: '-',
-  receiver: '王总',
-  receiverPhone: '15644432355',
-  receiverAddress: '北京市北京市朝阳区朝阳一号',
-  backupContact: '李总',
-  backupPhone: '16578890007',
+  receiver: '',
+  receiverPhone: '',
+  receiverAddress: '',
+  backupContact: '',
+  backupPhone: '',
   orderTemplate: '-',
   createMode: '手工创建',
   createdAt: '保存后生成',
@@ -78,18 +76,18 @@ const form = reactive({
 const itemRows = ref<OrderItemRow[]>([
   {
     id: 1,
-    itemCode: 'ITEM-001',
-    itemName: '鸡胸肉',
-    brand: '鲜达',
-    spec: '10kg/箱',
-    category: '生鲜原料',
-    orderUnit: '箱',
-    totalLimitQty: 500,
-    storeLimitQty: 30,
-    storeLimitTimes: 2,
-    orderQty: 10,
-    orderPrice: 185,
-    orderAmount: 1850,
+    itemCode: '',
+    itemName: '',
+    brand: '',
+    spec: '',
+    category: '',
+    orderUnit: '',
+    totalLimitQty: 0,
+    storeLimitQty: 0,
+    storeLimitTimes: 0,
+    orderQty: null,
+    orderPrice: 0,
+    orderAmount: 0,
     remark: '',
   },
 ]);
@@ -102,14 +100,6 @@ const scrollToSection = (key: string) => {
 
 const handleBack = () => {
   router.push('/order/order-documents');
-};
-
-const handleSaveDraft = () => {
-  ElMessage.success('订货单草稿已保存');
-};
-
-const handleSave = () => {
-  ElMessage.success('订货单保存成功');
 };
 
 const recalcAmount = (row: OrderItemRow) => {
@@ -159,7 +149,6 @@ const handleToolbarAction = (action: string) => {
     removeSelectedEmptyRows();
     return;
   }
-  ElMessage.info(`${action}功能待接入`);
 };
 </script>
 
@@ -168,9 +157,9 @@ const handleToolbarAction = (action: string) => {
     <FixedActionBreadcrumb
       :navs="sectionNavs"
       :active-key="activeNav"
+      :show-primary-action="false"
+      :show-secondary-action="false"
       @back="handleBack"
-      @save-draft="handleSaveDraft"
-      @save="handleSave"
       @navigate="scrollToSection"
     />
 
@@ -224,9 +213,7 @@ const handleToolbarAction = (action: string) => {
               <div class="readonly-field">{{ form.estimatedArrivalDate }}</div>
             </el-form-item>
             <el-form-item label="收货人">
-              <el-select v-model="form.receiver" style="width: 100%">
-                <el-option v-for="option in receiverOptions" :key="option" :label="option" :value="option" />
-              </el-select>
+              <el-input v-model="form.receiver" placeholder="请输入收货人" />
             </el-form-item>
             <el-form-item label="收货电话">
               <el-input v-model="form.receiverPhone" disabled />
@@ -271,7 +258,7 @@ const handleToolbarAction = (action: string) => {
               <el-input v-model="form.remark" placeholder="请输入备注" />
             </el-form-item>
             <el-form-item label="附件">
-              <el-button @click="handleToolbarAction('附件')">附件</el-button>
+              <el-button disabled>附件</el-button>
             </el-form-item>
           </div>
         </el-form>
@@ -282,12 +269,12 @@ const handleToolbarAction = (action: string) => {
 
         <div class="table-toolbar">
           <el-button type="primary" @click="handleToolbarAction('添加物品')">添加物品</el-button>
-          <el-button @click="handleToolbarAction('批量移除物品')">批量移除物品</el-button>
+          <el-button disabled>批量移除物品</el-button>
           <el-button @click="handleToolbarAction('移除为0或为空物品')">移除为0或为空物品</el-button>
-          <el-button @click="handleToolbarAction('移除售罄物品')">移除售罄物品</el-button>
-          <el-button @click="handleToolbarAction('通过模板新增')">通过模板新增</el-button>
-          <el-button @click="handleToolbarAction('通过菜品销售计划新增')">通过菜品销售计划新增</el-button>
-          <el-button @click="handleToolbarAction('导入')">导入</el-button>
+          <el-button disabled>移除售罄物品</el-button>
+          <el-button disabled>通过模板新增</el-button>
+          <el-button disabled>通过菜品销售计划新增</el-button>
+          <el-button disabled>导入</el-button>
         </div>
 
         <el-table :data="itemRows" border stripe class="erp-table order-item-table" :fit="false">

@@ -109,12 +109,23 @@ const roleOptions = computed(() => roles.value.map((item) => ({
   value: item.id,
 })));
 const ROLE_PREVIEW_LIMIT = 2;
-const userCodePreview = computed(() => {
-  const mnemonic = buildMnemonicCode(createForm.realName).toLowerCase();
-  const phone = createForm.phone.trim();
-  const suffix = phone.length <= 4 ? phone : phone.slice(-4);
-  return `${mnemonic}${suffix}`;
-});
+const userCodePreview = ref('');
+let userCodePreviewRequestId = 0;
+
+watch(
+  () => [createForm.realName, createForm.phone] as const,
+  async ([realName, phone]) => {
+    const requestId = ++userCodePreviewRequestId;
+    const mnemonic = (await buildMnemonicCode(realName)).toLowerCase();
+    if (requestId !== userCodePreviewRequestId) {
+      return;
+    }
+    const normalizedPhone = phone.trim();
+    const suffix = normalizedPhone.length <= 4 ? normalizedPhone : normalizedPhone.slice(-4);
+    userCodePreview.value = `${mnemonic}${suffix}`;
+  },
+  { immediate: true },
+);
 const userDialogTitle = computed(() => (editingUser.value ? '编辑用户' : '新增用户'));
 const pagedUsers = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value;
@@ -125,7 +136,7 @@ const groupScopeOptions = computed(() => groups.value.map((group) => ({
   value: group.id,
 })));
 const groupNameMap = computed(() => new Map(groups.value.map((group) => [group.id, group.groupName])));
-const groupAdminRole = computed(() => roles.value.find((role) => role.roleCode === 'GROUP_ADMIN' && role.roleType === 'GROUP'));
+const groupMemberRole = computed(() => roles.value.find((role) => role.roleCode === 'GROUP_MEMBER' && role.roleType === 'GROUP'));
 const storeScopeOptions = computed(() => stores.value.map((store) => ({
   label: `${groupNameMap.value.get(store.groupId) ?? '集团'} / ${store.storeName}（${store.storeCode}）`,
   value: store.id,
@@ -314,13 +325,13 @@ const savePlatformUserGroups = async (target: Pick<UserAdminItem, 'id'>) => {
   if (!isPlatformContext.value) {
     return;
   }
-  if (!groupAdminRole.value) {
-    ElMessage.warning('平台缺少集团管理员角色，无法划拨集团');
+  if (!groupMemberRole.value) {
+    ElMessage.warning('平台缺少集团成员角色，无法划拨集团');
     return;
   }
   const selectedGroupIds = Array.from(new Set(createForm.groupIds));
   const groupAssignments = selectedGroupIds.map((groupId) => ({
-    roleId: groupAdminRole.value!.id,
+    roleId: groupMemberRole.value!.id,
     scopeType: 'GROUP',
     scopeId: groupId,
   }));

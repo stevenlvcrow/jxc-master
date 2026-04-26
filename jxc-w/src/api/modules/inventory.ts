@@ -154,6 +154,142 @@ export const batchUnapprovePurchaseInboundApi = (ids: number[], rejectionReason:
     { params: withOrgParams(undefined, orgId) },
   );
 
+export type PeriodOpeningRow = {
+  id: number;
+  documentCode: string;
+  warehouseName: string;
+  periodType: string;
+  periodStartDate: string;
+  periodEndDate: string;
+  sourceType: string;
+  status: string;
+  totalQuantity: number;
+  totalAmount: number;
+  remark: string;
+  createdAt: string;
+  approvedAt: string;
+};
+
+export type PeriodOpeningPage = {
+  list: PeriodOpeningRow[];
+  total: number;
+  pageNum: number;
+  pageSize: number;
+};
+
+export type PeriodOpeningListParams = {
+  pageNum: number;
+  pageSize: number;
+  documentCode?: string;
+  warehouseName?: string;
+  periodType?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+};
+
+export type PeriodOpeningLinePayload = {
+  itemCode: string;
+  itemName: string;
+  spec?: string;
+  category?: string;
+  unitName?: string;
+  openingQty: number;
+  openingAmount: number;
+  remark?: string;
+};
+
+export type PeriodOpeningSavePayload = {
+  warehouseName: string;
+  periodType: string;
+  periodStartDate: string;
+  remark?: string;
+  items: PeriodOpeningLinePayload[];
+};
+
+export type PeriodOpeningGeneratePayload = {
+  warehouseName: string;
+  periodType: string;
+  periodStartDate: string;
+  remark?: string;
+};
+
+export type PeriodOpeningDetail = {
+  id: number;
+  documentCode: string;
+  warehouseName: string;
+  periodType: string;
+  periodStartDate: string;
+  periodEndDate: string;
+  sourceType: string;
+  status: string;
+  totalQuantity: number;
+  totalAmount: number;
+  remark: string;
+  rejectionReason: string;
+  creator: string;
+  createdAt: string;
+  auditor: string;
+  approvedAt: string;
+  items: Array<PeriodOpeningLinePayload & {
+    id: number;
+    openingAvgCost: number;
+  }>;
+};
+
+export const fetchPeriodOpeningPageApi = (params: PeriodOpeningListParams, orgId?: string) =>
+  apiClient.get<PeriodOpeningPage>('/api/inventory/period-openings', {
+    params: withOrgParams(params, orgId),
+  });
+
+export const createPeriodOpeningApi = (payload: PeriodOpeningSavePayload, orgId?: string) =>
+  apiClient.post<{ id: number; documentCode: string }>('/api/inventory/period-openings', payload, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const generatePeriodOpeningApi = (payload: PeriodOpeningGeneratePayload, orgId?: string) =>
+  apiClient.post<{ id: number; documentCode: string }>('/api/inventory/period-openings/generate', payload, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const fetchPeriodOpeningDetailApi = (id: number, orgId?: string) =>
+  apiClient.get<PeriodOpeningDetail>(`/api/inventory/period-openings/${id}`, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const updatePeriodOpeningApi = (id: number, payload: PeriodOpeningSavePayload, orgId?: string) =>
+  apiClient.put<void>(`/api/inventory/period-openings/${id}`, payload, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const deletePeriodOpeningApi = (id: number, orgId?: string) =>
+  apiClient.delete<void>(`/api/inventory/period-openings/${id}`, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const submitPeriodOpeningApi = (id: number, orgId?: string) =>
+  apiClient.post<void>(`/api/inventory/period-openings/${id}/submit`, undefined, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const approvePeriodOpeningApi = (id: number, orgId?: string) =>
+  apiClient.post<void>(`/api/inventory/period-openings/${id}/approve`, undefined, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export const rejectPeriodOpeningApi = (id: number, rejectionReason: string, orgId?: string) =>
+  apiClient.post<void>(`/api/inventory/period-openings/${id}/reject`, { rejectionReason }, {
+    params: withOrgParams(undefined, orgId),
+  });
+
+export type PeriodOpeningPermission = {
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  canApprove: boolean;
+  canReject: boolean;
+};
+
 export type GenericInventoryDocumentType =
   | 'purchase-return-outbound'
   | 'department-picking'
@@ -164,11 +300,12 @@ export type GenericInventoryDocumentType =
   | 'damage-outbound'
   | 'other-inbound'
   | 'other-outbound'
+  | 'profit-inbound'
+  | 'loss-outbound'
   | 'production-inbound'
   | 'customer-sales-outbound'
   | 'customer-return-inbound'
   | 'dish-consumption-outbound'
-  | 'warehouse-opening-balance'
   | 'store-transfer'
   | 'stock-transfer-outbound';
 

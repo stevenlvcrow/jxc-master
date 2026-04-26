@@ -43,7 +43,10 @@ public class PurchaseInboundRepositoryImpl implements PurchaseInboundRepository 
                 .eq(PurchaseInboundDO::getScopeId, scopeId)
                 .in(PurchaseInboundDO::getId, ids);
         if (!viewAll) {
-            query.eq(PurchaseInboundDO::getCreatedBy, createdBy);
+            query.and(wrapper -> wrapper
+                    .eq(PurchaseInboundDO::getCreatedBy, createdBy)
+                    .or()
+                    .eq(PurchaseInboundDO::getSalesmanUserId, createdBy));
         }
         return purchaseInboundMapper.selectList(query);
     }
@@ -60,7 +63,10 @@ public class PurchaseInboundRepositoryImpl implements PurchaseInboundRepository 
                 .eq(PurchaseInboundDO::getId, id)
                 .orderByDesc(PurchaseInboundDO::getId);
         if (!viewAll) {
-            query.eq(PurchaseInboundDO::getCreatedBy, createdBy);
+            query.and(wrapper -> wrapper
+                    .eq(PurchaseInboundDO::getCreatedBy, createdBy)
+                    .or()
+                    .eq(PurchaseInboundDO::getSalesmanUserId, createdBy));
         }
         return purchaseInboundMapper.selectList(query)
                 .stream()

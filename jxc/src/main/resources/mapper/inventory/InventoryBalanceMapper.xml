@@ -12,12 +12,15 @@
         <result property="itemCode" column="item_code"/>
         <result property="itemName" column="item_name"/>
         <result property="quantity" column="quantity"/>
+        <result property="costAmount" column="cost_amount"/>
+        <result property="avgCost" column="avg_cost"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
     <select id="selectForUpdate" resultMap="InventoryBalanceDOResultMap">
-        select id, scope_type, scope_id, warehouse_name, item_code, item_name, quantity, created_at, updated_at
+        select id, scope_type, scope_id, warehouse_name, item_code, item_name, quantity,
+               cost_amount, avg_cost, created_at, updated_at
         from inventory_balance
         where scope_type = #{scopeType}
           and scope_id = #{scopeId}

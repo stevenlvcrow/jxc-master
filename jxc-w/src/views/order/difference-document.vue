@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { Download, RefreshRight, Search } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
 import CommonQuerySection from '@/components/CommonQuerySection.vue';
 import { useSessionStore } from '@/stores/session';
 
@@ -15,14 +14,11 @@ const orgTree = computed<TreeNode[]>(() => sessionStore.rootGroups.map((node) =>
 const query = reactive({ dateType: '订单日期', startDate: '', endDate: '', diffCode: '', status: '', includePresale: '', share: '全部', processOrg: '', supplierOrg: '', deliveryOrg: '', sourceReceiptCode: '', sourceDeliveryCode: '', sourceOrderCode: '', businessMode: '', item: '', adjustedPrice: false });
 const currentPage = ref(1);
 const pageSize = ref(10);
-const tableData = ref<Row[]>([
-  { id: 1, diffCode: 'DF-202604-001', processOrg: '朝阳门店', supplierOrg: '华东配送中心', deliveryOrg: '朝阳门店', sourceReceiptCode: 'RC-202604-001', sourceDeliveryCode: 'DN-202604-001', sourceOrderCode: 'SO-202604-001', businessMode: '统配', orderDate: '2026-04-20', shipDate: '2026-04-22', receiptDate: '2026-04-24', lastOperatedAt: '2026-04-24 12:10:00', receiver: '王总', diffAmount: 80, refundAmount: 80, originalAmount: 1380, promoDiscount: 20, manualDiscount: 0, couponDiscount: 10, giftDiscount: 0, finalAmount: 1350, status: '待处理' },
-]);
+const tableData = ref<Row[]>([]);
 const filteredRows = computed(() => tableData.value.filter((row) => (!query.diffCode || row.diffCode.includes(query.diffCode)) && (!query.status || row.status === query.status)));
 const pagedRows = computed(() => filteredRows.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value));
 const money = (value: number) => value.toFixed(2);
 const reset = () => Object.assign(query, { dateType: '订单日期', startDate: '', endDate: '', diffCode: '', status: '', includePresale: '', share: '全部', processOrg: '', supplierOrg: '', deliveryOrg: '', sourceReceiptCode: '', sourceDeliveryCode: '', sourceOrderCode: '', businessMode: '', item: '', adjustedPrice: false });
-const action = (name: string) => ElMessage.info(`${name}功能待接入`);
 </script>
 
 <template>
@@ -46,11 +42,11 @@ const action = (name: string) => ElMessage.info(`${name}功能待接入`);
       <el-form-item label="被调过价"><el-checkbox v-model="query.adjustedPrice" /></el-form-item>
       <el-form-item><el-button type="primary" @click="currentPage=1"><el-icon><Search /></el-icon>查询</el-button><el-button @click="reset"><el-icon><RefreshRight /></el-icon>重置</el-button></el-form-item>
     </CommonQuerySection>
-    <div class="table-toolbar"><el-button @click="action('批量导出')"><el-icon><Download /></el-icon>批量导出</el-button></div>
+    <div class="table-toolbar"><el-button disabled><el-icon><Download /></el-icon>批量导出</el-button></div>
     <el-table :data="pagedRows" border stripe class="erp-table" :fit="false" height="460">
       <el-table-column type="index" label="序号" width="56" fixed="left" /><el-table-column prop="diffCode" label="差异处理单号" min-width="150" fixed="left" /><el-table-column prop="processOrg" label="处理机构" min-width="120" /><el-table-column prop="supplierOrg" label="供货机构" min-width="130" /><el-table-column prop="deliveryOrg" label="送货机构" min-width="130" /><el-table-column prop="sourceReceiptCode" label="来源配送收货单" min-width="160" /><el-table-column prop="sourceDeliveryCode" label="来源配送单" min-width="150" /><el-table-column prop="sourceOrderCode" label="来源订货单" min-width="150" /><el-table-column prop="businessMode" label="业务模式" min-width="100" /><el-table-column prop="orderDate" label="订单日期" min-width="120" /><el-table-column prop="shipDate" label="发货日期" min-width="120" /><el-table-column prop="receiptDate" label="收货日期" min-width="120" /><el-table-column prop="lastOperatedAt" label="最后操作时间" min-width="170" /><el-table-column prop="receiver" label="收货人" min-width="100" />
       <el-table-column v-for="col in ['diffAmount','refundAmount','originalAmount','promoDiscount','manualDiscount','couponDiscount','giftDiscount','finalAmount']" :key="col" :prop="col" :label="{diffAmount:'差异金额',refundAmount:'退费金额-退货机构收',originalAmount:'折前金额',promoDiscount:'促销折扣',manualDiscount:'手动折扣',couponDiscount:'支付折扣-优惠券',giftDiscount:'支付折扣-赠送金额',finalAmount:'折后金额'}[col]" min-width="130" align="right"><template #default="{ row }">{{ money(row[col]) }}</template></el-table-column>
-      <el-table-column prop="status" label="状态" min-width="100" /><el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button link type="primary" @click="action(`查看：${row.diffCode}`)">查看</el-button></template></el-table-column>
+      <el-table-column prop="status" label="状态" min-width="100" />
     </el-table>
     <div class="table-pagination"><el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :total="filteredRows.length" :page-sizes="[10,20,50]" background small layout="total, sizes, prev, pager, next, jumper" /></div>
   </section>

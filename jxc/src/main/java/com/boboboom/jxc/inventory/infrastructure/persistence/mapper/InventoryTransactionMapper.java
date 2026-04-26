@@ -1,5 +1,6 @@
 package com.boboboom.jxc.inventory.infrastructure.persistence.mapper;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -19,6 +20,16 @@ public interface InventoryTransactionMapper extends BaseMapper<InventoryTransact
                                                                 @Param("scopeId") Long scopeId,
                                                                 @Param("startTime") LocalDateTime startTime,
                                                                 @Param("endTime") LocalDateTime endTime);
+
+    List<InventoryTransactionDO> selectByScopeAndBusinessDateRange(@Param("scopeType") String scopeType,
+                                                                   @Param("scopeId") Long scopeId,
+                                                                   @Param("startDate") LocalDate startDate,
+                                                                   @Param("endDate") LocalDate endDate);
+
+    Long countByScopeWarehouseAndBusinessDateOnOrAfter(@Param("scopeType") String scopeType,
+                                                       @Param("scopeId") Long scopeId,
+                                                       @Param("warehouseName") String warehouseName,
+                                                       @Param("businessDate") LocalDate businessDate);
 
     List<InventoryBalanceDO> selectLatestBalancesBefore(@Param("scopeType") String scopeType,
                                                         @Param("scopeId") Long scopeId,
