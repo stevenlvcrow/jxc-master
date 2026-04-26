@@ -34,6 +34,7 @@ public class InventoryDocumentWorkflowService {
     private static final String NODE_TYPE_SUCCESS = "SUCCESS";
     private static final String NODE_TYPE_FAIL = "FAIL";
     private static final String NODE_TYPE_END = "END";
+    private static final String CONDITION_RESULT_VARIABLE = "result";
     private static final int WORKFLOW_AUTO_ADVANCE_LIMIT = 5;
 
     private final WorkflowBindingResolverService workflowBindingResolverService;
@@ -265,26 +266,61 @@ public class InventoryDocumentWorkflowService {
     /** 完成通用库存单据当前审批任务。 */
     public ApprovalResult completeCurrentTask(InventoryDocumentType type,
                                               InventoryDocumentHeader header,
-                                              Long operatorId) {
+                                              Long operatorId,
+                                              Long groupId) {
         return completeCurrentTaskInternal(
                 type.getBusinessCode(),
                 type.getBusinessName() + "流程",
                 header,
                 operatorId,
-                resolveGroupId(header),
+                groupId,
+                true,
+                () -> inventoryDocumentRepository.updateHeader(type, header)
+        );
+    }
+
+    /** 驳回通用库存单据当前审批任务。 */
+    public ApprovalResult rejectCurrentTask(InventoryDocumentType type,
+                                            InventoryDocumentHeader header,
+                                            Long operatorId,
+                                            Long groupId) {
+        return completeCurrentTaskInternal(
+                type.getBusinessCode(),
+                type.getBusinessName() + "流程",
+                header,
+                operatorId,
+                groupId,
+                false,
                 () -> inventoryDocumentRepository.updateHeader(type, header)
         );
     }
 
     /** 完成采购入库单当前审批任务。 */
-    public ApprovalResult completePurchaseInboundCurrentTask(PurchaseInboundDO header, Long operatorId) {
+    public ApprovalResult completePurchaseInboundCurrentTask(PurchaseInboundDO header, Long operatorId, Long groupId) {
         InventoryDocumentHeader workflowHeader = PurchaseInboundWorkflowBridge.toHeader(header);
         ApprovalResult result = completeCurrentTaskInternal(
                 InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode(),
                 "采购入库流程",
                 workflowHeader,
                 operatorId,
-                resolveGroupId(workflowHeader),
+                groupId,
+                true,
+                () -> persistPurchaseInboundHeader(header, workflowHeader)
+        );
+        PurchaseInboundWorkflowBridge.applyHeader(header, workflowHeader);
+        return result;
+    }
+
+    /** 驳回采购入库单当前审批任务。 */
+    public ApprovalResult rejectPurchaseInboundCurrentTask(PurchaseInboundDO header, Long operatorId, Long groupId) {
+        InventoryDocumentHeader workflowHeader = PurchaseInboundWorkflowBridge.toHeader(header);
+        ApprovalResult result = completeCurrentTaskInternal(
+                InventoryDocumentType.PURCHASE_INBOUND.getBusinessCode(),
+                "采购入库流程",
+                workflowHeader,
+                operatorId,
+                groupId,
+                false,
                 () -> persistPurchaseInboundHeader(header, workflowHeader)
         );
         PurchaseInboundWorkflowBridge.applyHeader(header, workflowHeader);
@@ -304,6 +340,25 @@ public class InventoryDocumentWorkflowService {
                 header,
                 operatorId,
                 groupId,
+                true,
+                persistAction
+        );
+    }
+
+    /** 按业务编码驳回当前审批任务。 */
+    public ApprovalResult rejectBusinessCurrentTask(String businessCode,
+                                                    String workflowLabel,
+                                                    InventoryDocumentHeader header,
+                                                    Long operatorId,
+                                                    Long groupId,
+                                                    Runnable persistAction) {
+        return completeCurrentTaskInternal(
+                businessCode,
+                workflowLabel,
+                header,
+                operatorId,
+                groupId,
+                false,
                 persistAction
         );
     }
@@ -453,6 +508,7 @@ public class InventoryDocumentWorkflowService {
                                                        InventoryDocumentHeader header,
                                                        Long operatorId,
                                                        Long groupId,
+                                                       boolean approved,
                                                        Runnable persistAction) {
         String businessKey = businessKey(businessCode, header.getId());
         ProcessInstance activeInstance = findActiveInstance(businessKey);
@@ -474,11 +530,13 @@ public class InventoryDocumentWorkflowService {
             throw new BusinessException("当前流程存在多个待办任务，请联系管理员");
         }
         Task task = tasks.get(0);
+        ensureCurrentTaskApprover(businessCode, workflowLabel, header, operatorId, groupId, task);
         taskService.complete(task.getId(), Map.of(
                 "operatorId", operatorId,
                 "businessId", header.getId(),
                 "businessCode", businessCode,
-                "documentCode", header.getDocumentCode()
+                "documentCode", header.getDocumentCode(),
+                CONDITION_RESULT_VARIABLE, approved
         ));
         ProcessInstance nextInstance = findActiveInstance(businessKey);
         autoCompleteTerminalTasks(businessCode, header, nextInstance, operatorId, groupId);
@@ -489,7 +547,7 @@ public class InventoryDocumentWorkflowService {
             header.setWorkflowTaskId(null);
             header.setWorkflowTaskName(null);
             persistAction.run();
-            return ApprovalResult.workflowCompleted();
+            return ApprovalResult.workflowCompleted(approved);
         }
         Optional<WorkflowBindingResolverService.ResolvedWorkflowBinding> binding =
                 resolveBinding(businessCode, workflowLabel, header.getScopeType(), header.getScopeId(), groupId, true);
@@ -498,7 +556,7 @@ public class InventoryDocumentWorkflowService {
         header.setWorkflowInstanceId(nextInstance.getId());
         refreshCurrentTask(header, nextInstance.getId());
         persistAction.run();
-        return ApprovalResult.workflowPending();
+        return ApprovalResult.workflowPending(approved);
     }
 
     private void resetWorkflowStateInternal(InventoryDocumentHeader header,
@@ -664,6 +722,24 @@ public class InventoryDocumentWorkflowService {
         throw new BusinessException("流程结束节点自动推进次数过多，请检查流程配置");
     }
 
+    private void ensureCurrentTaskApprover(String businessCode,
+                                           String workflowLabel,
+                                           InventoryDocumentHeader header,
+                                           Long operatorId,
+                                           Long groupId,
+                                           Task task) {
+        WorkflowActionService.ApprovalTarget target = workflowActionService.resolveApprovalTarget(
+                businessCode,
+                header.getScopeType(),
+                header.getScopeId(),
+                groupId,
+                task.getName()
+        ).orElseThrow(() -> new BusinessException(workflowLabel + "当前审批节点未配置审批人"));
+        if (!workflowActionService.matchesApprovalTarget(operatorId, header.getScopeType(), header.getScopeId(), groupId, target)) {
+            throw new BusinessException("当前账号无" + workflowLabel + "当前节点审批权限");
+        }
+    }
+
     private boolean isTerminalTask(String businessCode, InventoryDocumentHeader header, Long groupId) {
         if (!StringUtils.hasText(header.getWorkflowTaskName())) {
             return false;
@@ -784,20 +860,20 @@ public class InventoryDocumentWorkflowService {
     }
 
     /** 库存结果模型，承载业务处理结果。 */
-    public record ApprovalResult(boolean workflowApplied, boolean completed) {
+    public record ApprovalResult(boolean workflowApplied, boolean completed, boolean approved) {
         /** 构造不启用流程时的审核结果。 */
         public static ApprovalResult legacy() {
-            return new ApprovalResult(false, true);
+            return new ApprovalResult(false, true, true);
         }
 
         /** 构造流程待审批状态的审核结果。 */
-        public static ApprovalResult workflowPending() {
-            return new ApprovalResult(true, false);
+        public static ApprovalResult workflowPending(boolean approved) {
+            return new ApprovalResult(true, false, approved);
         }
 
         /** 构造流程已完成状态的审核结果。 */
-        public static ApprovalResult workflowCompleted() {
-            return new ApprovalResult(true, true);
+        public static ApprovalResult workflowCompleted(boolean approved) {
+            return new ApprovalResult(true, true, approved);
         }
     }
 }

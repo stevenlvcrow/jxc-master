@@ -43,6 +43,7 @@ public class PeriodOpeningBalanceApplicationService {
 
     public static final String BUSINESS_CODE = "PERIOD_OPENING_BALANCE";
     private static final String WORKFLOW_LABEL = "期初库存流程";
+    private static final String LEGACY_WAREHOUSE_OPENING_CONFIRM = "WAREHOUSE_OPENING_BALANCE_CONFIRM";
     private static final String SOURCE_MANUAL = "MANUAL";
     private static final String SOURCE_GENERATED = "GENERATED";
     private static final String PENDING_NONE = "NONE";
@@ -192,6 +193,32 @@ public class PeriodOpeningBalanceApplicationService {
     }
 
     /**
+     * 查询期初库存页面权限。
+     *
+     * @param orgId 机构标识
+     * @return 权限视图
+     */
+    public PeriodOpeningPermissionView permissions(String orgId) {
+        InventoryScope scope = resolveScope(orgId);
+        Long operatorId = AuthContextHolder.requireUserId("登录已失效，请重新登录");
+        boolean canManageScope = dataScopeAccessService.canViewScopeData(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId);
+        boolean canApprove = inventoryDocumentWorkflowService.hasBusinessReviewPermission(
+                BUSINESS_CODE,
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                operatorId
+        );
+        return new PeriodOpeningPermissionView(
+                canManageScope || hasOperationPermission(scope, operatorId, "CREATE"),
+                canManageScope || hasOperationPermission(scope, operatorId, "UPDATE"),
+                canManageScope || hasOperationPermission(scope, operatorId, "DELETE"),
+                canApprove,
+                canApprove
+        );
+    }
+
+    /**
      * 更新期初库存。
      *
      * @param orgId   机构标识
@@ -327,17 +354,39 @@ public class PeriodOpeningBalanceApplicationService {
         if (!Objects.equals(header.getStatus(), submittedStatus())) {
             throw new BusinessException("只有已提交期初可以驳回");
         }
+        String rejectionReason = requiredTrim(request.rejectionReason(), "驳回原因不能为空");
         InventoryDocumentHeader workflowHeader = toWorkflowHeader(header);
+        InventoryDocumentWorkflowService.ApprovalResult result = inventoryDocumentWorkflowService.rejectBusinessCurrentTask(
+                BUSINESS_CODE,
+                WORKFLOW_LABEL,
+                workflowHeader,
+                operatorId,
+                workflowGroupId(scope),
+                () -> {
+                    applyWorkflowHeader(header, workflowHeader);
+                    periodOpeningRepository.updateHeader(header);
+                }
+        );
+        if (!result.workflowApplied()) {
+            throw new BusinessException(WORKFLOW_LABEL + "未启动，请先提交并完成审批流配置");
+        }
+        applyWorkflowHeader(header, workflowHeader);
+        if (!result.completed()) {
+            header.setRejectionReason(rejectionReason);
+            periodOpeningRepository.updateHeader(header);
+            return;
+        }
         workflowHeader.setStatus(draftStatus());
         inventoryDocumentWorkflowService.resetBusinessWorkflowState(workflowHeader, () -> {
             applyWorkflowHeader(header, workflowHeader);
             header.setStatus(draftStatus());
-            header.setRejectionReason(requiredTrim(request.rejectionReason(), "驳回原因不能为空"));
+            header.setRejectionReason(rejectionReason);
             periodOpeningRepository.updateHeader(header);
         }, "期初库存驳回");
     }
 
     private void confirmOpening(InventoryScope scope, InventoryPeriodOpeningDO header, Long operatorId) {
+        ensureNoLegacyWarehouseOpeningLedger(scope);
         ensureNoLaterTransactions(scope, header);
         List<InventoryPeriodOpeningLineDO> lines = periodOpeningRepository.findLinesByHeaderId(header.getId());
         if (lines.isEmpty()) {
@@ -647,6 +696,17 @@ public class PeriodOpeningBalanceApplicationService {
         }
     }
 
+    private void ensureNoLegacyWarehouseOpeningLedger(InventoryScope scope) {
+        boolean exists = inventoryTransactionRepository.existsByScopeAndBizType(
+                scope.scopeType(),
+                scope.scopeId(),
+                LEGACY_WAREHOUSE_OPENING_CONFIRM
+        );
+        if (exists) {
+            throw new BusinessException("当前机构存在旧仓库期初库存流水，请清理旧账本后重建期初库存");
+        }
+    }
+
     private void ensureEditable(InventoryPeriodOpeningDO header) {
         if (Objects.equals(header.getStatus(), approvedStatus())) {
             throw new BusinessException("已确认期初不支持修改或删除");
@@ -704,16 +764,23 @@ public class PeriodOpeningBalanceApplicationService {
         if (dataScopeAccessService.canViewScopeData(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId)) {
             return;
         }
-        if (!inventoryDocumentWorkflowService.hasBusinessOperationPermission(
-                BUSINESS_CODE, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId, action)) {
+        if (!hasOperationPermission(scope, operatorId, action)) {
             throw new BusinessException("当前账号无期初库存操作权限");
         }
     }
 
+    private boolean hasOperationPermission(InventoryScope scope, Long operatorId, String action) {
+        return inventoryDocumentWorkflowService.hasBusinessOperationPermission(
+                BUSINESS_CODE,
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                operatorId,
+                action
+        );
+    }
+
     private void ensureReviewPermission(InventoryScope scope, Long operatorId) {
-        if (dataScopeAccessService.canViewScopeData(scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId)) {
-            return;
-        }
         if (!inventoryDocumentWorkflowService.hasBusinessReviewPermission(BUSINESS_CODE, scope.scopeType(), scope.scopeId(), scope.groupId(), operatorId)) {
             throw new BusinessException("当前账号无期初库存审核权限");
         }
@@ -1015,6 +1082,14 @@ public class PeriodOpeningBalanceApplicationService {
                                       String auditor,
                                       String approvedAt,
                                       List<PeriodOpeningLineView> items) {
+    }
+
+    /** 期初库存权限视图。 */
+    public record PeriodOpeningPermissionView(boolean canCreate,
+                                              boolean canUpdate,
+                                              boolean canDelete,
+                                              boolean canApprove,
+                                              boolean canReject) {
     }
 
     /** 期初库存详情明细。 */

@@ -1,17 +1,9 @@
 package com.boboboom.jxc.workflow.application.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 
-import org.flowable.bpmn.converter.BpmnXMLConverter;
-import org.flowable.bpmn.model.BpmnModel;
-import org.flowable.bpmn.model.EndEvent;
-import org.flowable.bpmn.model.Process;
-import org.flowable.bpmn.model.SequenceFlow;
-import org.flowable.bpmn.model.StartEvent;
-import org.flowable.bpmn.model.UserTask;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
@@ -27,6 +19,8 @@ import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepos
 import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * 库存单据流程默认配置初始化服务。
@@ -37,28 +31,7 @@ public class InventoryWorkflowBootstrapService {
     private static final String SCOPE_GROUP = "GROUP";
     public static final String DEFAULT_WORKFLOW_CODE = "BUILTIN_DEFAULT_APPROVAL";
     private static final String DEFAULT_WORKFLOW_NAME = "内置通用审批流程";
-    private static final String NODE_TYPE_START = "START";
-    private static final String NODE_TYPE_SUCCESS = "SUCCESS";
-    private static final String NODE_TYPE_FAIL = "FAIL";
-    private static final String NODE_TYPE_END = "END";
-    private static final String DEFAULT_NODE_CONFIG_JSON = """
-            [
-              {"nodeKey":"start_node","nodeName":"开始","x":88,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"START","conditionExpression":"","triggerActions":[]},
-              {"nodeKey":"business_fill","nodeName":"业务填报","x":340,"y":76,"approverRoleCode":"SALESMAN","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"NORMAL","conditionExpression":"","triggerActions":["CREATE","UPDATE","DELETE"]},
-              {"nodeKey":"finance_approval","nodeName":"财务审批","x":632,"y":76,"approverRoleCode":"FINANCE","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"NORMAL","conditionExpression":"","triggerActions":[]},
-              {"nodeKey":"success_node","nodeName":"成功","x":924,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":true,"nodeType":"SUCCESS","conditionExpression":"","triggerActions":[]},
-              {"nodeKey":"fail_node","nodeName":"失败","x":412,"y":324,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"FAIL","conditionExpression":"","triggerActions":[]},
-              {"nodeKey":"end_node","nodeName":"结束","x":722,"y":324,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"END","conditionExpression":"","triggerActions":[]}
-            ]
-            """;
-    private static final List<NodeConfig> DEFAULT_NODES = List.of(
-            new NodeConfig("start_node", "开始", "", NODE_TYPE_START, List.of()),
-            new NodeConfig("business_fill", "业务填报", "SALESMAN", "NORMAL", List.of("CREATE", "UPDATE", "DELETE")),
-            new NodeConfig("finance_approval", "财务审批", "FINANCE", "NORMAL", List.of()),
-            new NodeConfig("success_node", "成功", "", NODE_TYPE_SUCCESS, List.of()),
-            new NodeConfig("fail_node", "失败", "", NODE_TYPE_FAIL, List.of()),
-            new NodeConfig("end_node", "结束", "", NODE_TYPE_END, List.of())
-    );
+    private static final String DEFAULT_NODE_CONFIG_JSON = WorkflowBpmnModelSupport.defaultNodeConfigJson();
     private static final List<WorkflowProcessSeed> EXTRA_PROCESS_SEEDS = List.of(
             new WorkflowProcessSeed("PURCHASE_APPLICATION", "采购单申请流程"),
             new WorkflowProcessSeed("PURCHASE_ORDER", "采购订单流程"),
@@ -73,16 +46,19 @@ public class InventoryWorkflowBootstrapService {
     private final WorkflowDefinitionConfigRepository workflowDefinitionConfigRepository;
     private final RepositoryService repositoryService;
     private final DictionaryLookupService dictionaryLookupService;
+    private final ObjectMapper objectMapper;
 
     /** 审批流程服务，负责相关业务规则和流程协作。 */
     public InventoryWorkflowBootstrapService(WorkflowProcessRegistryRepository workflowProcessRegistryRepositoryValue,
                                             WorkflowDefinitionConfigRepository workflowDefinitionConfigRepositoryValue,
                                             RepositoryService repositoryServiceValue,
-                                            DictionaryLookupService dictionaryLookupServiceValue) {
+                                            DictionaryLookupService dictionaryLookupServiceValue,
+                                            ObjectMapper objectMapperValue) {
         this.workflowProcessRegistryRepository = workflowProcessRegistryRepositoryValue;
         this.workflowDefinitionConfigRepository = workflowDefinitionConfigRepositoryValue;
         this.repositoryService = repositoryServiceValue;
         this.dictionaryLookupService = dictionaryLookupServiceValue;
+        this.objectMapper = objectMapperValue;
     }
 
     /**
@@ -138,7 +114,8 @@ public class InventoryWorkflowBootstrapService {
             publishDefaultConfig(config, operatorId);
         } else if (!publishedStatus().equals(existing.getStatus())
                 || !StringUtils.hasText(existing.getProcessDefinitionKey())
-                || !StringUtils.hasText(existing.getProcessDefinitionId())) {
+                || !StringUtils.hasText(existing.getProcessDefinitionId())
+                || requiresDefaultWorkflowRefresh(existing.getNodeConfigJson())) {
             existing.setWorkflowName(StringUtils.hasText(workflowName) ? workflowName : DEFAULT_WORKFLOW_NAME);
             existing.setNodeConfigJson(DEFAULT_NODE_CONFIG_JSON);
             existing.setUpdatedBy(operatorId);
@@ -184,7 +161,12 @@ public class InventoryWorkflowBootstrapService {
 
     private void publishDefaultConfig(WorkflowDefinitionConfigDO config, Long operatorId) {
         String processDefinitionKey = processDefinitionKey(config.getBusinessCode(), config.getWorkflowCode(), config.getScopeType(), config.getScopeId());
-        byte[] xmlBytes = buildBpmnXml(processDefinitionKey, config.getWorkflowName(), DEFAULT_NODES);
+        byte[] xmlBytes = WorkflowBpmnModelSupport.buildBpmnXml(
+                processDefinitionKey,
+                config.getWorkflowName(),
+                WorkflowBpmnModelSupport.parseNodes(config.getNodeConfigJson(), objectMapper),
+                objectMapper
+        );
         Deployment deployment = repositoryService.createDeployment()
                 .name(config.getWorkflowName())
                 .key(processDefinitionKey)
@@ -206,68 +188,30 @@ public class InventoryWorkflowBootstrapService {
         workflowDefinitionConfigRepository.update(config);
     }
 
-    private byte[] buildBpmnXml(String processDefinitionKey, String workflowName, List<NodeConfig> nodes) {
-        BpmnModel bpmnModel = new BpmnModel();
-        Process process = new Process();
-        process.setId(processDefinitionKey);
-        process.setName(workflowName);
-        bpmnModel.addProcess(process);
-
-        StartEvent startEvent = new StartEvent();
-        startEvent.setId("start_event");
-        startEvent.setName("开始");
-        process.addFlowElement(startEvent);
-
-        EndEvent endEvent = new EndEvent();
-        endEvent.setId("end_event");
-        endEvent.setName("结束");
-        process.addFlowElement(endEvent);
-
-        String sourceRef = startEvent.getId();
-        for (int i = 0; i < nodes.size(); i++) {
-            NodeConfig node = nodes.get(i);
-            if (NODE_TYPE_START.equals(node.nodeType())) {
-                continue;
-            }
-            if (isTerminalNode(node.nodeType())) {
-                process.addFlowElement(sequenceFlow("flow_" + i, sourceRef, endEvent.getId()));
-                sourceRef = endEvent.getId();
-                break;
-            }
-
-            String taskId = "task_" + node.nodeKey();
-            UserTask userTask = new UserTask();
-            userTask.setId(taskId);
-            userTask.setName(node.nodeName());
-            userTask.setDocumentation(
-                    "nodeType=" + node.nodeType()
-                            + ";approverRoleCode=" + node.approverRoleCode()
-                            + ";approverUserId="
-                            + ";triggerActions=" + String.join(",", node.triggerActions())
-            );
-            process.addFlowElement(userTask);
-
-            process.addFlowElement(sequenceFlow("flow_" + i, sourceRef, taskId));
-            sourceRef = taskId;
+    private boolean requiresDefaultWorkflowRefresh(String nodeConfigJson) {
+        if (!StringUtils.hasText(nodeConfigJson)) {
+            return true;
         }
-        if (!endEvent.getId().equals(sourceRef)) {
-            process.addFlowElement(sequenceFlow("flow_end", sourceRef, endEvent.getId()));
+        try {
+            JsonNode nodes = objectMapper.readTree(nodeConfigJson);
+            if (nodes == null || !nodes.isArray()) {
+                return true;
+            }
+            for (JsonNode node : nodes) {
+                if (!"finance_approval".equals(trimToNull(node.path("nodeKey").asText(null)))) {
+                    continue;
+                }
+                String nodeType = trimToNull(node.path("nodeType").asText(null));
+                String expression = trimToNull(node.path("conditionExpression").asText(null));
+                return !"CONDITION".equalsIgnoreCase(nodeType)
+                        || !StringUtils.hasText(expression)
+                        || !expression.contains(WorkflowBpmnModelSupport.CONDITION_TRUE_EXPRESSION)
+                        || !expression.contains(WorkflowBpmnModelSupport.CONDITION_FALSE_EXPRESSION);
+            }
+            return true;
+        } catch (Exception ex) {
+            return true;
         }
-        return new BpmnXMLConverter().convertToXML(bpmnModel, StandardCharsets.UTF_8.name());
-    }
-
-    private SequenceFlow sequenceFlow(String id, String sourceRef, String targetRef) {
-        SequenceFlow sequenceFlow = new SequenceFlow();
-        sequenceFlow.setId(id);
-        sequenceFlow.setSourceRef(sourceRef);
-        sequenceFlow.setTargetRef(targetRef);
-        return sequenceFlow;
-    }
-
-    private boolean isTerminalNode(String nodeType) {
-        return NODE_TYPE_END.equals(nodeType)
-                || NODE_TYPE_SUCCESS.equals(nodeType)
-                || NODE_TYPE_FAIL.equals(nodeType);
     }
 
     private String processDefinitionKey(String businessCode, String workflowCode, String scopeType, Long scopeId) {
@@ -296,10 +240,4 @@ public class InventoryWorkflowBootstrapService {
     private record WorkflowProcessSeed(String processCode, String businessName) {
     }
 
-    private record NodeConfig(String nodeKey,
-                              String nodeName,
-                              String approverRoleCode,
-                              String nodeType,
-                              List<String> triggerActions) {
-    }
 }

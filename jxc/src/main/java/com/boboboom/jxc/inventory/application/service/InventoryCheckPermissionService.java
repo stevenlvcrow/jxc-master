@@ -37,7 +37,7 @@ public class InventoryCheckPermissionService {
                                                  Long groupId,
                                                  Long operatorId) {
         boolean canManageAll = canViewAll(scopeType, scopeId, groupId, operatorId);
-        boolean canApprove = canReview(kind, scopeType, scopeId, groupId, operatorId) || canManageAll;
+        boolean canApprove = canReview(kind, scopeType, scopeId, groupId, operatorId);
         return new PermissionSnapshot(
                 canManageAll || hasWorkflowOperationPermission(kind, scopeType, scopeId, groupId, operatorId, "CREATE"),
                 canManageAll || hasWorkflowOperationPermission(kind, scopeType, scopeId, groupId, operatorId, "UPDATE"),
@@ -91,8 +91,7 @@ public class InventoryCheckPermissionService {
      * @param operatorId 操作人 ID
      */
     public void ensureReviewPermission(InventoryCheckKind kind, String scopeType, Long scopeId, Long groupId, Long operatorId) {
-        if (!canViewAll(scopeType, scopeId, groupId, operatorId)
-                && !canReview(kind, scopeType, scopeId, groupId, operatorId)) {
+        if (!canReview(kind, scopeType, scopeId, groupId, operatorId)) {
             throw new BusinessException("当前账号无盘点单审核权限");
         }
     }

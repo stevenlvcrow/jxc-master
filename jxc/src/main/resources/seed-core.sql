@@ -175,7 +175,7 @@ WITH dict_item_seed(dict_code, item_key, item_code, item_label, sort_no) AS (
         ('workflow.definition_status', 'DRAFT', 'DRAFT', '草稿', 10),
         ('workflow.definition_status', 'PUBLISHED', 'PUBLISHED', '已发布', 20),
         ('workflow.node_type', 'START', 'START', '开始', 10),
-        ('workflow.node_type', 'NORMAL', 'NORMAL', '审批节点', 20),
+        ('workflow.node_type', 'NORMAL', 'NORMAL', '普通节点', 20),
         ('workflow.node_type', 'CONDITION', 'CONDITION', '条件节点', 30),
         ('workflow.node_type', 'SUCCESS', 'SUCCESS', '通过结束', 40),
         ('workflow.node_type', 'FAIL', 'FAIL', '拒绝结束', 50),
@@ -411,11 +411,11 @@ SELECT 'GROUP',
        'DRAFT',
        0,
        '[
-  {"nodeKey":"start_node","nodeName":"开始","x":88,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"START","conditionExpression":"","triggerActions":[]},
-  {"nodeKey":"business_fill","nodeName":"业务填报","x":340,"y":76,"approverRoleCode":"SALESMAN","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"NORMAL","conditionExpression":"","triggerActions":["CREATE","UPDATE","DELETE"]},
-  {"nodeKey":"finance_approval","nodeName":"财务审批","x":632,"y":76,"approverRoleCode":"FINANCE","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"NORMAL","conditionExpression":"","triggerActions":[]},
-  {"nodeKey":"success_node","nodeName":"成功","x":924,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":true,"nodeType":"SUCCESS","conditionExpression":"","triggerActions":[]},
-  {"nodeKey":"fail_node","nodeName":"失败","x":412,"y":324,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"FAIL","conditionExpression":"","triggerActions":[]},
+  {"nodeKey":"start_node","nodeName":"开始","x":88,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"START","conditionExpression":"[{\"to\":\"business_fill\",\"expression\":\"\"}]","triggerActions":[]},
+  {"nodeKey":"business_fill","nodeName":"业务填报","x":340,"y":76,"approverRoleCode":"SALESMAN","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"NORMAL","conditionExpression":"[{\"to\":\"finance_approval\",\"expression\":\"\"}]","triggerActions":["CREATE","UPDATE","DELETE"]},
+  {"nodeKey":"finance_approval","nodeName":"财务审批","x":632,"y":76,"approverRoleCode":"FINANCE","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"CONDITION","conditionExpression":"[{\"to\":\"success_node\",\"expression\":\"$.result==true\"},{\"to\":\"fail_node\",\"expression\":\"$.result==false\"}]","triggerActions":[]},
+  {"nodeKey":"success_node","nodeName":"成功","x":924,"y":76,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"SUCCESS","conditionExpression":"[{\"to\":\"end_node\",\"expression\":\"\"}]","triggerActions":[]},
+  {"nodeKey":"fail_node","nodeName":"失败","x":632,"y":324,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"FAIL","conditionExpression":"[{\"to\":\"end_node\",\"expression\":\"\"}]","triggerActions":[]},
   {"nodeKey":"end_node","nodeName":"结束","x":722,"y":324,"approverRoleCode":"","roleSignMode":"OR","approverUserId":null,"allowReject":false,"allowUnapprove":false,"nodeType":"END","conditionExpression":"","triggerActions":[]}
 ]',
        NULL,
@@ -785,15 +785,7 @@ VALUES ('GROUP_WORKBENCH', '集团工作台', NULL, 'MENU', '/group/dashboard', 
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
-VALUES ('GROUP_MGMT', '集团管理', NULL, 'DIRECTORY', '/group', NULL, 'office-building', 40, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES ('GROUP_INFO', '集团信息', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/info', 'group:info:view', 'document', 41, TRUE, 'ENABLED')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
-VALUES ('GROUP_STORE_MGMT', '门店管理', (SELECT id FROM sys_menu WHERE menu_code = 'GROUP_MGMT'), 'MENU', '/group/stores', 'group:store:manage', 'shop', 44, TRUE, 'ENABLED')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
@@ -1053,11 +1045,6 @@ VALUES (
     'ENABLED'
 )
 ON CONFLICT DO NOTHING;
-
-
-
-
-
 
 INSERT INTO sys_menu (menu_code, menu_name, parent_id, menu_type, route_path, permission_code, icon, sort_no, visible, status)
 VALUES (
@@ -2593,6 +2580,7 @@ SET permission_code = 'store:' || split_part(route_path, '/', 2) || ':' || split
 WHERE menu_code LIKE 'STORE_BIZ_MENU_%'
   AND COALESCE(component_key, '') <> ''
   AND route_path ~ '^/[^/]+/[^/]+$';
+
 -- STORE_MENU_SEED_END
 
 DELETE FROM sys_role_menu_rel

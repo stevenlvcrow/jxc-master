@@ -8,6 +8,7 @@ import {
   approvePeriodOpeningApi,
   deletePeriodOpeningApi,
   fetchPeriodOpeningPageApi,
+  fetchPeriodOpeningPermissionApi,
   generatePeriodOpeningApi,
   rejectPeriodOpeningApi,
   submitPeriodOpeningApi,
@@ -59,6 +60,13 @@ const currentPage = ref(1);
 const pageSize = ref(10);
 const selectedRows = ref<PeriodOpeningRow[]>([]);
 const warehouseOptions = ref<WarehouseOption[]>([]);
+const permissions = reactive({
+  canCreate: false,
+  canUpdate: false,
+  canDelete: false,
+  canApprove: false,
+  canReject: false,
+});
 
 const statusLabelMap = computed(() =>
   documentStatusOptions.value.reduce<Record<string, string>>((result, item) => {
@@ -130,8 +138,33 @@ const loadRows = async () => {
   }
 };
 
+const loadPermissions = async () => {
+  if (!orgId.value) {
+    permissions.canCreate = false;
+    permissions.canUpdate = false;
+    permissions.canDelete = false;
+    permissions.canApprove = false;
+    permissions.canReject = false;
+    return;
+  }
+  try {
+    const result = await fetchPeriodOpeningPermissionApi(orgId.value);
+    permissions.canCreate = Boolean(result.canCreate);
+    permissions.canUpdate = Boolean(result.canUpdate);
+    permissions.canDelete = Boolean(result.canDelete);
+    permissions.canApprove = Boolean(result.canApprove);
+    permissions.canReject = Boolean(result.canReject);
+  } catch {
+    permissions.canCreate = false;
+    permissions.canUpdate = false;
+    permissions.canDelete = false;
+    permissions.canApprove = false;
+    permissions.canReject = false;
+  }
+};
+
 const refreshAll = async () => {
-  await Promise.all([loadRows(), loadWarehouses()]);
+  await Promise.all([loadRows(), loadWarehouses(), loadPermissions()]);
 };
 
 const resetQuery = async () => {
@@ -272,14 +305,23 @@ const handleSelectionChange = (selection: PeriodOpeningRow[]) => {
 };
 
 const canEdit = (row: PeriodOpeningRow) => row.sourceType === 'MANUAL'
+  && permissions.canUpdate
   && approvedStatus.value
   && row.status !== approvedStatus.value;
 
 const canSubmit = (row: PeriodOpeningRow) => draftStatus.value && row.status === draftStatus.value;
 
-const canApprove = (row: PeriodOpeningRow) => submittedStatus.value && row.status === submittedStatus.value;
+const canApprove = (row: PeriodOpeningRow) => permissions.canApprove
+  && submittedStatus.value
+  && row.status === submittedStatus.value;
 
-const canDelete = (row: PeriodOpeningRow) => approvedStatus.value && row.status !== approvedStatus.value;
+const canReject = (row: PeriodOpeningRow) => permissions.canReject
+  && submittedStatus.value
+  && row.status === submittedStatus.value;
+
+const canDelete = (row: PeriodOpeningRow) => permissions.canDelete
+  && approvedStatus.value
+  && row.status !== approvedStatus.value;
 </script>
 
 <template>
@@ -324,12 +366,12 @@ const canDelete = (row: PeriodOpeningRow) => approvedStatus.value && row.status 
     </CommonQuerySection>
 
     <div class="table-toolbar">
-      <el-button type="primary" @click="router.push({ name: 'PeriodOpeningCreate' })">
+      <el-button v-if="permissions.canCreate" type="primary" @click="router.push({ name: 'PeriodOpeningCreate' })">
         <el-icon><Plus /></el-icon>
         新增
       </el-button>
-      <el-button @click="openGenerateDialog">从结存生成</el-button>
-      <el-button @click="handleBatchDelete">
+      <el-button v-if="permissions.canCreate" @click="openGenerateDialog">从结存生成</el-button>
+      <el-button v-if="permissions.canDelete" @click="handleBatchDelete">
         <el-icon><Delete /></el-icon>
         批量删除
       </el-button>
@@ -378,7 +420,7 @@ const canDelete = (row: PeriodOpeningRow) => approvedStatus.value && row.status 
           <el-button v-if="canEdit(row)" text @click="router.push({ name: 'PeriodOpeningEdit', params: { id: row.id } })">编辑</el-button>
           <el-button v-if="canSubmit(row)" text @click="handleSubmit(row)">提交</el-button>
           <el-button v-if="canApprove(row)" text @click="handleApprove(row)">审核</el-button>
-          <el-button v-if="canApprove(row)" text @click="handleReject(row)">驳回</el-button>
+          <el-button v-if="canReject(row)" text @click="handleReject(row)">驳回</el-button>
           <el-button v-if="canDelete(row)" text type="danger" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>

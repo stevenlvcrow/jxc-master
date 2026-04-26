@@ -90,7 +90,6 @@ public class WorkflowProcessApplicationService {
     /** 分页查询业务列表。 */
     public List<WorkflowProcessView> list(String orgId) {
         Long groupId = resolveGroupScope(orgId);
-        inventoryWorkflowBootstrapService.ensureDefaults(groupId, AuthContextHolder.requireUserId("登录已失效，请重新登录"));
         List<WorkflowProcessRegistryDO> processes = processRegistryRepository.findByScopeOrdered(SCOPE_GROUP, groupId);
         if (processes.isEmpty()) {
             return List.of();

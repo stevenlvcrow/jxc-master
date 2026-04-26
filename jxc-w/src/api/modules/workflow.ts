@@ -6,8 +6,12 @@ export type WorkflowNode = {
   x?: number;
   y?: number;
   approverRoleCode?: string;
+  roleSignMode?: 'OR' | 'AND';
   approverUserId?: number;
+  allowReject?: boolean;
+  allowUnapprove?: boolean;
   nodeType?: 'NORMAL' | 'CONDITION' | 'SUCCESS' | 'FAIL' | 'START' | 'END';
+  conditionExpression?: string;
   triggerActions?: ('CREATE' | 'UPDATE' | 'DELETE')[];
 };
 

@@ -42,17 +42,15 @@ type ReportRow = {
   category: string;
   statType: string;
   unit: string;
+  unitConversionRate: number;
+  itemVolume: number;
+  itemWeight: number;
   stockQty: number;
-  availableStock: number;
   stockAmount: number;
+  stockAmountExTax: number;
+  stockTaxAmount: number;
   avgCost: number;
-  warehouseType: string;
-  batchNo: string;
-  manufacturer: string;
-  productionDate: string;
-  expiryDate: string;
-  shelfLifeStatus: string;
-  itemStatus: string;
+  avgCostExTax: number;
 };
 
 type DisplayColumn = {
@@ -78,8 +76,8 @@ const query = reactive({
   item: '',
   status: '启用' as ItemStatus,
   unitType: '库存单位' as UnitType,
-  hideZeroStock: '',
-  hideZeroTheoretical: '',
+  hideZeroStock: false,
+  hideZeroTheoretical: false,
   scheme: '系统默认方案' as QueryScheme,
 });
 
@@ -95,47 +93,24 @@ const itemOptions = ref<Array<{ value: string; label: string }>>([]);
 const rawRows = ref<ReportRow[]>([]);
 const isWarehouseDimension = computed(() => query.dimension === '仓库维度');
 
-const warehouseColumns: DisplayColumn[] = [
+const reportColumns: DisplayColumn[] = [
   { key: 'itemCode', label: '物品编码', minWidth: 130 },
   { key: 'itemName', label: '物品名称', minWidth: 140 },
   { key: 'spec', label: '规格型号', minWidth: 120 },
   { key: 'category', label: '物品类别', minWidth: 120 },
   { key: 'statType', label: '统计类型', minWidth: 120 },
   { key: 'unit', label: '单位', minWidth: 100 },
+  { key: 'unitConversionRate', label: '与基准单位的换算率', minWidth: 160 },
+  { key: 'itemVolume', label: '物品体积', minWidth: 110 },
+  { key: 'itemWeight', label: '物品重量', minWidth: 110 },
   { key: 'warehouseName', label: '仓库', minWidth: 140 },
-  { key: 'warehouseType', label: '仓库类型', minWidth: 120 },
-  { key: 'stockQty', label: '当前库存', minWidth: 110 },
-  { key: 'availableStock', label: '可用库存', minWidth: 110 },
-  { key: 'stockAmount', label: '库存成本', minWidth: 120 },
-  { key: 'avgCost', label: '移动均价', minWidth: 110 },
-  { key: 'batchNo', label: '批次', minWidth: 130 },
-  { key: 'manufacturer', label: '厂家', minWidth: 130 },
-  { key: 'productionDate', label: '生产日期', minWidth: 110 },
-  { key: 'expiryDate', label: '到期日期', minWidth: 110 },
-  { key: 'shelfLifeStatus', label: '保质期状态', minWidth: 120 },
-  { key: 'itemStatus', label: '物品状态', minWidth: 100 },
+  { key: 'stockQty', label: '库存量', minWidth: 110 },
+  { key: 'stockAmount', label: '库存金额', minWidth: 120 },
+  { key: 'stockAmountExTax', label: '库存金额（不含税）', minWidth: 160 },
+  { key: 'stockTaxAmount', label: '库存税额', minWidth: 120 },
+  { key: 'avgCostExTax', label: '库存均价（不含税）', minWidth: 160 },
 ];
-
-const itemColumns: DisplayColumn[] = [
-  { key: 'itemCode', label: '物品编码', minWidth: 130 },
-  { key: 'itemName', label: '物品名称', minWidth: 140 },
-  { key: 'spec', label: '规格型号', minWidth: 120 },
-  { key: 'category', label: '物品类别', minWidth: 120 },
-  { key: 'statType', label: '统计类型', minWidth: 120 },
-  { key: 'unit', label: '单位', minWidth: 100 },
-  { key: 'stockQty', label: '当前库存', minWidth: 110 },
-  { key: 'availableStock', label: '可用库存', minWidth: 110 },
-  { key: 'stockAmount', label: '库存成本', minWidth: 120 },
-  { key: 'avgCost', label: '移动均价', minWidth: 110 },
-  { key: 'batchNo', label: '批次', minWidth: 130 },
-  { key: 'manufacturer', label: '厂家', minWidth: 130 },
-  { key: 'productionDate', label: '生产日期', minWidth: 110 },
-  { key: 'expiryDate', label: '到期日期', minWidth: 110 },
-  { key: 'shelfLifeStatus', label: '保质期状态', minWidth: 120 },
-  { key: 'itemStatus', label: '物品状态', minWidth: 100 },
-];
-
-const visibleColumns = computed(() => (isWarehouseDimension.value ? warehouseColumns : itemColumns));
+const visibleColumns = computed(() => reportColumns);
 const tableData = computed(() => {
   const pageRows = filteredRows.value;
   const start = (currentPage.value - 1) * pageSize.value;
@@ -153,7 +128,6 @@ const formatCell = (value: unknown) => {
   return String(value ?? '-');
 };
 const toCsvCell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-const isTruthyFilter = (value: string) => ['1', 'true', '是', 'yes', 'y'].includes(value.trim().toLowerCase());
 
 const fetchAllPages = async <T,>(
   loader: (pageNum: number, pageSize: number) => Promise<{ list?: T[]; total?: number; pageSize?: number }>,
@@ -249,9 +223,7 @@ const buildReportRows = async () => {
 
     (page.list ?? []).forEach((balance: RealtimeStockReportRow) => {
       const item = itemMap.get(balance.itemCode);
-      const rowKey = isWarehouseDimension.value
-        ? `${balance.warehouse}|${balance.itemCode}|${balance.batchNo || ''}`
-        : `${balance.itemCode}|${balance.batchNo || ''}`;
+      const rowKey = `${balance.warehouse}|${balance.itemCode}`;
       const existing = grouped.get(rowKey);
       if (!existing) {
         grouped.set(rowKey, {
@@ -261,34 +233,34 @@ const buildReportRows = async () => {
           itemName: balance.itemName,
           spec: balance.spec,
           category: balance.itemCategory,
-          statType: normalizeText(item?.statType),
+          statType: normalizeText(balance.statisticType || item?.statType),
           unit: balance.unit,
+          unitConversionRate: parseNumber(balance.unitConversionRate),
+          itemVolume: parseNumber(balance.itemVolume),
+          itemWeight: parseNumber(balance.itemWeight),
           stockQty: parseNumber(balance.currentStock),
-          availableStock: parseNumber(balance.availableStock),
           stockAmount: parseNumber(balance.costAmount),
+          stockAmountExTax: parseNumber(balance.costAmountExTax),
+          stockTaxAmount: parseNumber(balance.taxAmount),
           avgCost: parseNumber(balance.avgCost),
-          warehouseType: balance.warehouseType,
-          batchNo: balance.batchNo,
-          manufacturer: balance.manufacturer,
-          productionDate: balance.productionDate,
-          expiryDate: balance.expiryDate,
-          shelfLifeStatus: balance.shelfLifeStatus,
-          itemStatus: balance.itemStatus,
+          avgCostExTax: parseNumber(balance.avgCostExTax),
         });
       } else {
         existing.stockQty += parseNumber(balance.currentStock);
-        existing.availableStock += parseNumber(balance.availableStock);
         existing.stockAmount += parseNumber(balance.costAmount);
+        existing.stockAmountExTax += parseNumber(balance.costAmountExTax);
+        existing.stockTaxAmount += parseNumber(balance.taxAmount);
         existing.avgCost = existing.stockQty > 0 ? existing.stockAmount / existing.stockQty : 0;
+        existing.avgCostExTax = existing.stockQty > 0 ? existing.stockAmountExTax / existing.stockQty : 0;
       }
     });
 
     const filtered = Array.from(grouped.values())
-      .filter((row) => !isTruthyFilter(query.hideZeroStock) || row.stockQty !== 0)
-      .filter((row) => !isTruthyFilter(query.hideZeroTheoretical) || row.availableStock !== 0);
+      .filter((row) => !query.hideZeroStock || row.stockQty !== 0)
+      .filter((row) => !query.hideZeroTheoretical || row.stockQty !== 0);
 
     rawRows.value = filtered;
-    total.value = Number(page.total ?? filtered.length);
+    total.value = filtered.length;
     currentPage.value = 1;
   } catch {
     rawRows.value = [];
@@ -304,13 +276,15 @@ const filteredRows = computed(() => rawRows.value);
 const summaryTotals = computed(() => {
   const rows = filteredRows.value;
   const stockQty = rows.reduce((sum, row) => sum + row.stockQty, 0);
-  const availableStock = rows.reduce((sum, row) => sum + row.availableStock, 0);
   const stockAmount = rows.reduce((sum, row) => sum + row.stockAmount, 0);
+  const stockAmountExTax = rows.reduce((sum, row) => sum + row.stockAmountExTax, 0);
+  const stockTaxAmount = rows.reduce((sum, row) => sum + row.stockTaxAmount, 0);
   return {
     stockQty,
-    availableStock,
     stockAmount,
-    avgCost: stockQty > 0 ? stockAmount / stockQty : 0,
+    stockAmountExTax,
+    stockTaxAmount,
+    avgCostExTax: stockQty > 0 ? stockAmountExTax / stockQty : 0,
   };
 });
 
@@ -318,9 +292,10 @@ const summaryCells = computed(() => {
   const totals = summaryTotals.value;
   const labels = [
     `库存量：${formatNumber(totals.stockQty, 4)}`,
-    `可用库存：${formatNumber(totals.availableStock, 4)}`,
-    `库存成本：${formatMoney(totals.stockAmount)}`,
-    `移动均价：${formatMoney(totals.avgCost)}`,
+    `库存金额：${formatMoney(totals.stockAmount)}`,
+    `库存金额（不含税）：${formatMoney(totals.stockAmountExTax)}`,
+    `库存税额：${formatMoney(totals.stockTaxAmount)}`,
+    `库存均价（不含税）：${formatNumber(totals.avgCostExTax, 4)}`,
   ];
   return labels;
 });
@@ -334,50 +309,10 @@ const handleExport = async () => {
   exportLoading.value = true;
   try {
     const rows = filteredRows.value;
-    const headers = isWarehouseDimension.value
-      ? ['物品编码', '物品名称', '规格型号', '物品类别', '统计类型', '单位', '仓库', '仓库类型', '当前库存', '可用库存', '库存成本', '移动均价', '批次', '厂家', '生产日期', '到期日期', '保质期状态', '物品状态']
-      : ['物品编码', '物品名称', '规格型号', '物品类别', '统计类型', '单位', '当前库存', '可用库存', '库存成本', '移动均价', '批次', '厂家', '生产日期', '到期日期', '保质期状态', '物品状态'];
+    const headers = reportColumns.map((column) => column.label);
     const lines = [headers.map(toCsvCell).join(',')];
     rows.forEach((row) => {
-      const cells = isWarehouseDimension.value
-        ? [
-            row.itemCode,
-            row.itemName,
-            row.spec,
-            row.category,
-            row.statType,
-            row.unit,
-            row.warehouseName,
-            row.warehouseType,
-            formatNumber(row.stockQty, 4),
-            formatNumber(row.availableStock, 4),
-            formatMoney(row.stockAmount),
-            formatMoney(row.avgCost),
-            row.batchNo,
-            row.manufacturer,
-            row.productionDate,
-            row.expiryDate,
-            row.shelfLifeStatus,
-            row.itemStatus,
-          ]
-        : [
-            row.itemCode,
-            row.itemName,
-            row.spec,
-            row.category,
-            row.statType,
-            row.unit,
-            formatNumber(row.stockQty, 4),
-            formatNumber(row.availableStock, 4),
-            formatMoney(row.stockAmount),
-            formatMoney(row.avgCost),
-            row.batchNo,
-            row.manufacturer,
-            row.productionDate,
-            row.expiryDate,
-            row.shelfLifeStatus,
-            row.itemStatus,
-          ];
+      const cells = reportColumns.map((column) => formatCell(row[column.key]));
       lines.push(cells.map(toCsvCell).join(','));
     });
     const blob = new Blob([`\uFEFF${lines.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
@@ -402,8 +337,8 @@ const handleReset = async () => {
   query.item = '';
   query.status = '启用';
   query.unitType = '库存单位';
-  query.hideZeroStock = '';
-  query.hideZeroTheoretical = '';
+  query.hideZeroStock = false;
+  query.hideZeroTheoretical = false;
   query.scheme = '系统默认方案';
   currentPage.value = 1;
   await buildReportRows();
@@ -497,10 +432,10 @@ onMounted(async () => {
         </el-select>
       </el-form-item>
       <el-form-item label="不显示库存量为0的物品">
-        <el-input v-model="query.hideZeroStock" placeholder="输入1启用" clearable style="width: 160px" />
+        <el-checkbox v-model="query.hideZeroStock" />
       </el-form-item>
       <el-form-item label="不显示实时库存为0的物品">
-        <el-input v-model="query.hideZeroTheoretical" placeholder="输入1启用" clearable style="width: 160px" />
+        <el-checkbox v-model="query.hideZeroTheoretical" />
       </el-form-item>
       <el-form-item label="查询方案">
         <el-select v-model="query.scheme" style="width: 140px">

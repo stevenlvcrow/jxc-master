@@ -23,6 +23,7 @@ import com.boboboom.jxc.identity.domain.repository.WarehouseRepository;
 import com.boboboom.jxc.identity.infrastructure.persistence.dataobject.WarehouseDO;
 import com.boboboom.jxc.inventory.domain.repository.InventoryBalanceRepository;
 import com.boboboom.jxc.inventory.domain.repository.InventoryBatchBalanceRepository;
+import com.boboboom.jxc.inventory.domain.repository.InventoryTransactionRepository;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBalanceDO;
 import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.InventoryBatchBalanceDO;
 import com.boboboom.jxc.item.domain.repository.ItemProfileRepository;
@@ -38,10 +39,15 @@ public class InventoryRealtimeReportApplicationService {
     private static final int MAX_PAGE_SIZE = 200;
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int INVENTORY_QUANTITY_SCALE = 4;
+    private static final int MONEY_SCALE = 2;
+    private static final int PRICE_SCALE = 4;
+    private static final int UNIT_CONVERSION_SCALE = 6;
+    private static final String LEGACY_WAREHOUSE_OPENING_CONFIRM = "WAREHOUSE_OPENING_BALANCE_CONFIRM";
 
     private final OrgScopeService orgScopeService;
     private final InventoryBalanceRepository inventoryBalanceRepository;
     private final InventoryBatchBalanceRepository inventoryBatchBalanceRepository;
+    private final InventoryTransactionRepository inventoryTransactionRepository;
     private final ItemProfileRepository itemProfileRepository;
     private final WarehouseRepository warehouseRepository;
     private final ObjectMapper objectMapper;
@@ -50,12 +56,14 @@ public class InventoryRealtimeReportApplicationService {
     public InventoryRealtimeReportApplicationService(OrgScopeService orgScopeServiceValue,
                                                      InventoryBalanceRepository inventoryBalanceRepositoryValue,
                                                      InventoryBatchBalanceRepository inventoryBatchBalanceRepositoryValue,
+                                                     InventoryTransactionRepository inventoryTransactionRepositoryValue,
                                                      ItemProfileRepository itemProfileRepositoryValue,
                                                      WarehouseRepository warehouseRepositoryValue,
                                                      ObjectMapper objectMapperValue) {
         this.orgScopeService = orgScopeServiceValue;
         this.inventoryBalanceRepository = inventoryBalanceRepositoryValue;
         this.inventoryBatchBalanceRepository = inventoryBatchBalanceRepositoryValue;
+        this.inventoryTransactionRepository = inventoryTransactionRepositoryValue;
         this.itemProfileRepository = itemProfileRepositoryValue;
         this.warehouseRepository = warehouseRepositoryValue;
         this.objectMapper = objectMapperValue;
@@ -72,6 +80,7 @@ public class InventoryRealtimeReportApplicationService {
                                                                 String shelfLifeStatus,
                                                                 String orgId) {
         InventoryScope scope = resolveInventoryScope(orgId);
+        ensureNoLegacyWarehouseOpeningLedger(scope);
         int safePageNo = normalizePageNo(pageNo);
         int safePageSize = normalizePageSize(pageSize);
         String warehouseValue = trimNullable(warehouse);
@@ -107,6 +116,7 @@ public class InventoryRealtimeReportApplicationService {
                                                              String unitType,
                                                              String orgId) {
         InventoryScope scope = resolveInventoryScope(orgId);
+        ensureNoLegacyWarehouseOpeningLedger(scope);
         int safePageNo = normalizePageNo(pageNo);
         int safePageSize = normalizePageSize(pageSize);
         Map<String, ItemProfileSnapshot> itemProfiles = loadItemProfiles(scope);
@@ -282,17 +292,27 @@ public class InventoryRealtimeReportApplicationService {
         BigDecimal stockQty = batch == null ? defaultQuantity(balance.getQuantity()) : defaultQuantity(batch.getQuantity());
         BigDecimal stockCost = batch == null ? defaultMoney(balance.getCostAmount()) : defaultMoney(batch.getCostAmount());
         BigDecimal avgCost = batch == null ? defaultMoney(balance.getAvgCost()) : defaultMoney(batch.getAvgCost());
+        BigDecimal costAmountExTax = taxExcludedAmount(stockCost, item.taxRate());
+        BigDecimal taxAmount = stockCost.subtract(costAmountExTax).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        BigDecimal avgCostExTax = averagePrice(costAmountExTax, stockQty);
         String shelfLifeStatus = batch == null ? "" : resolveShelfLifeStatus(batch.getExpiryDate(), item.warningDays(), LocalDate.now());
         return new RealtimeStockReportRow(
                 summaryRowId(balance.getWarehouseName(), balance.getItemCode(), batch == null ? "" : batch.getBatchNo()),
                 item.itemCode(),
                 item.itemName(),
                 item.category(),
+                item.statisticType(),
                 item.stockUnit(),
+                item.unitConversionRate(),
+                item.itemVolume(),
+                item.itemWeight(),
                 stockQty,
                 stockQty,
                 stockCost,
+                costAmountExTax,
+                taxAmount,
                 avgCost,
+                avgCostExTax,
                 defaultIfBlank(balance.getWarehouseName(), ""),
                 resolveWarehouseType(scope, balance.getWarehouseName()),
                 item.spec(),
@@ -344,6 +364,11 @@ public class InventoryRealtimeReportApplicationService {
                 defaultIfBlank(trimNullable(request.name()), ""),
                 defaultIfBlank(trimNullable(request.category()), ""),
                 defaultIfBlank(trimNullable(resolveStockUnit(request)), "库存单位"),
+                defaultIfBlank(trimNullable(request.statType()), ""),
+                resolveUnitConversionRate(profile.getItemCode(), request),
+                resolveUnitVolume(profile.getItemCode(), request),
+                resolveUnitWeight(profile.getItemCode(), request),
+                parseOptionalDecimal(request.taxRate(), "税率", profile.getItemCode()).setScale(MONEY_SCALE, RoundingMode.HALF_UP),
                 defaultIfBlank(trimNullable(request.spec()), ""),
                 defaultIfBlank(normalizeBigDecimalString(request.stockMin()), "0"),
                 defaultIfBlank(normalizeBigDecimalString(request.stockMax()), "0"),
@@ -376,6 +401,65 @@ public class InventoryRealtimeReportApplicationService {
         return "库存单位";
     }
 
+    private BigDecimal resolveUnitConversionRate(String itemCode, ItemCreateRequest request) {
+        List<ItemCreateRequest.UnitSettingRow> rows = requireUnitSettingRows(itemCode, request);
+        String stockUnit = resolveStockUnit(request);
+        ItemCreateRequest.UnitSettingRow row = findUnitRow(rows, stockUnit);
+        if (row == null || row == rows.get(0)) {
+            return BigDecimal.ONE.setScale(UNIT_CONVERSION_SCALE, RoundingMode.HALF_UP);
+        }
+        BigDecimal from = parsePositiveDecimal(row.convertFrom(), "单位换算数量", itemCode);
+        BigDecimal to = parsePositiveDecimal(row.convertTo(), "基准单位换算数量", itemCode);
+        return to.divide(from, UNIT_CONVERSION_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveUnitVolume(String itemCode, ItemCreateRequest request) {
+        ItemCreateRequest.UnitSettingRow row = requireDisplayUnitRow(itemCode, request);
+        return parseOptionalDecimal(row.volume(), "物品体积", itemCode).setScale(PRICE_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveUnitWeight(String itemCode, ItemCreateRequest request) {
+        ItemCreateRequest.UnitSettingRow row = requireDisplayUnitRow(itemCode, request);
+        return parseOptionalDecimal(row.weight(), "物品重量", itemCode).setScale(PRICE_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private ItemCreateRequest.UnitSettingRow requireDisplayUnitRow(String itemCode, ItemCreateRequest request) {
+        List<ItemCreateRequest.UnitSettingRow> rows = requireUnitSettingRows(itemCode, request);
+        ItemCreateRequest.UnitSettingRow row = findUnitRow(rows, resolveStockUnit(request));
+        return row == null ? rows.get(0) : row;
+    }
+
+    private List<ItemCreateRequest.UnitSettingRow> requireUnitSettingRows(String itemCode, ItemCreateRequest request) {
+        List<ItemCreateRequest.UnitSettingRow> rows = request.unitSettingRows();
+        if (rows == null || rows.isEmpty() || !StringUtils.hasText(rows.get(0).unit())) {
+            throw new BusinessException("物品单位设置缺失，请清理脏数据：" + itemCode);
+        }
+        return rows;
+    }
+
+    private ItemCreateRequest.UnitSettingRow findUnitRow(List<ItemCreateRequest.UnitSettingRow> rows, String unit) {
+        return rows.stream()
+                .filter(row -> Objects.equals(trimNullable(row.unit()), trimNullable(unit)))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private BigDecimal taxExcludedAmount(BigDecimal amountTaxIncluded, BigDecimal taxRate) {
+        BigDecimal rate = defaultMoney(taxRate);
+        if (rate.compareTo(BigDecimal.ZERO) == 0) {
+            return amountTaxIncluded.setScale(MONEY_SCALE, RoundingMode.HALF_UP);
+        }
+        BigDecimal denominator = BigDecimal.ONE.add(rate.divide(new BigDecimal("100"), PRICE_SCALE, RoundingMode.HALF_UP));
+        return amountTaxIncluded.divide(denominator, MONEY_SCALE, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal averagePrice(BigDecimal amount, BigDecimal quantity) {
+        if (quantity.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO.setScale(PRICE_SCALE, RoundingMode.HALF_UP);
+        }
+        return amount.divide(quantity, PRICE_SCALE, RoundingMode.HALF_UP);
+    }
+
     private String resolveWarehouseType(InventoryScope scope, String warehouseName) {
         if (!StringUtils.hasText(warehouseName)) {
             return "";
@@ -401,6 +485,17 @@ public class InventoryRealtimeReportApplicationService {
     private InventoryScope resolveInventoryScope(String orgId) {
         OrgScopeService.AccessibleScope scope = orgScopeService.resolveAccessibleScope(AuthContextHolder.requireUserId("登录已失效，请重新登录"), orgId);
         return new InventoryScope(scope.scopeType(), scope.scopeId(), scope.groupId());
+    }
+
+    private void ensureNoLegacyWarehouseOpeningLedger(InventoryScope scope) {
+        boolean exists = inventoryTransactionRepository.existsByScopeAndBizType(
+                scope.scopeType(),
+                scope.scopeId(),
+                LEGACY_WAREHOUSE_OPENING_CONFIRM
+        );
+        if (exists) {
+            throw new BusinessException("当前机构存在旧仓库期初库存流水，请清理旧账本后重建期初库存");
+        }
     }
 
     private <T> PageData<T> page(List<T> rows, int pageNo, int pageSize) {
@@ -448,6 +543,25 @@ public class InventoryRealtimeReportApplicationService {
         return new BigDecimal(normalized).setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
     }
 
+    private BigDecimal parseOptionalDecimal(String value, String fieldName, String itemCode) {
+        if (!StringUtils.hasText(value)) {
+            return BigDecimal.ZERO;
+        }
+        try {
+            return new BigDecimal(value.trim());
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(fieldName + "格式错误，请清理脏数据：" + itemCode);
+        }
+    }
+
+    private BigDecimal parsePositiveDecimal(String value, String fieldName, String itemCode) {
+        BigDecimal decimal = parseOptionalDecimal(value, fieldName, itemCode);
+        if (decimal.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException(fieldName + "必须大于0，请清理脏数据：" + itemCode);
+        }
+        return decimal;
+    }
+
     private static BigDecimal defaultQuantity(BigDecimal value) {
         return value == null ? BigDecimal.ZERO.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP)
                 : value.setScale(INVENTORY_QUANTITY_SCALE, RoundingMode.HALF_UP);
@@ -476,6 +590,11 @@ public class InventoryRealtimeReportApplicationService {
                                        String itemName,
                                        String category,
                                        String stockUnit,
+                                       String statisticType,
+                                       BigDecimal unitConversionRate,
+                                       BigDecimal itemVolume,
+                                       BigDecimal itemWeight,
+                                       BigDecimal taxRate,
                                        String spec,
                                        String stockMin,
                                        String stockMax,
@@ -492,11 +611,18 @@ public class InventoryRealtimeReportApplicationService {
                                          String itemCode,
                                          String itemName,
                                          String itemCategory,
+                                         String statisticType,
                                          String unit,
+                                         BigDecimal unitConversionRate,
+                                         BigDecimal itemVolume,
+                                         BigDecimal itemWeight,
                                          BigDecimal currentStock,
                                          BigDecimal availableStock,
                                          BigDecimal costAmount,
+                                         BigDecimal costAmountExTax,
+                                         BigDecimal taxAmount,
                                          BigDecimal avgCost,
+                                         BigDecimal avgCostExTax,
                                          String warehouse,
                                          String warehouseType,
                                          String spec,

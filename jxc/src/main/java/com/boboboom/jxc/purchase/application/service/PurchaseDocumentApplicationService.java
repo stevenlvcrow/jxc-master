@@ -431,14 +431,22 @@ public class PurchaseDocumentApplicationService {
         header.lastOperatedAt = LocalDateTime.now();
         header.updatedAt = LocalDateTime.now();
         InventoryDocumentHeader workflowHeader = toWorkflowHeader(header);
-        workflowService.resetBusinessWorkflowState(
+        InventoryDocumentWorkflowService.ApprovalResult result = workflowService.rejectBusinessCurrentTask(
+                kind.businessCode(),
+                kind.businessName() + "流程",
                 workflowHeader,
+                operatorId,
+                scope.groupId(),
                 () -> {
                     applyWorkflowHeader(header, workflowHeader);
                     updateHeader(header);
-                },
-                kind.businessName() + "驳回"
+                }
         );
+        if (!result.workflowApplied()) {
+            throw new BusinessException(kind.businessName() + "未发起审批流，不能驳回");
+        }
+        applyWorkflowHeader(header, workflowHeader);
+        updateHeader(header);
         recordAudit(scope, kind, header, role, "拒绝", reason);
     }
 

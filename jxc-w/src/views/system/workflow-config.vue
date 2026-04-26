@@ -83,11 +83,13 @@ const ACTION_OPTIONS: Array<{ label: string; value: ActionCode }> = [
 const NODE_TYPE_LABEL: Record<NodeType, string> = {
   NORMAL: '普通节点',
   CONDITION: '条件节点',
-  SUCCESS: '成功节点',
-  FAIL: '失败节点',
+  SUCCESS: '成功',
+  FAIL: '失败',
   START: '开始节点',
   END: '结束节点',
 };
+const CONDITION_TRUE_EXPRESSION = '$.result==true';
+const CONDITION_FALSE_EXPRESSION = '$.result==false';
 
 const normalizeNodeTypeValue = (value?: string): NodeType => {
   if (value === 'CONDITION' || value === 'SUCCESS' || value === 'FAIL' || value === 'START' || value === 'END' || value === 'NORMAL') {
@@ -104,6 +106,92 @@ const supportsRoleAssignment = (type?: string) => {
 
 const supportsActionTriggers = (type?: string) => normalizeNodeTypeValue(type) === 'NORMAL';
 const supportsApproverUser = (type?: string) => normalizeNodeTypeValue(type) === 'CONDITION';
+
+const normalizeConditionExpressionValue = (value?: string) => {
+  const compact = String(value ?? '').replace(/\s+/g, '').toLowerCase();
+  if (compact === CONDITION_TRUE_EXPRESSION) {
+    return CONDITION_TRUE_EXPRESSION;
+  }
+  if (compact === CONDITION_FALSE_EXPRESSION) {
+    return CONDITION_FALSE_EXPRESSION;
+  }
+  return String(value ?? '').trim();
+};
+
+const isConditionExpression = (value?: string) => {
+  const normalized = normalizeConditionExpressionValue(value);
+  return normalized === CONDITION_TRUE_EXPRESSION || normalized === CONDITION_FALSE_EXPRESSION;
+};
+
+const collectUsedConditionExpressions = (outgoing: EdgeItem[]) => new Set(
+  outgoing
+    .map((item) => normalizeConditionExpressionValue(item.conditionExpression))
+    .filter((item) => isConditionExpression(item)),
+);
+
+const conditionExpressionForTarget = (targetNodeKey: string, used: Set<string>) => {
+  const targetNode = form.nodes.find((item) => item.nodeKey === targetNodeKey);
+  const targetType = normalizeNodeTypeValue(targetNode?.nodeType);
+  if (targetType === 'SUCCESS' && !used.has(CONDITION_TRUE_EXPRESSION)) {
+    return CONDITION_TRUE_EXPRESSION;
+  }
+  if (targetType === 'FAIL' && !used.has(CONDITION_FALSE_EXPRESSION)) {
+    return CONDITION_FALSE_EXPRESSION;
+  }
+  return used.has(CONDITION_TRUE_EXPRESSION) ? CONDITION_FALSE_EXPRESSION : CONDITION_TRUE_EXPRESSION;
+};
+
+const ensureConditionOutgoingExpressions = (sourceNodeKey: string) => {
+  const outgoing = edges.value
+    .filter((item) => item.from === sourceNodeKey)
+    .sort((left, right) => {
+      const leftNode = form.nodes.find((item) => item.nodeKey === left.to);
+      const rightNode = form.nodes.find((item) => item.nodeKey === right.to);
+      const leftType = normalizeNodeTypeValue(leftNode?.nodeType);
+      const rightType = normalizeNodeTypeValue(rightNode?.nodeType);
+      if (leftType === 'SUCCESS' && rightType !== 'SUCCESS') {
+        return -1;
+      }
+      if (rightType === 'SUCCESS' && leftType !== 'SUCCESS') {
+        return 1;
+      }
+      if (leftType === 'FAIL' && rightType !== 'FAIL') {
+        return -1;
+      }
+      if (rightType === 'FAIL' && leftType !== 'FAIL') {
+        return 1;
+      }
+      return left.id.localeCompare(right.id);
+    });
+  const used = new Set<string>();
+  outgoing.forEach((edge) => {
+    const normalized = normalizeConditionExpressionValue(edge.conditionExpression);
+    if (isConditionExpression(normalized) && !used.has(normalized)) {
+      edge.conditionExpression = normalized;
+      used.add(normalized);
+    } else {
+      edge.conditionExpression = conditionExpressionForTarget(edge.to, used);
+      used.add(edge.conditionExpression);
+    }
+  });
+};
+
+const normalizeEdgeExpressions = () => {
+  edges.value = edges.value.filter((edge) => {
+    const sourceNode = form.nodes.find((item) => item.nodeKey === edge.from);
+    const targetNode = form.nodes.find((item) => item.nodeKey === edge.to);
+    return Boolean(sourceNode && targetNode && normalizeNodeTypeValue(sourceNode.nodeType) !== 'END' && normalizeNodeTypeValue(targetNode.nodeType) !== 'START');
+  });
+  edges.value.forEach((edge) => {
+    const sourceNode = form.nodes.find((item) => item.nodeKey === edge.from);
+    if (normalizeNodeTypeValue(sourceNode?.nodeType) !== 'CONDITION') {
+      edge.conditionExpression = '';
+    }
+  });
+  form.nodes
+    .filter((node) => normalizeNodeTypeValue(node.nodeType) === 'CONDITION')
+    .forEach((node) => ensureConditionOutgoingExpressions(node.nodeKey));
+};
 
 const nodeDraft = reactive({
   nodeType: 'NORMAL' as NodeType,
@@ -539,6 +627,30 @@ const syncEditByType = () => {
   }
 };
 
+const removeInvalidEdgesForNodeType = (node: EditableNode) => {
+  const nodeType = normalizeNodeTypeValue(node.nodeType);
+  if (nodeType === 'END') {
+    edges.value = edges.value.filter((edge) => edge.from !== node.nodeKey);
+    return;
+  }
+  if (nodeType === 'CONDITION') {
+    ensureConditionOutgoingExpressions(node.nodeKey);
+    return;
+  }
+  let firstOutgoingKept = false;
+  edges.value = edges.value.filter((edge) => {
+    if (edge.from !== node.nodeKey) {
+      return true;
+    }
+    edge.conditionExpression = '';
+    if (firstOutgoingKept) {
+      return false;
+    }
+    firstOutgoingKept = true;
+    return true;
+  });
+};
+
 const _openEditDialog = (nodeKey: string) => {
   const node = form.nodes.find((item) => item.nodeKey === nodeKey);
   if (!node) {
@@ -575,6 +687,7 @@ const applyNodeEdit = () => {
   node.allowReject = false;
   node.allowUnapprove = editDraft.nodeType === 'SUCCESS' ? editDraft.allowUnapprove : false;
   ensureRoleByNodeType(node);
+  removeInvalidEdgesForNodeType(node);
   editDialogVisible.value = false;
 };
 
@@ -745,7 +858,16 @@ const appendEdgeIfAbsent = (from: string, to: string) => {
     ElMessage.warning('该连线会与已有连线交叉，请调整节点位置后再连线');
     return false;
   }
-  edges.value.push({ id: `${from}__${to}`, from, to });
+  const sourceNode = form.nodes.find((item) => item.nodeKey === from);
+  edges.value.push({
+    id: `${from}__${to}`,
+    from,
+    to,
+    conditionExpression: normalizeNodeTypeValue(sourceNode?.nodeType) === 'CONDITION' ? CONDITION_TRUE_EXPRESSION : '',
+  });
+  if (normalizeNodeTypeValue(sourceNode?.nodeType) === 'CONDITION') {
+    ensureConditionOutgoingExpressions(from);
+  }
   return true;
 };
 
@@ -757,6 +879,9 @@ const canAppendConditionEdge = (fromNodeKey: string) => {
 const linkNewNodeAfter = (sourceNodeKey: string, newNodeKey: string) => {
   const sourceNode = form.nodes.find((item) => item.nodeKey === sourceNodeKey);
   const sourceNodeType = normalizeNodeTypeValue(sourceNode?.nodeType);
+  if (sourceNodeType === 'END') {
+    return;
+  }
   if (sourceNodeType === 'CONDITION') {
     if (!canAppendConditionEdge(sourceNodeKey)) {
       ElMessage.warning('条件节点最多只能连接两条分支');
@@ -819,6 +944,10 @@ const handleContextRollback = (targetNodeKey: string) => {
     to: targetNodeKey,
     conditionExpression: '',
   });
+  const sourceNode = form.nodes.find((item) => item.nodeKey === contextMenu.nodeKey);
+  if (normalizeNodeTypeValue(sourceNode?.nodeType) === 'CONDITION') {
+    ensureConditionOutgoingExpressions(contextMenu.nodeKey);
+  }
   closeContextMenu();
 };
 
@@ -977,11 +1106,20 @@ const connectNodeClick = (node: EditableNode) => {
     return;
   }
   if (!connectingFromKey.value) {
+    if (normalizeNodeTypeValue(node.nodeType) === 'END') {
+      ElMessage.warning('结束节点不能作为连线起点');
+      return;
+    }
     connectingFromKey.value = node.nodeKey;
     ElMessage.info('请选择目标节点完成连线');
     return;
   }
   if (connectingFromKey.value === node.nodeKey) {
+    return;
+  }
+  if (normalizeNodeTypeValue(node.nodeType) === 'START') {
+    ElMessage.warning('开始节点不能作为连线目标');
+    connectingFromKey.value = '';
     return;
   }
   const sourceNode = form.nodes.find((item) => item.nodeKey === connectingFromKey.value);
@@ -1015,8 +1153,12 @@ const connectNodeClick = (node: EditableNode) => {
       id: `${connectingFromKey.value}__${node.nodeKey}`,
       from: connectingFromKey.value,
       to: node.nodeKey,
-      conditionExpression: '',
+      conditionExpression: conditionExpressionForTarget(
+        node.nodeKey,
+        collectUsedConditionExpressions(outgoing),
+      ),
     });
+    ensureConditionOutgoingExpressions(connectingFromKey.value);
   } else {
     const oldOutgoing = edges.value.find((item) => item.from === connectingFromKey.value);
     if (oldOutgoing) {
@@ -1104,7 +1246,7 @@ const edgePath = (edge: EdgeItem) => {
   return `M ${from.x} ${from.y} C ${from.x} ${c1y}, ${to.x} ${c2y}, ${to.x} ${endY}`;
 };
 
-const _edgeLabelPoint = (edge: EdgeItem) => {
+const edgeLabelPoint = (edge: EdgeItem) => {
   const { startOffset, endOffset } = edgePortOffset(edge);
   const from = edgeAnchorPoint(edge.from, edge.to, startOffset);
   const to = edgeAnchorPoint(edge.to, edge.from, endOffset);
@@ -1117,8 +1259,27 @@ const _edgeLabelPoint = (edge: EdgeItem) => {
 };
 
 const openEdgeExpression = async (edge: EdgeItem) => {
-  void edge;
-  ElMessage.warning('当前版本暂不支持配置连线条件表达式');
+  if (isReadOnlyMode.value) {
+    return;
+  }
+  const sourceNode = form.nodes.find((item) => item.nodeKey === edge.from);
+  if (normalizeNodeTypeValue(sourceNode?.nodeType) !== 'CONDITION') {
+    ElMessage.info('普通连线不需要配置条件');
+    return;
+  }
+  const nextExpression = normalizeConditionExpressionValue(edge.conditionExpression) === CONDITION_TRUE_EXPRESSION
+    ? CONDITION_FALSE_EXPRESSION
+    : CONDITION_TRUE_EXPRESSION;
+  const duplicate = edges.value.some((item) =>
+    item.id !== edge.id
+    && item.from === edge.from
+    && normalizeConditionExpressionValue(item.conditionExpression) === nextExpression,
+  );
+  if (duplicate) {
+    ElMessage.warning('条件节点必须分别配置 true 和 false 两条分支');
+    return;
+  }
+  edge.conditionExpression = nextExpression;
 };
 
 const clearEdges = () => {
@@ -1147,18 +1308,21 @@ function buildEdgesFromNodeConfig() {
         if (!targetKey || !form.nodes.some((item) => item.nodeKey === targetKey)) {
           return;
         }
-        const id = `${node.nodeKey}__${targetKey}`;
-        if (edges.value.some((item) => item.id === id)) {
-          return;
-        }
-        edges.value.push({
-          id,
-          from: node.nodeKey,
-          to: targetKey,
-          conditionExpression: String(link?.expression ?? '').trim(),
+          const id = `${node.nodeKey}__${targetKey}`;
+          if (edges.value.some((item) => item.id === id)) {
+            return;
+          }
+          const sourceType = normalizeNodeTypeValue(node.nodeType);
+          edges.value.push({
+            id,
+            from: node.nodeKey,
+            to: targetKey,
+            conditionExpression: sourceType === 'CONDITION'
+              ? normalizeConditionExpressionValue(link?.expression)
+              : '',
+          });
+          restoredCount += 1;
         });
-        restoredCount += 1;
-      });
     } catch {
       // ignore invalid legacy value
     }
@@ -1173,6 +1337,7 @@ function buildEdgesFromNodeConfig() {
       });
     }
   }
+  normalizeEdgeExpressions();
 }
 
 const generateWorkflowCode = () => {
@@ -1429,6 +1594,18 @@ const saveConfig = async () => {
     ElMessage.warning(`条件节点【${invalidConditionNode.nodeName}】需选择审批角色或指定人员`);
     return;
   }
+  normalizeEdgeExpressions();
+  const invalidConditionEdges = conditionNodes.find((item) => {
+    const outgoing = edges.value.filter((edge) => edge.from === item.nodeKey);
+    const expressions = new Set(outgoing.map((edge) => normalizeConditionExpressionValue(edge.conditionExpression)));
+    return outgoing.length !== 2
+      || !expressions.has(CONDITION_TRUE_EXPRESSION)
+      || !expressions.has(CONDITION_FALSE_EXPRESSION);
+  });
+  if (invalidConditionEdges) {
+    ElMessage.warning(`条件节点【${invalidConditionEdges.nodeName}】必须配置 $.result==true 和 $.result==false 两条分支`);
+    return;
+  }
   const invalidActionNode = form.nodes.find((item) => {
     if (normalizeNodeTypeValue(item.nodeType) !== 'NORMAL') {
       return false;
@@ -1441,6 +1618,19 @@ const saveConfig = async () => {
     ElMessage.warning(`普通节点【${invalidActionNode.nodeName}】已选择触发动作，请同时配置审批角色`);
     return;
   }
+  const edgeExpressionMap = new Map<string, string>();
+  form.nodes.forEach((node) => {
+    const outgoing = edges.value
+      .filter((edge) => edge.from === node.nodeKey)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((edge) => ({
+        to: edge.to,
+        expression: normalizeNodeTypeValue(node.nodeType) === 'CONDITION'
+          ? normalizeConditionExpressionValue(edge.conditionExpression)
+          : '',
+      }));
+    edgeExpressionMap.set(node.nodeKey, outgoing.length ? JSON.stringify(outgoing) : '');
+  });
   saving.value = true;
   try {
     const isCopyMode = Boolean(copySourceWorkflowCode.value.trim());
@@ -1462,8 +1652,12 @@ const saveConfig = async () => {
         x: Math.round(node.x),
         y: Math.round(node.y),
         approverRoleCode: supportsRoleAssignment(node.nodeType) ? String(node.approverRoleCode ?? '').trim() : '',
+        roleSignMode: node.nodeType === 'CONDITION' ? normalizeRoleSignMode(node.roleSignMode) : 'OR',
         approverUserId: supportsApproverUser(node.nodeType) ? node.approverUserId : undefined,
+        allowReject: false,
+        allowUnapprove: false,
         nodeType: node.nodeType,
+        conditionExpression: edgeExpressionMap.get(node.nodeKey) ?? '',
         triggerActions: supportsActionTriggers(node.nodeType) ? normalizeActionTriggers(node.triggerActions) : [],
       })),
     });
@@ -1603,27 +1797,34 @@ watch(
                 <path d="M0,0 L12,6 L0,12 z" fill="#4f6f95" />
               </marker>
             </defs>
-            <path
-              v-for="edge in edges"
-              :key="edge.id"
-              :d="edgePath(edge)"
-              class="edge-line"
-              stroke="#5c7ea7"
-              stroke-width="2"
-              fill="none"
-              marker-end="url(#arrow)"
-            />
-            <path
-              v-for="edge in edges"
-              :key="`${edge.id}_hit`"
-              :d="edgePath(edge)"
-              class="edge-hit"
-              stroke="transparent"
-              stroke-width="14"
-              fill="none"
-              @click.stop="openEdgeExpression(edge)"
-            />
-            <g v-for="edge in edges" :key="`${edge.id}_label`" />
+            <template v-for="edge in edges" :key="edge.id">
+              <path
+                :d="edgePath(edge)"
+                class="edge-line"
+                stroke="#5c7ea7"
+                stroke-width="2"
+                fill="none"
+                marker-end="url(#arrow)"
+              />
+              <path
+                :d="edgePath(edge)"
+                class="edge-hit"
+                stroke="transparent"
+                stroke-width="14"
+                fill="none"
+                @click.stop="openEdgeExpression(edge)"
+              />
+            </template>
+            <g v-for="edge in edges" :key="`${edge.id}_label`">
+              <text
+                v-if="isConditionExpression(edge.conditionExpression)"
+                class="edge-label"
+                :x="edgeLabelPoint(edge).x"
+                :y="edgeLabelPoint(edge).y"
+              >
+                {{ normalizeConditionExpressionValue(edge.conditionExpression) }}
+              </text>
+            </g>
           </svg>
 
           <div
@@ -1690,7 +1891,7 @@ watch(
             <el-input v-model="selectedNode.nodeName" />
           </el-form-item>
           <el-form-item label="节点类型">
-            <el-select v-model="selectedNode.nodeType">
+            <el-select v-model="selectedNode.nodeType" @change="removeInvalidEdgesForNodeType(selectedNode)">
               <el-option label="普通节点" value="NORMAL" />
               <el-option label="条件节点" value="CONDITION" />
               <el-option label="成功节点" value="SUCCESS" />

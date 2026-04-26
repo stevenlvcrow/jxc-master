@@ -476,6 +476,14 @@ class InventoryStockMutationServiceTest {
         }
 
         @Override
+        public boolean existsByScopeAndBizType(String scopeType, Long scopeId, String bizType) {
+            return findByScopeOrdered(scopeType, scopeId).stream()
+                    .anyMatch(transaction -> bizType == null
+                            ? transaction.getBizType() == null
+                            : bizType.equals(transaction.getBizType()));
+        }
+
+        @Override
         public List<InventoryBalanceDO> findLatestBalancesBefore(String scopeType,
                                                                  Long scopeId,
                                                                  String warehouseName,

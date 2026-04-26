@@ -573,7 +573,8 @@ public class InventoryDocumentApplicationService {
             InventoryDocumentWorkflowService.ApprovalResult workflowResult = inventoryDocumentWorkflowService.completeCurrentTask(
                     type,
                     header,
-                    operatorId
+                    operatorId,
+                    scope.groupId()
             );
             if (workflowResult.workflowApplied() && !workflowResult.completed()) {
                 inventoryDocumentRepository.updateHeader(type, header);
@@ -598,6 +599,10 @@ public class InventoryDocumentApplicationService {
                                  List<InventoryDocumentLine> lines,
                                  Long operatorId,
                                  String rejectionReason) {
+        if (Objects.equals(header.getStatus(), submittedStatus())) {
+            rejectSubmittedHeader(type, scope, header, operatorId, rejectionReason);
+            return;
+        }
         if (!Objects.equals(header.getStatus(), approvedStatus())) {
             return;
         }
@@ -622,6 +627,46 @@ public class InventoryDocumentApplicationService {
             inventoryDocumentRepository.updateHeader(type, header);
         }
         inventoryDocumentNotificationService.recordRejected(type, scope.scopeType(), scope.scopeId(), header, approverRole, rejectionReason);
+    }
+
+    private void rejectSubmittedHeader(InventoryDocumentType type,
+                                       InventoryScope scope,
+                                       InventoryDocumentHeader header,
+                                       Long operatorId,
+                                       String rejectionReason) {
+        if (!type.isWorkflowEnabled()) {
+            header.setStatus(submittedStatus());
+            header.setRejectionReason(rejectionReason);
+            inventoryDocumentRepository.updateHeader(type, header);
+            return;
+        }
+        String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
+                type,
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                operatorId,
+                header.getWorkflowTaskName()
+        );
+        InventoryDocumentWorkflowService.ApprovalResult result = inventoryDocumentWorkflowService.rejectCurrentTask(
+                type,
+                header,
+                operatorId,
+                scope.groupId()
+        );
+        if (!result.workflowApplied()) {
+            throw new BusinessException(type.getBusinessName() + "未启动审批流，不能驳回");
+        }
+        header.setStatus(submittedStatus());
+        header.setApprovedBy(null);
+        header.setApprovedAt(null);
+        header.setRejectionReason(rejectionReason);
+        header.setPendingOperation(PENDING_OPERATION_NONE);
+        inventoryDocumentRepository.updateHeader(type, header);
+        inventoryDocumentNotificationService.recordRejected(type, scope.scopeType(), scope.scopeId(), header, approverRole, rejectionReason);
+        if (!result.completed()) {
+            inventoryDocumentNotificationService.recordSubmit(type, scope.scopeType(), scope.scopeId(), scope.groupId(), header);
+        }
     }
 
     private void applyInventoryDelta(InventoryDocumentType type,

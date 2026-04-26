@@ -94,6 +94,14 @@
           and business_date &gt;= #{businessDate}
     </select>
 
+    <select id="countByScopeAndBizType" resultType="java.lang.Long">
+        select count(1)
+        from inventory_transaction
+        where scope_type = #{scopeType}
+          and scope_id = #{scopeId}
+          and biz_type = #{bizType}
+    </select>
+
     <select id="selectLatestBalancesBefore" resultMap="InventoryBalanceDOResultMap">
         select id, scope_type, scope_id, warehouse_name, item_code, item_name, quantity,
                cost_amount, avg_cost, created_at, updated_at

@@ -1,6 +1,5 @@
 package com.boboboom.jxc.workflow.application.service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -9,13 +8,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import org.flowable.bpmn.converter.BpmnXMLConverter;
-import org.flowable.bpmn.model.BpmnModel;
-import org.flowable.bpmn.model.EndEvent;
-import org.flowable.bpmn.model.Process;
-import org.flowable.bpmn.model.SequenceFlow;
-import org.flowable.bpmn.model.StartEvent;
-import org.flowable.bpmn.model.UserTask;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
@@ -28,12 +20,12 @@ import com.boboboom.jxc.common.dictionary.DictionaryCodes;
 import com.boboboom.jxc.identity.application.auth.AuthContextHolder;
 import com.boboboom.jxc.identity.application.auth.OrgScopeService;
 import com.boboboom.jxc.identity.application.service.DictionaryLookupService;
+import com.boboboom.jxc.workflow.application.service.WorkflowBpmnModelSupport.NodeConfig;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowDefinitionConfigRepository;
 import com.boboboom.jxc.workflow.domain.repository.WorkflowProcessRegistryRepository;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowDefinitionConfigDO;
 import com.boboboom.jxc.workflow.infrastructure.persistence.dataobject.WorkflowProcessRegistryDO;
 import com.boboboom.jxc.workflow.interfaces.rest.request.WorkflowConfigSaveRequest;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /** 流程配置业务服务，负责审批节点配置保存和读取。 */
@@ -43,19 +35,10 @@ public class WorkflowConfigApplicationService {
     private static final int DEFAULT_PUBLISH_HISTORY_LIMIT = 200;
     private static final int MAX_PUBLISH_HISTORY_LIMIT = 1000;
 
-    private static final String SCOPE_PLATFORM = "PLATFORM";
-    private static final String SCOPE_GROUP = "GROUP";
-    private static final String SCOPE_STORE = "STORE";
-    private static final String NODE_TYPE_NORMAL = "NORMAL";
-    private static final String NODE_TYPE_CONDITION = "CONDITION";
-    private static final String NODE_TYPE_SUCCESS = "SUCCESS";
-    private static final String NODE_TYPE_FAIL = "FAIL";
-    private static final String NODE_TYPE_START = "START";
-    private static final String NODE_TYPE_END = "END";
+    private static final String NODE_TYPE_NORMAL = WorkflowBpmnModelSupport.NODE_TYPE_NORMAL;
     private static final String ROLE_SIGN_MODE_OR = "OR";
-    private static final String ROLE_SIGN_MODE_AND = "AND";
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
-    private static final String UNSUPPORTED_ADVANCED_FIELD_MESSAGE = "当前版本暂不支持条件表达式、会签方式、允许驳回或允许反审核配置";
+    private static final String UNSUPPORTED_ADVANCED_FIELD_MESSAGE = "当前版本暂不支持会签方式、允许驳回或允许反审核配置";
 
     private final WorkflowDefinitionConfigRepository configRepository;
     private final WorkflowProcessRegistryRepository processRegistryRepository;
@@ -264,7 +247,7 @@ public class WorkflowConfigApplicationService {
                 false,
                 false,
                 nodeType,
-                "",
+                node.conditionExpression(),
                 node.triggerActions() == null ? List.of() : node.triggerActions()
         );
     }
@@ -325,6 +308,7 @@ public class WorkflowConfigApplicationService {
             String roleCode = normalizeApproverRoleCode(node, roleNode);
             Long approverUserId = supportsApproverUser(nodeType) ? node.approverUserId() : null;
             List<String> triggerActions = normalizeTriggerActions(node.triggerActions(), nodeType);
+            String conditionExpression = normalizeConditionExpression(node.conditionExpression());
             if (NODE_TYPE_NORMAL.equals(nodeType) && !triggerActions.isEmpty() && !StringUtils.hasText(roleCode)) {
                 throw new BusinessException("普通节点已选择触发动作，请同时配置审批角色");
             }
@@ -343,10 +327,11 @@ public class WorkflowConfigApplicationService {
                     false,
                     false,
                     nodeType,
-                    "",
+                    conditionExpression,
                     triggerActions
             ));
         }
+        WorkflowBpmnModelSupport.validateAndBuildGraph(normalized, objectMapper);
         return normalized;
     }
 
@@ -356,89 +341,15 @@ public class WorkflowConfigApplicationService {
     }
 
     private List<NodeConfig> parseNodes(String configJson) {
-        if (!StringUtils.hasText(configJson)) {
-            return List.of();
-        }
-        try {
-            List<NodeConfig> nodes = objectMapper.readValue(configJson, new TypeReference<>() {
-            });
-            return nodes == null ? List.of() : nodes;
-        } catch (Exception ex) {
-            throw new BusinessException("流程节点配置数据损坏");
-        }
+        return WorkflowBpmnModelSupport.parseNodes(configJson, objectMapper);
     }
 
     private String toConfigJson(List<NodeConfig> nodes) {
-        try {
-            return objectMapper.writeValueAsString(nodes);
-        } catch (Exception ex) {
-            throw new BusinessException("流程配置序列化失败");
-        }
+        return WorkflowBpmnModelSupport.toConfigJson(nodes, objectMapper);
     }
 
     private byte[] buildBpmnXml(String processDefinitionKey, String workflowName, List<NodeConfig> nodes) {
-        BpmnModel bpmnModel = new BpmnModel();
-        Process process = new Process();
-        process.setId(processDefinitionKey);
-        process.setName(workflowName);
-        bpmnModel.addProcess(process);
-
-        StartEvent startEvent = new StartEvent();
-        startEvent.setId("start_event");
-        startEvent.setName("开始");
-        process.addFlowElement(startEvent);
-
-        EndEvent endEvent = new EndEvent();
-        endEvent.setId("end_event");
-        endEvent.setName("结束");
-        process.addFlowElement(endEvent);
-
-        String sourceRef = startEvent.getId();
-        for (int i = 0; i < nodes.size(); i++) {
-            NodeConfig node = nodes.get(i);
-            String nodeType = normalizeNodeType(node.nodeType());
-            if (NODE_TYPE_START.equals(nodeType)) {
-                continue;
-            }
-            if (isTerminalNode(nodeType)) {
-                process.addFlowElement(sequenceFlow("flow_" + i, sourceRef, endEvent.getId()));
-                sourceRef = endEvent.getId();
-                break;
-            }
-
-            String taskId = "task_" + node.nodeKey();
-            UserTask userTask = new UserTask();
-            userTask.setId(taskId);
-            userTask.setName(node.nodeName());
-            userTask.setDocumentation(
-                    "nodeType=" + nodeType
-                            + ";approverRoleCode=" + (node.approverRoleCode() == null ? "" : node.approverRoleCode())
-                            + ";approverUserId=" + (node.approverUserId() == null ? "" : node.approverUserId())
-                            + ";triggerActions=" + String.join(",", node.triggerActions() == null ? List.of() : node.triggerActions())
-            );
-            process.addFlowElement(userTask);
-
-            process.addFlowElement(sequenceFlow("flow_" + i, sourceRef, taskId));
-            sourceRef = taskId;
-        }
-        if (!endEvent.getId().equals(sourceRef)) {
-            process.addFlowElement(sequenceFlow("flow_end", sourceRef, endEvent.getId()));
-        }
-        return new BpmnXMLConverter().convertToXML(bpmnModel, StandardCharsets.UTF_8.name());
-    }
-
-    private SequenceFlow sequenceFlow(String id, String sourceRef, String targetRef) {
-        SequenceFlow sequenceFlow = new SequenceFlow();
-        sequenceFlow.setId(id);
-        sequenceFlow.setSourceRef(sourceRef);
-        sequenceFlow.setTargetRef(targetRef);
-        return sequenceFlow;
-    }
-
-    private boolean isTerminalNode(String nodeType) {
-        return NODE_TYPE_END.equals(nodeType)
-                || NODE_TYPE_SUCCESS.equals(nodeType)
-                || NODE_TYPE_FAIL.equals(nodeType);
+        return WorkflowBpmnModelSupport.buildBpmnXml(processDefinitionKey, workflowName, nodes, objectMapper);
     }
 
     private Scope resolveScope(String orgId) {
@@ -493,32 +404,7 @@ public class WorkflowConfigApplicationService {
     }
 
     private String normalizeNodeType(String value) {
-        String normalized = trimNullable(value);
-        if (normalized == null) {
-            return NODE_TYPE_NORMAL;
-        }
-        String upper = normalized.toUpperCase(Locale.ROOT);
-        if (NODE_TYPE_CONDITION.equals(upper)
-                || NODE_TYPE_SUCCESS.equals(upper)
-                || NODE_TYPE_FAIL.equals(upper)
-                || NODE_TYPE_START.equals(upper)
-                || NODE_TYPE_END.equals(upper)
-                || NODE_TYPE_NORMAL.equals(upper)) {
-            return upper;
-        }
-        return NODE_TYPE_NORMAL;
-    }
-
-    private String normalizeRoleSignMode(String value) {
-        String normalized = trimNullable(value);
-        if (normalized == null) {
-            return ROLE_SIGN_MODE_OR;
-        }
-        String upper = normalized.toUpperCase(Locale.ROOT);
-        if (ROLE_SIGN_MODE_AND.equals(upper)) {
-            return ROLE_SIGN_MODE_AND;
-        }
-        return ROLE_SIGN_MODE_OR;
+        return WorkflowBpmnModelSupport.normalizeNodeType(value);
     }
 
     private void validateUnsupportedAdvancedFields(WorkflowConfigSaveRequest.NodeItem node) {
@@ -526,8 +412,7 @@ public class WorkflowConfigApplicationService {
             return;
         }
         if (Boolean.TRUE.equals(node.allowReject())
-                || Boolean.TRUE.equals(node.allowUnapprove())
-                || StringUtils.hasText(trimNullable(node.conditionExpression()))) {
+                || Boolean.TRUE.equals(node.allowUnapprove())) {
             throw new BusinessException(UNSUPPORTED_ADVANCED_FIELD_MESSAGE);
         }
         String roleSignMode = trimNullable(node.roleSignMode());
@@ -537,11 +422,41 @@ public class WorkflowConfigApplicationService {
     }
 
     private boolean supportsRoleAssignment(String nodeType) {
-        return NODE_TYPE_NORMAL.equals(nodeType) || NODE_TYPE_CONDITION.equals(nodeType);
+        return WorkflowBpmnModelSupport.supportsRoleAssignment(nodeType);
     }
 
     private boolean supportsApproverUser(String nodeType) {
-        return NODE_TYPE_CONDITION.equals(nodeType);
+        return WorkflowBpmnModelSupport.supportsApproverUser(nodeType);
+    }
+
+    private String normalizeConditionExpression(String value) {
+        String normalized = trimNullable(value);
+        if (normalized == null) {
+            return "";
+        }
+        try {
+            List<WorkflowEdgeLink> links = objectMapper.readValue(normalized, new com.fasterxml.jackson.core.type.TypeReference<>() {
+            });
+            if (links == null || links.isEmpty()) {
+                return "";
+            }
+            List<WorkflowEdgeLink> normalizedLinks = new ArrayList<>();
+            for (WorkflowEdgeLink link : links) {
+                String targetKey = trimNullable(link.to());
+                if (!StringUtils.hasText(targetKey)) {
+                    throw new BusinessException("流程连线目标节点不能为空");
+                }
+                normalizedLinks.add(new WorkflowEdgeLink(
+                        targetKey,
+                        WorkflowBpmnModelSupport.normalizeConditionExpression(link.expression())
+                ));
+            }
+            return objectMapper.writeValueAsString(normalizedLinks);
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new BusinessException("流程连线配置数据损坏");
+        }
     }
 
     private String draftStatus() {
@@ -630,17 +545,6 @@ public class WorkflowConfigApplicationService {
     private record Scope(String scopeType, Long scopeId, Long groupId) {
     }
 
-    private record NodeConfig(String nodeKey,
-                              String nodeName,
-                              Integer x,
-                              Integer y,
-                              String approverRoleCode,
-                              String roleSignMode,
-                              Long approverUserId,
-                              boolean allowReject,
-                              boolean allowUnapprove,
-                              String nodeType,
-                              String conditionExpression,
-                              List<String> triggerActions) {
+    private record WorkflowEdgeLink(String to, String expression) {
     }
 }

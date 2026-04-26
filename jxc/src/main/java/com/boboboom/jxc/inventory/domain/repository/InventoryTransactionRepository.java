@@ -29,6 +29,8 @@ public interface InventoryTransactionRepository {
                                                            String warehouseName,
                                                            LocalDate businessDate);
 
+    boolean existsByScopeAndBizType(String scopeType, Long scopeId, String bizType);
+
     List<InventoryBalanceDO> findLatestBalancesBefore(String scopeType,
                                                       Long scopeId,
                                                       String warehouseName,

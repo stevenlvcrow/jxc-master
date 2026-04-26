@@ -430,6 +430,7 @@ public class PurchaseInboundApplicationService {
             purchaseInboundRepository.update(header);
             return header;
         }
+        recordPendingApprovalIfNecessary(scope, header);
         return header;
     }
 
@@ -765,7 +766,7 @@ public class PurchaseInboundApplicationService {
                 header.getWorkflowTaskName()
         );
         InventoryDocumentWorkflowService.ApprovalResult workflowResult =
-                inventoryDocumentWorkflowService.completePurchaseInboundCurrentTask(header, context.operatorId());
+                inventoryDocumentWorkflowService.completePurchaseInboundCurrentTask(header, context.operatorId(), scope.groupId());
         if (!workflowResult.workflowApplied()) {
             approveWithoutWorkflow(scope, header, lines, context, approverRole);
             return;
@@ -1077,6 +1078,19 @@ public class PurchaseInboundApplicationService {
         header.setApprovedBy(null);
         header.setApprovedAt(null);
         purchaseInboundRepository.update(header);
+        recordPendingApprovalIfNecessary(scope, header);
+    }
+
+    private void recordPendingApprovalIfNecessary(InventoryScope scope, PurchaseInboundDO header) {
+        if (!StringUtils.hasText(header.getWorkflowTaskName())) {
+            return;
+        }
+        purchaseInboundNotificationService.recordSubmit(
+                scope.scopeType(),
+                scope.scopeId(),
+                scope.groupId(),
+                header
+        );
     }
 
     /** 库存载荷模型，承载接口返回的关键标识。 */

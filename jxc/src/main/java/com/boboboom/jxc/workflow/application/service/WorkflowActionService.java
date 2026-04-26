@@ -492,10 +492,7 @@ public class WorkflowActionService {
     }
 
     private boolean isReviewNode(String nodeType, JsonNode triggerActionsNode) {
-        if ("CONDITION".equalsIgnoreCase(nodeType)) {
-            return true;
-        }
-        return "NORMAL".equalsIgnoreCase(nodeType) && collectTriggerActions(triggerActionsNode).isEmpty();
+        return "CONDITION".equalsIgnoreCase(nodeType);
     }
 
     private String normalizeAction(String action) {

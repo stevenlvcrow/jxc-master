@@ -18,6 +18,7 @@ import com.boboboom.jxc.inventory.application.service.PeriodOpeningBalanceApplic
 import com.boboboom.jxc.inventory.application.service.PeriodOpeningBalanceApplicationService.PeriodOpeningDetail;
 import com.boboboom.jxc.inventory.application.service.PeriodOpeningBalanceApplicationService.PeriodOpeningGenerateRequest;
 import com.boboboom.jxc.inventory.application.service.PeriodOpeningBalanceApplicationService.PeriodOpeningPage;
+import com.boboboom.jxc.inventory.application.service.PeriodOpeningBalanceApplicationService.PeriodOpeningPermissionView;
 import com.boboboom.jxc.inventory.application.service.PeriodOpeningBalanceApplicationService.PeriodOpeningRejectRequest;
 import com.boboboom.jxc.inventory.application.service.PeriodOpeningBalanceApplicationService.PeriodOpeningSaveRequest;
 
@@ -73,6 +74,17 @@ public class PeriodOpeningBalanceController {
                 endDate,
                 status
         ));
+    }
+
+    /**
+     * 查询期初库存页面权限。
+     *
+     * @param orgId 机构标识
+     * @return 权限视图
+     */
+    @GetMapping("/permissions")
+    public CodeDataResponse<PeriodOpeningPermissionView> permissions(@RequestParam(required = false) String orgId) {
+        return CodeDataResponse.ok(periodOpeningBalanceApplicationService.permissions(orgId));
     }
 
     /**

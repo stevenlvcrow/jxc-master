@@ -61,6 +61,12 @@ public class InventoryTransactionRepositoryImpl implements InventoryTransactionR
     }
 
     @Override
+    public boolean existsByScopeAndBizType(String scopeType, Long scopeId, String bizType) {
+        Long count = inventoryTransactionMapper.countByScopeAndBizType(scopeType, scopeId, bizType);
+        return count != null && count > 0;
+    }
+
+    @Override
     public List<InventoryBalanceDO> findLatestBalancesBefore(String scopeType,
                                                              Long scopeId,
                                                              String warehouseName,

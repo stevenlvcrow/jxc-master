@@ -555,7 +555,7 @@ onMounted(() => {
         >
           <template #default="{ row }">
             <el-button
-              v-if="column.prop === 'documentCode' && row.documentCode"
+              v-if="column.prop === 'documentCode' && row.documentCode && !isWarehouseOpeningBalance"
               text
               type="primary"
               @click="handleView(row)"

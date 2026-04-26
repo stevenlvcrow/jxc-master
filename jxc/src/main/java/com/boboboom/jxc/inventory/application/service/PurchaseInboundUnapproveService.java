@@ -18,7 +18,6 @@ import com.boboboom.jxc.inventory.infrastructure.persistence.dataobject.Purchase
 @Service
 public class PurchaseInboundUnapproveService {
 
-    private static final String PENDING_OPERATION_DELETE = "DELETE";
     private static final String PENDING_OPERATION_NONE = "NONE";
     private static final String INVENTORY_BIZ_TYPE_UNAPPROVE = "PURCHASE_INBOUND_UNAPPROVE";
 
@@ -60,7 +59,7 @@ public class PurchaseInboundUnapproveService {
                         Long operatorId,
                         String rejectionReason) {
         if (!Objects.equals(header.getStatus(), approvedStatus())) {
-            resetDeletePendingIfNecessary(header);
+            rejectPendingHeader(scopeType, scopeId, groupId, header, operatorId, rejectionReason);
             return;
         }
         String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
@@ -84,12 +83,44 @@ public class PurchaseInboundUnapproveService {
         );
     }
 
-    private void resetDeletePendingIfNecessary(PurchaseInboundDO header) {
-        if (!PENDING_OPERATION_DELETE.equals(header.getPendingOperation())) {
+    private void rejectPendingHeader(String scopeType,
+                                     Long scopeId,
+                                     Long groupId,
+                                     PurchaseInboundDO header,
+                                     Long operatorId,
+                                     String rejectionReason) {
+        if (!hasWorkflowMetadata(header)) {
             return;
         }
-        header.setPendingOperation(PENDING_OPERATION_NONE);
-        persistAfterUnapprove(header);
+        String approverRole = inventoryDocumentWorkflowService.resolveApprovalRoleLabel(
+                InventoryDocumentType.PURCHASE_INBOUND,
+                scopeType,
+                scopeId,
+                groupId,
+                operatorId,
+                header.getWorkflowTaskName()
+        );
+        InventoryDocumentWorkflowService.ApprovalResult result = inventoryDocumentWorkflowService.rejectPurchaseInboundCurrentTask(
+                header,
+                operatorId,
+                groupId
+        );
+        if (!result.workflowApplied()) {
+            return;
+        }
+        markHeaderSubmitted(header, rejectionReason);
+        purchaseInboundRepository.update(header);
+        purchaseInboundNotificationService.recordRejected(
+                scopeType,
+                scopeId,
+                groupId,
+                header,
+                approverRole,
+                rejectionReason
+        );
+        if (!result.completed()) {
+            purchaseInboundNotificationService.recordSubmit(scopeType, scopeId, groupId, header);
+        }
     }
 
     private void rollbackInventory(String scopeType,

@@ -13,6 +13,7 @@ import {
   approvePeriodOpeningApi,
   createPeriodOpeningApi,
   fetchPeriodOpeningDetailApi,
+  fetchPeriodOpeningPermissionApi,
   rejectPeriodOpeningApi,
   submitPeriodOpeningApi,
   updatePeriodOpeningApi,
@@ -110,6 +111,13 @@ const saving = ref(false);
 const detailStatus = ref('');
 const rowSeed = ref(2);
 const warehouseOptions = ref<WarehouseOption[]>([]);
+const permissions = reactive({
+  canCreate: false,
+  canUpdate: false,
+  canDelete: false,
+  canApprove: false,
+  canReject: false,
+});
 
 const form = reactive({
   documentCode: '',
@@ -184,6 +192,7 @@ const showSubmitAction = computed(() =>
 );
 const showApprovalActions = computed(() =>
   (isApprovalMode.value || isViewMode.value)
+  && permissions.canApprove
   && Boolean(submittedStatus.value)
   && detailStatus.value === submittedStatus.value,
 );
@@ -348,10 +357,35 @@ const loadPageData = async () => {
   resetForm();
   loading.value = true;
   try {
-    await Promise.all([loadWarehouses(), loadItemTree()]);
+    await Promise.all([loadWarehouses(), loadItemTree(), loadPermissions()]);
     await loadDetail();
   } finally {
     loading.value = false;
+  }
+};
+
+const loadPermissions = async () => {
+  if (!orgId.value) {
+    permissions.canCreate = false;
+    permissions.canUpdate = false;
+    permissions.canDelete = false;
+    permissions.canApprove = false;
+    permissions.canReject = false;
+    return;
+  }
+  try {
+    const result = await fetchPeriodOpeningPermissionApi(orgId.value);
+    permissions.canCreate = Boolean(result.canCreate);
+    permissions.canUpdate = Boolean(result.canUpdate);
+    permissions.canDelete = Boolean(result.canDelete);
+    permissions.canApprove = Boolean(result.canApprove);
+    permissions.canReject = Boolean(result.canReject);
+  } catch {
+    permissions.canCreate = false;
+    permissions.canUpdate = false;
+    permissions.canDelete = false;
+    permissions.canApprove = false;
+    permissions.canReject = false;
   }
 };
 
@@ -646,7 +680,7 @@ watch(
       :primary-action-text="actionPrimaryText"
       :secondary-action-text="actionSecondaryText"
       :show-primary-action="showActions"
-      :show-secondary-action="showApprovalActions"
+      :show-secondary-action="showApprovalActions && permissions.canReject"
       @back="handleBack"
       @save-draft="handleSecondaryAction"
       @save="handlePrimaryAction"

@@ -42,7 +42,7 @@ public class InventoryDocumentPermissionService {
             boolean canApprove = type == InventoryDocumentType.WAREHOUSE_OPENING_BALANCE;
             return new PermissionSnapshot(true, true, true, canApprove, false);
         }
-        boolean canApprove = canReview(type, scopeType, scopeId, groupId, operatorId) || canManageAll;
+        boolean canApprove = canReview(type, scopeType, scopeId, groupId, operatorId);
         return new PermissionSnapshot(
                 canManageAll || hasWorkflowOperationPermission(type, scopeType, scopeId, groupId, operatorId, "CREATE"),
                 canManageAll || hasWorkflowOperationPermission(type, scopeType, scopeId, groupId, operatorId, "UPDATE"),
@@ -136,7 +136,7 @@ public class InventoryDocumentPermissionService {
         if (!type.isWorkflowEnabled()) {
             throw new BusinessException(type.getBusinessName() + "不支持审核");
         }
-        if (!canReview(type, scopeType, scopeId, groupId, operatorId) && !canViewAll(scopeType, scopeId, groupId, operatorId)) {
+        if (!canReview(type, scopeType, scopeId, groupId, operatorId)) {
             throw new BusinessException("当前账号无" + type.getBusinessName() + "审核权限");
         }
     }

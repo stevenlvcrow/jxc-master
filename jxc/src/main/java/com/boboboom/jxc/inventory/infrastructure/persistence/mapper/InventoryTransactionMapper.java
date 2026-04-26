@@ -31,6 +31,10 @@ public interface InventoryTransactionMapper extends BaseMapper<InventoryTransact
                                                        @Param("warehouseName") String warehouseName,
                                                        @Param("businessDate") LocalDate businessDate);
 
+    Long countByScopeAndBizType(@Param("scopeType") String scopeType,
+                                @Param("scopeId") Long scopeId,
+                                @Param("bizType") String bizType);
+
     List<InventoryBalanceDO> selectLatestBalancesBefore(@Param("scopeType") String scopeType,
                                                         @Param("scopeId") Long scopeId,
                                                         @Param("warehouseName") String warehouseName,

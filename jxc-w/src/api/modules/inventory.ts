@@ -270,6 +270,11 @@ export const fetchPeriodOpeningDetailApi = (id: number, orgId?: string) =>
     params: withOrgParams(undefined, orgId),
   });
 
+export const fetchPeriodOpeningPermissionApi = (orgId?: string) =>
+  apiClient.get<PeriodOpeningPermission>('/api/inventory/period-openings/permissions', {
+    params: withOrgParams(undefined, orgId),
+  });
+
 export const updatePeriodOpeningApi = (id: number, payload: PeriodOpeningSavePayload, orgId?: string) =>
   apiClient.put<void>(`/api/inventory/period-openings/${id}`, payload, {
     params: withOrgParams(undefined, orgId),
@@ -810,11 +815,18 @@ export type RealtimeStockReportRow = {
   itemCode: string;
   itemName: string;
   itemCategory: string;
+  statisticType: string;
   unit: string;
+  unitConversionRate: number;
+  itemVolume: number;
+  itemWeight: number;
   currentStock: number;
   availableStock: number;
   costAmount: number;
+  costAmountExTax: number;
+  taxAmount: number;
   avgCost: number;
+  avgCostExTax: number;
   warehouse: string;
   warehouseType: string;
   spec: string;
