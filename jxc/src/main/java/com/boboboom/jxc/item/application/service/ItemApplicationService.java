@@ -440,10 +440,7 @@ public class ItemApplicationService {
     }
 
     private String normalizeStocktakeFrequency(String stocktakeFrequency) {
-        String normalized = trimNullable(stocktakeFrequency);
-        if (normalized == null) {
-            return null;
-        }
+        String normalized = requiredTrim(stocktakeFrequency, "盘点频次不能为空");
         if ("月盘点".equals(normalized) || "MONTHLY".equals(normalized)) {
             throw new BusinessException("盘点频次不支持月盘点，请清理脏数据");
         }

@@ -64,7 +64,7 @@ const form = reactive({
   consumeOnInbound: '否',
   disableStocktake: '否',
   defaultNoStocktake: '否',
-  stocktakeFrequency: '',
+  stocktakeFrequency: 'DAILY',
   purchaseReceiptRule: '不限制',
   purchaseRuleMaxRatio: '',
   purchaseRuleMinRatio: '',
@@ -719,6 +719,24 @@ const goBack = () => {
   router.push('/archive/items');
 };
 
+const validateBeforeSave = () => {
+  const checks: Array<{ valid: boolean; message: string; section: string }> = [
+    { valid: Boolean(form.name.trim()), message: '请先填写物品名称', section: 'basic' },
+    { valid: Boolean(form.category.trim()), message: '请先选择物品类别', section: 'basic' },
+    { valid: Boolean(form.status.trim()), message: '请先选择物品状态', section: 'basic' },
+    { valid: Boolean(form.storageMode.trim()), message: '请先选择储存方式', section: 'storage' },
+    { valid: Boolean(form.stocktakeFrequency.trim()), message: '请先选择盘点频次', section: 'business' },
+  ];
+  const invalid = checks.find((item) => !item.valid);
+  if (!invalid) {
+    return true;
+  }
+  activeSectionKey.value = invalid.section;
+  scrollToSection(invalid.section);
+  ElMessage.warning(invalid.message);
+  return false;
+};
+
 const buildCreatePayload = (): ItemCreatePayload => ({
   ...form,
   code: undefined,
@@ -819,12 +837,7 @@ const handleSave = async () => {
   if (saving.value) {
     return;
   }
-  if (!form.name.trim()) {
-    ElMessage.warning('请先填写物品名称');
-    return;
-  }
-  if (!form.category.trim()) {
-    ElMessage.warning('请先选择物品类别');
+  if (!validateBeforeSave()) {
     return;
   }
   try {
@@ -1246,7 +1259,7 @@ const loadDetailIfEditMode = async () => {
               </el-radio-group>
             </el-form-item>
             <el-form-item label="盘点频次">
-              <el-select v-model="form.stocktakeFrequency" clearable placeholder="请选择">
+              <el-select v-model="form.stocktakeFrequency" placeholder="请选择">
                 <el-option
                   v-for="option in stocktakeFrequencyOptions"
                   :key="option.itemCode"
